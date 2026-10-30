@@ -1,0 +1,277 @@
+import CoreGraphics
+import Foundation
+import OpenScreensCanvas
+import OpenScreensCore
+import OpenScreensUI
+import os
+
+/// The production transport: drives the Rust RFB engine through UniFFI.
+public struct UniFfiSessionService: OpenScreensUI.RemoteSessionService {
+    public init() {}
+
+    public func makeSession() -> any OpenScreensUI.RemoteSessionProtocol {
+        UniFfiRemoteSession()
+    }
+}
+
+private enum InputCommand: Sendable {
+    case pointer(mask: UInt8, x: UInt16, y: UInt16)
+    case key(down: Bool, keysym: UInt32)
+    case clipboard(String)
+}
+
+public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
+    public nonisolated let events: AsyncStream<OpenScreensUI.RemoteSessionEvent>
+
+    private let continuation: AsyncStream<OpenScreensUI.RemoteSessionEvent>.Continuation
+    private nonisolated let inputContinuation: AsyncStream<InputCommand>.Continuation
+    private let inputStream: AsyncStream<InputCommand>
+
+    private var session: OpenScreensCore.RemoteSession?
+    private var eventTask: Task<Void, Never>?
+    private var inputTask: Task<Void, Never>?
+
+    private var width: UInt16 = 0
+    private var height: UInt16 = 0
+    private var cursor = CGPoint(x: 0.5, y: 0.5)
+    private var buttonMask: UInt8 = 0
+    private var observing = false
+    private var finished = false
+
+    private let logger = Logger(subsystem: "app.openscreens", category: "Session")
+
+    public init() {
+        let (stream, continuation) = AsyncStream.makeStream(
+            of: OpenScreensUI.RemoteSessionEvent.self,
+            bufferingPolicy: .unbounded
+        )
+        self.events = stream
+        self.continuation = continuation
+
+        let (input, inputContinuation) = AsyncStream.makeStream(of: InputCommand.self)
+        self.inputStream = input
+        self.inputContinuation = inputContinuation
+    }
+
+    public func connect(profile: ConnectionProfile) async throws {
+        guard session == nil, !finished else { return }
+        observing = profile.controls.startInObserveMode
+        cursor = CGPoint(x: 0.5, y: 0.5)
+        buttonMask = 0
+        continuation.yield(.state(.connecting))
+
+        let storedPassword = OpenScreensCredentials.password(for: profile.id)
+        let password = storedPassword ?? debugPassword()
+        let username = profile.username.trimmingCharacters(in: .whitespacesAndNewlines)
+        let config = OpenScreensCore.SessionConfig(
+            host: profile.trimmedHost,
+            port: UInt16(clamping: profile.port),
+            username: username.isEmpty ? nil : username,
+            password: (password?.isEmpty == false) ? password : nil,
+            shared: true
+        )
+
+        do {
+            let session = try await OpenScreensCore.RemoteSession.connect(config: config)
+            self.session = session
+            updateSize(session.size())
+            continuation.yield(.displays([
+                RemoteDisplay(
+                    id: 0,
+                    name: session.serverName(),
+                    width: Int(width),
+                    height: Int(height)
+                ),
+            ]))
+            continuation.yield(.state(.connected))
+            startEventPump(session)
+            startInputPump(session)
+        } catch {
+            logger.error("connect failed: \(error.localizedDescription, privacy: .public)")
+            throw error
+        }
+    }
+
+    public func disconnect() async {
+        finish(reason: "Connection closed")
+    }
+
+    public func sendPointer(_ event: PointerEvent) async {
+        guard !observing, width > 0, height > 0 else { return }
+
+        if event.isRelative {
+            cursor.x += event.x
+            cursor.y += event.y
+        } else {
+            cursor = CGPoint(x: event.x, y: event.y)
+        }
+        cursor.x = min(max(cursor.x, 0), 1)
+        cursor.y = min(max(cursor.y, 0), 1)
+
+        let bit = Self.bit(for: event.button)
+        switch event.action {
+        case .down:
+            buttonMask |= bit
+        case .up:
+            buttonMask &= ~bit
+        case .move:
+            break
+        }
+
+        let x = UInt16(clamping: min(Int(cursor.x * Double(width)), Int(width) - 1))
+        let y = UInt16(clamping: min(Int(cursor.y * Double(height)), Int(height) - 1))
+        inputContinuation.yield(.pointer(mask: buttonMask, x: x, y: y))
+    }
+
+    public func sendKey(_ event: RemoteKeyEvent) async {
+        guard !observing else { return }
+        let modifiers = Keysym.modifiers(event.modifiers)
+        for keysym in modifiers {
+            inputContinuation.yield(.key(down: true, keysym: keysym))
+        }
+
+        if case .text(let text) = event.key {
+            for scalar in text.unicodeScalars {
+                let keysym = Keysym.keysym(for: scalar)
+                inputContinuation.yield(.key(down: true, keysym: keysym))
+                inputContinuation.yield(.key(down: false, keysym: keysym))
+            }
+        } else if let keysym = Keysym.keysym(for: event.key) {
+            inputContinuation.yield(.key(down: true, keysym: keysym))
+            inputContinuation.yield(.key(down: false, keysym: keysym))
+        }
+
+        for keysym in modifiers.reversed() {
+            inputContinuation.yield(.key(down: false, keysym: keysym))
+        }
+    }
+
+    public func sendClipboard(_ text: String) async {
+        inputContinuation.yield(.clipboard(text))
+    }
+
+    public func requestClipboard() async {}
+
+    public func setObserveMode(_ observing: Bool) async {
+        self.observing = observing
+    }
+
+    private func startEventPump(_ session: OpenScreensCore.RemoteSession) {
+        eventTask = Task { [weak self] in
+            while let event = await session.nextEvent() {
+                await self?.handle(event, session: session)
+            }
+            await self?.finish(reason: nil)
+        }
+    }
+
+    private func handle(
+        _ event: OpenScreensCore.SessionEvent,
+        session: OpenScreensCore.RemoteSession
+    ) {
+        switch event {
+        case .connected(let width, let height, let name):
+            self.width = width
+            self.height = height
+            continuation.yield(.displays([
+                RemoteDisplay(id: 0, name: name, width: Int(width), height: Int(height)),
+            ]))
+            continuation.yield(.state(.connected))
+
+        case .frame(_, let rects):
+            guard width > 0, height > 0 else { return }
+            let frameWidth = Int(width)
+            let frameHeight = Int(height)
+            for rect in rects where rect.width > 0 && rect.height > 0 {
+                guard let data = session.copyRegion(rect: rect) else { continue }
+                // The renderer only allocates its texture from a full frame, so a
+                // rect that covers the whole framebuffer must clear `region`.
+                let coversFrame = rect.x == 0 && rect.y == 0
+                    && Int(rect.width) == frameWidth && Int(rect.height) == frameHeight
+                let region = coversFrame ? nil : RemoteRegion(
+                    x: Int(rect.x),
+                    y: Int(rect.y),
+                    width: Int(rect.width),
+                    height: Int(rect.height)
+                )
+                continuation.yield(.frame(RemoteFrame(
+                    width: frameWidth,
+                    height: frameHeight,
+                    region: region,
+                    data: data
+                )))
+            }
+
+        case .resized(let width, let height):
+            self.width = width
+            self.height = height
+            continuation.yield(.displays([
+                RemoteDisplay(id: 0, name: "Display", width: Int(width), height: Int(height)),
+            ]))
+
+        case .clipboard(let text):
+            continuation.yield(.clipboard(text))
+
+        case .bell:
+            continuation.yield(.bell)
+
+        case .disconnected(let reason):
+            finish(reason: reason)
+        }
+    }
+
+    private func startInputPump(_ session: OpenScreensCore.RemoteSession) {
+        let stream = inputStream
+        inputTask = Task {
+            for await command in stream {
+                do {
+                    switch command {
+                    case .pointer(let mask, let x, let y):
+                        try await session.sendPointer(mask: mask, x: x, y: y)
+                    case .key(let down, let keysym):
+                        try await session.sendKey(down: down, keysym: keysym)
+                    case .clipboard(let text):
+                        try await session.sendClipboard(text: text)
+                    }
+                } catch {
+                    return
+                }
+            }
+        }
+    }
+
+    private func finish(reason: String?) {
+        guard !finished else { return }
+        finished = true
+        continuation.yield(.state(.disconnected(reason: reason)))
+        continuation.finish()
+        eventTask?.cancel()
+        eventTask = nil
+        inputTask?.cancel()
+        inputTask = nil
+        inputContinuation.finish()
+        session = nil
+    }
+
+    private func updateSize(_ size: OpenScreensCore.SessionSize?) {
+        guard let size else { return }
+        width = size.width
+        height = size.height
+    }
+
+    private static func bit(for button: PointerButton) -> UInt8 {
+        switch button {
+        case .left: 1 << 0
+        case .middle: 1 << 1
+        case .right: 1 << 2
+        }
+    }
+
+    private func debugPassword() -> String? {
+        #if DEBUG
+        return ProcessInfo.processInfo.environment["OPENSCREENS_PASSWORD"]
+        #else
+        return nil
+        #endif
+    }
+}

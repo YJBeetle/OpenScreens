@@ -1,0 +1,62 @@
+name: OpenScreens
+
+options:
+  bundleIdPrefix: app.openscreens
+  deploymentTarget:
+    iOS: "18.0"
+  createIntermediateGroups: true
+  groupSortPosition: top
+  xcodeVersion: "26.0"
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    CODE_SIGN_STYLE: Automatic
+    DEVELOPMENT_TEAM: ""
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+
+packages:
+  OpenScreensUI:
+    path: ../apple/OpenScreensUI
+  OpenScreensClient:
+    path: ../apple/OpenScreensClient
+
+targets:
+  OpenScreens:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources
+    dependencies:
+      - package: OpenScreensUI
+        product: OpenScreensUI
+      - package: OpenScreensUI
+        product: OpenScreensCanvas
+      - package: OpenScreensClient
+        product: OpenScreensClient
+    settings:
+      base:
+        PRODUCT_NAME: OpenScreens
+        PRODUCT_BUNDLE_IDENTIFIER: app.openscreens.ios
+        IPHONEOS_DEPLOYMENT_TARGET: "18.0"
+        TARGETED_DEVICE_FAMILY: "1,2"
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: OpenScreens
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
+        SWIFT_EMIT_LOC_STRINGS: YES
+
+schemes:
+  OpenScreens:
+    build:
+      targets:
+        OpenScreens: all
+    run:
+      config: Debug
+    archive:
+      config: Release

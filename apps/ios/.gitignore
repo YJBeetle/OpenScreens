@@ -1,0 +1,13 @@
+# XcodeGen output — project.yml is the source of truth.
+OpenScreens.xcodeproj/
+build/
+DerivedData/
+*.xcworkspace/
+xcuserdata/
+*.xcuserstate
+.DS_Store
+
+# Local SwiftPM artefacts
+.build/
+.swiftpm/
+Package.resolved

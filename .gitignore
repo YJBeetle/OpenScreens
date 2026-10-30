@@ -9,4 +9,6 @@ core/bindings/
 apps/**/.build/
 apps/**/.swiftpm/
 apps/**/DerivedData/
+apps/**/build/
 apps/**/*.xcodeproj
+apps/apple/OpenScreensCore/OpenScreensCore.xcframework/

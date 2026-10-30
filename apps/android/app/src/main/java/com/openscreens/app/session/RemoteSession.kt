@@ -1,5 +1,6 @@
 package com.openscreens.app.session
 
+import android.graphics.Bitmap
 import com.openscreens.app.data.Connection
 import com.openscreens.app.data.QualityPreset
 import kotlinx.coroutines.flow.Flow
@@ -32,15 +33,24 @@ interface RemoteSession {
 sealed interface SessionEvent {
     data object Connecting : SessionEvent
     data class Connected(val width: Int, val height: Int) : SessionEvent
+    data class Resized(val width: Int, val height: Int) : SessionEvent
+
+    /**
+     * A completed framebuffer update. [sequence] increases with every update so Compose
+     * recomposes even though [bitmap] is reused between frames; treat the pixels as
+     * read-only, the session may be drawing the next frame into a different buffer.
+     */
+    data class Frame(val sequence: Long, val bitmap: Bitmap) : SessionEvent
+
     data object Disconnected : SessionEvent
     data class Failed(val reason: String) : SessionEvent
 }
 
 /**
- * The single seam between Compose and the native layer. When the UniFFI-generated
- * bindings exist, return an adapter around them here; no screen code has to change.
+ * The single seam between Compose and the native layer. No screen code depends on
+ * how frames are produced, only on [RemoteSession].
  */
 object SessionProvider {
     fun create(connection: Connection, quality: QualityPreset): RemoteSession =
-        FakeRemoteSession(connection, quality)
+        UniFfiRemoteSession(connection, quality)
 }

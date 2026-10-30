@@ -7,6 +7,7 @@ data class Connection(
     val name: String,
     val host: String,
     val port: Int = DEFAULT_VNC_PORT,
+    val username: String = "",
     val vncPassword: String = "",
     val ssh: SshCredentials? = null,
     val lastConnectedAt: Long? = null,

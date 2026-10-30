@@ -24,6 +24,8 @@
     <string name="editor_host">Host</string>
     <string name="editor_host_placeholder">192.168.1.20</string>
     <string name="editor_port">Port</string>
+    <string name="editor_username">Username</string>
+    <string name="editor_username_optional">Optional. Required by Apple Screen Sharing.</string>
     <string name="editor_vnc_password">VNC password</string>
     <string name="editor_optional">Optional</string>
     <string name="editor_show_password">Show password</string>
@@ -43,8 +45,8 @@
     <string name="session_status_disconnected">Disconnected</string>
     <string name="session_status_error">Connection failed</string>
     <string name="session_disconnect">Disconnect</string>
-    <string name="session_mock_title">Remote screen preview</string>
-    <string name="session_mock_body">Live frames from the Rust core will render here.</string>
+    <string name="session_waiting_title">Waiting for the remote screen</string>
+    <string name="session_waiting_body">Live frames from the Rust core appear here as soon as the first update arrives.</string>
     <string name="session_resolution">%1$d × %2$d</string>
     <string name="session_keyboard">Send a keystroke</string>
     <string name="session_keyboard_hint">Key</string>

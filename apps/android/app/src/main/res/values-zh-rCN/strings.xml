@@ -24,6 +24,8 @@
     <string name="editor_host">主机</string>
     <string name="editor_host_placeholder">192.168.1.20</string>
     <string name="editor_port">端口</string>
+    <string name="editor_username">用户名</string>
+    <string name="editor_username_optional">可选。Apple 屏幕共享需要填写。</string>
     <string name="editor_vnc_password">VNC 密码</string>
     <string name="editor_optional">可选</string>
     <string name="editor_show_password">显示密码</string>
@@ -43,8 +45,8 @@
     <string name="session_status_disconnected">已断开</string>
     <string name="session_status_error">连接失败</string>
     <string name="session_disconnect">断开连接</string>
-    <string name="session_mock_title">远程屏幕预览</string>
-    <string name="session_mock_body">来自 Rust 核心的实时画面将显示在这里。</string>
+    <string name="session_waiting_title">等待远程画面</string>
+    <string name="session_waiting_body">Rust 核心推送的实时画面将在这里显示。</string>
     <string name="session_resolution">%1$d × %2$d</string>
     <string name="session_keyboard">发送按键</string>
     <string name="session_keyboard_hint">按键</string>

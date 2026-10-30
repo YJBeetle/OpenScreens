@@ -61,8 +61,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.FilterQuality
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
@@ -71,6 +72,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -91,8 +93,7 @@ import kotlin.math.min
 import kotlin.math.roundToInt
 
 private val SessionBackdrop = Color(0xFF060808)
-private val CanvasTop = Color(0xFF141B1C)
-private val CanvasBottom = Color(0xFF080B0B)
+private val FramebufferBackground = Color(0xFF000000)
 
 private enum class SessionStatus { Connecting, Connected, Disconnected, Failed }
 
@@ -116,6 +117,7 @@ fun SessionScreen(
     var status by remember { mutableStateOf(SessionStatus.Connecting) }
     var remoteWidth by remember { mutableIntStateOf(1920) }
     var remoteHeight by remember { mutableIntStateOf(1200) }
+    var frame by remember { mutableStateOf<SessionEvent.Frame?>(null) }
     var lastAction by remember { mutableStateOf<String?>(null) }
     var showKeyboardDialog by rememberSaveable { mutableStateOf(false) }
     var showClipboardDialog by rememberSaveable { mutableStateOf(false) }
@@ -165,8 +167,28 @@ fun SessionScreen(
                     remoteHeight = event.height
                     onConnected()
                 }
-                SessionEvent.Disconnected -> status = SessionStatus.Disconnected
-                is SessionEvent.Failed -> status = SessionStatus.Failed
+                is SessionEvent.Resized -> {
+                    remoteWidth = event.width
+                    remoteHeight = event.height
+                }
+                is SessionEvent.Frame -> {
+                    status = SessionStatus.Connected
+                    frame = event
+                }
+                SessionEvent.Disconnected -> {
+                    status = SessionStatus.Disconnected
+                    if (!isExiting) {
+                        scope.launch {
+                            snackbarHostState.showSnackbar(
+                                context.getString(R.string.session_status_disconnected),
+                            )
+                        }
+                    }
+                }
+                is SessionEvent.Failed -> {
+                    status = SessionStatus.Failed
+                    scope.launch { snackbarHostState.showSnackbar(event.reason) }
+                }
             }
         }
     }
@@ -211,7 +233,7 @@ fun SessionScreen(
                 .width(canvasWidth)
                 .aspectRatio(aspect)
                 .clip(RoundedCornerShape(16.dp))
-                .background(Brush.verticalGradient(listOf(CanvasTop, CanvasBottom)))
+                .background(FramebufferBackground)
                 .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(16.dp))
                 .pointerInput(session, remoteWidth, remoteHeight) {
                     detectTapGestures(
@@ -263,12 +285,25 @@ fun SessionScreen(
                     )
                 },
         ) {
-            RemoteCanvasGrid()
-            RemoteCanvasPlaceholder(
-                remoteWidth = remoteWidth,
-                remoteHeight = remoteHeight,
-                modifier = Modifier.align(Alignment.Center),
-            )
+            val live = frame
+            if (live != null) {
+                Canvas(modifier = Modifier.fillMaxSize()) {
+                    drawImage(
+                        image = live.bitmap.asImageBitmap(),
+                        srcOffset = IntOffset.Zero,
+                        srcSize = IntSize(live.bitmap.width, live.bitmap.height),
+                        dstOffset = IntOffset.Zero,
+                        dstSize = IntSize(size.width.roundToInt(), size.height.roundToInt()),
+                        filterQuality = FilterQuality.Low,
+                    )
+                }
+            } else {
+                RemoteCanvasPlaceholder(
+                    remoteWidth = remoteWidth,
+                    remoteHeight = remoteHeight,
+                    modifier = Modifier.align(Alignment.Center),
+                )
+            }
             lastAction?.let { action ->
                 InputBadge(
                     text = action,
@@ -318,8 +353,9 @@ fun SessionScreen(
         KeystrokeDialog(
             onDismiss = { showKeyboardDialog = false },
             onSend = { key ->
-                session.sendKey(key.first().code, true)
-                session.sendKey(key.first().code, false)
+                val keysym = x11Keysym(key.first())
+                session.sendKey(keysym, true)
+                session.sendKey(keysym, false)
                 lastAction = context.getString(
                     R.string.session_action_prefix,
                     context.getString(R.string.session_key_sent, key),
@@ -345,24 +381,6 @@ fun SessionScreen(
                 showClipboardDialog = false
             },
         )
-    }
-}
-
-@Composable
-private fun RemoteCanvasGrid() {
-    Canvas(modifier = Modifier.fillMaxSize()) {
-        val step = 40.dp.toPx()
-        val color = Color.White.copy(alpha = 0.025f)
-        var x = 0f
-        while (x <= size.width) {
-            drawLine(color, Offset(x, 0f), Offset(x, size.height), strokeWidth = 1f)
-            x += step
-        }
-        var y = 0f
-        while (y <= size.height) {
-            drawLine(color, Offset(0f, y), Offset(size.width, y), strokeWidth = 1f)
-            y += step
-        }
     }
 }
 
@@ -393,13 +411,13 @@ private fun RemoteCanvasPlaceholder(
         }
         Spacer(Modifier.height(12.dp))
         Text(
-            text = stringResource(R.string.session_mock_title),
+            text = stringResource(R.string.session_waiting_title),
             style = MaterialTheme.typography.titleMedium,
             color = Color.White.copy(alpha = 0.9f),
         )
         Spacer(Modifier.height(4.dp))
         Text(
-            text = stringResource(R.string.session_mock_body),
+            text = stringResource(R.string.session_waiting_body),
             style = MaterialTheme.typography.bodySmall,
             color = Color.White.copy(alpha = 0.55f),
             textAlign = TextAlign.Center,
@@ -664,6 +682,19 @@ private fun remotePoint(
     val x = (offset.x / size.width * remoteWidth).roundToInt().coerceIn(0, remoteWidth - 1)
     val y = (offset.y / size.height * remoteHeight).roundToInt().coerceIn(0, remoteHeight - 1)
     return x to y
+}
+
+/**
+ * Maps a character to an X11 keysym. Printable Latin-1 keeps its code point; everything
+ * else uses the Unicode keysym range, matching how RFB servers translate KeyEvents.
+ */
+private fun x11Keysym(char: Char): Int {
+    val code = char.code
+    return if (code in 0x20..0x7E || code in 0xA0..0xFF) {
+        code
+    } else {
+        0x0100_0000 or code
+    }
 }
 
 private fun statusColor(status: SessionStatus): Color = when (status) {

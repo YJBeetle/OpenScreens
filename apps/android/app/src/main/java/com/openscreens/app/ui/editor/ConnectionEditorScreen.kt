@@ -70,6 +70,9 @@ fun ConnectionEditorScreen(
     var vncPassword by rememberSaveable(editorKey) {
         mutableStateOf(connection?.vncPassword.orEmpty())
     }
+    var username by rememberSaveable(editorKey) {
+        mutableStateOf(connection?.username.orEmpty())
+    }
     var sshEnabled by rememberSaveable(editorKey) { mutableStateOf(connection?.ssh != null) }
     var sshUsername by rememberSaveable(editorKey) {
         mutableStateOf(connection?.ssh?.username.orEmpty())
@@ -109,6 +112,7 @@ fun ConnectionEditorScreen(
                 name = name.trim(),
                 host = host.trim(),
                 port = portNumber ?: Connection.DEFAULT_VNC_PORT,
+                username = username.trim(),
                 vncPassword = vncPassword,
                 ssh = ssh,
             )
@@ -217,6 +221,19 @@ fun ConnectionEditorScreen(
                         ),
                     )
                 }
+
+                OutlinedTextField(
+                    value = username,
+                    onValueChange = { username = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text(stringResource(R.string.editor_username)) },
+                    singleLine = true,
+                    supportingText = { Text(stringResource(R.string.editor_username_optional)) },
+                    keyboardOptions = KeyboardOptions(
+                        autoCorrectEnabled = false,
+                        imeAction = ImeAction.Next,
+                    ),
+                )
 
                 PasswordField(
                     value = vncPassword,

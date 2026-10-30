@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">OpenScreens</string>
+
+    <!-- Connection library -->
+    <string name="library_add_connection">Add connection</string>
+    <string name="library_more">More options</string>
+    <string name="library_settings">Settings</string>
+    <string name="library_last_connected">Last connected %1$s</string>
+    <string name="library_never_connected">Never connected</string>
+    <string name="library_empty_title">Your library is empty</string>
+    <string name="library_empty_body">Save a VNC server here to reopen it in one tap.</string>
+    <string name="library_empty_action">Add your first connection</string>
+    <string name="library_edit_connection">Edit connection</string>
+    <string name="library_connection_thumbnail">Server thumbnail</string>
+
+    <!-- Connection editor -->
+    <string name="editor_new_title">New connection</string>
+    <string name="editor_edit_title">Edit connection</string>
+    <string name="editor_cancel">Cancel</string>
+    <string name="editor_save">Save</string>
+    <string name="editor_name">Name</string>
+    <string name="editor_name_placeholder">Studio Mac</string>
+    <string name="editor_host">Host</string>
+    <string name="editor_host_placeholder">192.168.1.20</string>
+    <string name="editor_port">Port</string>
+    <string name="editor_vnc_password">VNC password</string>
+    <string name="editor_optional">Optional</string>
+    <string name="editor_show_password">Show password</string>
+    <string name="editor_hide_password">Hide password</string>
+    <string name="editor_ssh_toggle">Tunnel through SSH</string>
+    <string name="editor_ssh_description">Route VNC traffic through an SSH server before connecting.</string>
+    <string name="editor_ssh_username">SSH username</string>
+    <string name="editor_ssh_password">SSH password</string>
+    <string name="editor_ssh_password_optional">Leave empty to use a key agent.</string>
+    <string name="editor_error_required">This field is required.</string>
+    <string name="editor_error_host">Use a hostname or IP address without spaces.</string>
+    <string name="editor_error_port">Enter a port from 1 to 65535.</string>
+
+    <!-- Session -->
+    <string name="session_status_connecting">Connecting…</string>
+    <string name="session_status_connected">Connected</string>
+    <string name="session_status_disconnected">Disconnected</string>
+    <string name="session_status_error">Connection failed</string>
+    <string name="session_disconnect">Disconnect</string>
+    <string name="session_mock_title">Remote screen preview</string>
+    <string name="session_mock_body">Live frames from the Rust core will render here.</string>
+    <string name="session_resolution">%1$d × %2$d</string>
+    <string name="session_keyboard">Send a keystroke</string>
+    <string name="session_keyboard_hint">Key</string>
+    <string name="session_keyboard_action">Send key</string>
+    <string name="session_clipboard">Clipboard</string>
+    <string name="session_clipboard_hint">Text to send to the remote clipboard</string>
+    <string name="session_clipboard_action">Send text</string>
+    <string name="session_quality">Quality</string>
+    <string name="session_enter_fullscreen">Enter fullscreen</string>
+    <string name="session_exit_fullscreen">Exit fullscreen</string>
+    <string name="session_action_prefix">Input: %1$s</string>
+    <string name="session_pointer_sent">pointer %1$d, %2$d</string>
+    <string name="session_key_sent">key “%1$s”</string>
+    <plurals name="session_clipboard_sent">
+        <item quantity="one">clipboard sent (%1$d character)</item>
+        <item quantity="other">clipboard sent (%1$d characters)</item>
+    </plurals>
+    <plurals name="session_region_copied">
+        <item quantity="one">region copied (%1$d byte)</item>
+        <item quantity="other">region copied (%1$d bytes)</item>
+    </plurals>
+
+    <!-- Quality presets -->
+    <string name="quality_low">Low</string>
+    <string name="quality_balanced">Balanced</string>
+    <string name="quality_high">High</string>
+    <string name="quality_low_summary">Saves bandwidth on slower links.</string>
+    <string name="quality_balanced_summary">A balance of sharpness and speed.</string>
+    <string name="quality_high_summary">Sharpest image, uses more bandwidth.</string>
+
+    <!-- Settings -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_appearance">Appearance</string>
+    <string name="theme_system">Follow system</string>
+    <string name="theme_light">Light</string>
+    <string name="theme_dark">Dark</string>
+    <string name="settings_streaming">Streaming</string>
+    <string name="settings_about">About</string>
+    <string name="settings_app_description">An open-source VNC client powered by a shared Rust core.</string>
+    <string name="settings_version">Version %1$s</string>
+    <string name="settings_license">Licensed under Apache-2.0</string>
+    <string name="settings_back">Back</string>
+</resources>

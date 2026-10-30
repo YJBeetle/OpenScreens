@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">OpenScreens</string>
+
+    <!-- 连接库 -->
+    <string name="library_add_connection">添加连接</string>
+    <string name="library_more">更多选项</string>
+    <string name="library_settings">设置</string>
+    <string name="library_last_connected">上次连接：%1$s</string>
+    <string name="library_never_connected">从未连接</string>
+    <string name="library_empty_title">连接库为空</string>
+    <string name="library_empty_body">保存一个 VNC 服务器，下次即可一键打开。</string>
+    <string name="library_empty_action">添加第一个连接</string>
+    <string name="library_edit_connection">编辑连接</string>
+    <string name="library_connection_thumbnail">服务器缩略图</string>
+
+    <!-- 连接编辑器 -->
+    <string name="editor_new_title">新建连接</string>
+    <string name="editor_edit_title">编辑连接</string>
+    <string name="editor_cancel">取消</string>
+    <string name="editor_save">保存</string>
+    <string name="editor_name">名称</string>
+    <string name="editor_name_placeholder">工作室 Mac</string>
+    <string name="editor_host">主机</string>
+    <string name="editor_host_placeholder">192.168.1.20</string>
+    <string name="editor_port">端口</string>
+    <string name="editor_vnc_password">VNC 密码</string>
+    <string name="editor_optional">可选</string>
+    <string name="editor_show_password">显示密码</string>
+    <string name="editor_hide_password">隐藏密码</string>
+    <string name="editor_ssh_toggle">通过 SSH 隧道连接</string>
+    <string name="editor_ssh_description">连接前通过 SSH 服务器转发 VNC 流量。</string>
+    <string name="editor_ssh_username">SSH 用户名</string>
+    <string name="editor_ssh_password">SSH 密码</string>
+    <string name="editor_ssh_password_optional">留空则使用密钥代理。</string>
+    <string name="editor_error_required">此字段为必填项。</string>
+    <string name="editor_error_host">请输入不含空格的主机名或 IP 地址。</string>
+    <string name="editor_error_port">请输入 1 到 65535 之间的端口。</string>
+
+    <!-- 会话 -->
+    <string name="session_status_connecting">正在连接…</string>
+    <string name="session_status_connected">已连接</string>
+    <string name="session_status_disconnected">已断开</string>
+    <string name="session_status_error">连接失败</string>
+    <string name="session_disconnect">断开连接</string>
+    <string name="session_mock_title">远程屏幕预览</string>
+    <string name="session_mock_body">来自 Rust 核心的实时画面将显示在这里。</string>
+    <string name="session_resolution">%1$d × %2$d</string>
+    <string name="session_keyboard">发送按键</string>
+    <string name="session_keyboard_hint">按键</string>
+    <string name="session_keyboard_action">发送按键</string>
+    <string name="session_clipboard">剪贴板</string>
+    <string name="session_clipboard_hint">要发送到远程剪贴板的文本</string>
+    <string name="session_clipboard_action">发送文本</string>
+    <string name="session_quality">画质</string>
+    <string name="session_enter_fullscreen">进入全屏</string>
+    <string name="session_exit_fullscreen">退出全屏</string>
+    <string name="session_action_prefix">输入：%1$s</string>
+    <string name="session_pointer_sent">指针 %1$d, %2$d</string>
+    <string name="session_key_sent">按键“%1$s”</string>
+    <plurals name="session_clipboard_sent">
+        <item quantity="other">剪贴板已发送（%1$d 个字符）</item>
+    </plurals>
+    <plurals name="session_region_copied">
+        <item quantity="other">区域已复制（%1$d 字节）</item>
+    </plurals>
+
+    <!-- 画质预设 -->
+    <string name="quality_low">低</string>
+    <string name="quality_balanced">均衡</string>
+    <string name="quality_high">高</string>
+    <string name="quality_low_summary">在较慢的网络上节省带宽。</string>
+    <string name="quality_balanced_summary">在清晰度与速度之间取得平衡。</string>
+    <string name="quality_high_summary">画面最清晰，占用更多带宽。</string>
+
+    <!-- 设置 -->
+    <string name="settings_title">设置</string>
+    <string name="settings_appearance">外观</string>
+    <string name="theme_system">跟随系统</string>
+    <string name="theme_light">浅色</string>
+    <string name="theme_dark">深色</string>
+    <string name="settings_streaming">串流</string>
+    <string name="settings_about">关于</string>
+    <string name="settings_app_description">由共享 Rust 核心驱动的开源 VNC 客户端。</string>
+    <string name="settings_version">版本 %1$s</string>
+    <string name="settings_license">基于 Apache-2.0 许可</string>
+    <string name="settings_back">返回</string>
+</resources>

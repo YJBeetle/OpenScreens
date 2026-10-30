@@ -117,8 +117,8 @@ impl From<EngineEvent> for SessionEvent {
 
 #[derive(Debug, thiserror::Error, uniffi::Error)]
 pub enum SessionFailure {
-    #[error("{message}")]
-    Session { message: String },
+    #[error("{reason}")]
+    Session { reason: String },
 }
 
 #[derive(uniffi::Object)]
@@ -134,7 +134,7 @@ impl RemoteSession {
             Session::connect(config.into())
                 .await
                 .map_err(|error| SessionFailure::Session {
-                    message: error.to_string(),
+                    reason: error.to_string(),
                 })?;
         Ok(Arc::new(Self {
             session: Arc::new(session),
@@ -185,6 +185,6 @@ impl RemoteSession {
 
 fn to_failure(error: rfb_engine::session::SessionError) -> SessionFailure {
     SessionFailure::Session {
-        message: error.to_string(),
+        reason: error.to_string(),
     }
 }

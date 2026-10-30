@@ -1167,7 +1167,7 @@ enum SessionFailure: Swift.Error, Equatable, Hashable, Foundation.LocalizedError
 
     
     
-    case Session(message: String
+    case Session(reason: String
     )
 
     
@@ -1199,7 +1199,7 @@ public struct FfiConverterTypeSessionFailure: FfiConverterRustBuffer {
 
         
         case 1: return .Session(
-            message: try FfiConverterString.read(from: &buf)
+            reason: try FfiConverterString.read(from: &buf)
             )
 
          default: throw UniffiInternalError.unexpectedEnumCase
@@ -1213,9 +1213,9 @@ public struct FfiConverterTypeSessionFailure: FfiConverterRustBuffer {
 
         
         
-        case let .Session(message):
+        case let .Session(reason):
             writeInt(&buf, Int32(1))
-            FfiConverterString.write(message, into: &buf)
+            FfiConverterString.write(reason, into: &buf)
             
         }
     }

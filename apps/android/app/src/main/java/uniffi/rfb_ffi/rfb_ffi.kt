@@ -2050,7 +2050,7 @@ sealed class SessionFailure: kotlin.Exception() {
         val `reason`: kotlin.String
         ) : SessionFailure() {
         override val message
-            get() = "message=${ `reason` }"
+            get() = "reason=${ `reason` }"
     }
     
 

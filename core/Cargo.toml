@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/rfb-proto"]
+members = ["crates/rfb-engine", "crates/rfb-io", "crates/rfb-proto"]
 
 [workspace.package]
 version = "0.1.0"

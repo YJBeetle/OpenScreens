@@ -1,0 +1,14 @@
+[package]
+name = "rfb-io"
+description = "Transports for the RFB protocol"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+tokio = { version = "1", features = ["net", "io-util", "rt", "macros"] }
+
+[lints.rust]
+unsafe_code = "forbid"

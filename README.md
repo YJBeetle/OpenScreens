@@ -26,4 +26,4 @@ cargo clippy --workspace --all-targets -- -D warnings
 
 ## License
 
-Apache-2.0. See [LICENSE-APACHE](LICENSE-APACHE).
+AGPL-3.0. See [LICENSE-AGPL](LICENSE-AGPL).

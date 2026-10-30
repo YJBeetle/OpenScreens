@@ -26,4 +26,4 @@ cargo clippy --workspace --all-targets -- -D warnings
 
 ## 许可证
 
-Apache-2.0，见 [LICENSE-APACHE](LICENSE-APACHE)。
+AGPL-3.0，见 [LICENSE-AGPL](LICENSE-AGPL)。

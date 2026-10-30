@@ -26,4 +26,4 @@ cargo clippy --workspace --all-targets -- -D warnings
 
 ## 许可证
 
-MIT OR Apache-2.0，见 [LICENSE-MIT](LICENSE-MIT) 与 [LICENSE-APACHE](LICENSE-APACHE)。
+Apache-2.0，见 [LICENSE-APACHE](LICENSE-APACHE)。

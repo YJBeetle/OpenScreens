@@ -8,9 +8,11 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+bytes = "1"
+rfb-codec = { path = "../rfb-codec" }
 rfb-io = { path = "../rfb-io" }
 rfb-proto = { path = "../rfb-proto" }
-tokio = { version = "1", features = ["io-util", "macros", "rt", "sync"] }
+tokio = { version = "1", features = ["io-util", "macros", "rt", "sync", "time"] }
 
 [lints.rust]
 unsafe_code = "forbid"

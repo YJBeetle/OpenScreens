@@ -1,0 +1,15 @@
+[package]
+name = "rfb-codec"
+description = "RFB rectangle decoders writing into a BGRA framebuffer"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+flate2 = "1"
+rfb-proto = { path = "../rfb-proto" }
+
+[lints.rust]
+unsafe_code = "forbid"

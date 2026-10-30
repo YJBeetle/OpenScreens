@@ -1,0 +1,13 @@
+[package]
+name = "rfb-proto"
+description = "Sans-IO RFB (VNC) protocol primitives"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+
+[lints.rust]
+unsafe_code = "forbid"

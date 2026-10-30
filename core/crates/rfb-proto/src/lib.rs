@@ -3,6 +3,7 @@
 //! This crate contains no networking or rendering code. It parses and encodes
 //! wire messages so that transports and frontends stay thin.
 
+pub mod apple_auth;
 pub mod auth;
 pub mod encoding;
 pub mod messages;

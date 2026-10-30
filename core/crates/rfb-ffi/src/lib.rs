@@ -14,6 +14,7 @@ uniffi::setup_scaffolding!();
 pub struct SessionConfig {
     pub host: String,
     pub port: u16,
+    pub username: Option<String>,
     pub password: Option<String>,
     pub shared: bool,
 }
@@ -23,6 +24,7 @@ impl From<SessionConfig> for EngineConfig {
         Self {
             host: config.host,
             port: config.port,
+            username: config.username,
             password: config.password,
             shared: config.shared,
         }

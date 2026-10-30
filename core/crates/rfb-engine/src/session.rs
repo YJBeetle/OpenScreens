@@ -40,6 +40,7 @@ const ENCODINGS: [i32; 8] = [
 pub struct SessionConfig {
     pub host: String,
     pub port: u16,
+    pub username: Option<String>,
     pub password: Option<String>,
     pub shared: bool,
 }
@@ -49,6 +50,7 @@ impl SessionConfig {
         Self {
             host: host.into(),
             port,
+            username: None,
             password: None,
             shared: true,
         }
@@ -125,6 +127,7 @@ pub struct Session {
     commands: mpsc::Sender<Vec<u8>>,
     events: AsyncMutex<mpsc::Receiver<Event>>,
     framebuffer: Arc<Mutex<Framebuffer>>,
+    input_key: Option<[u8; 16]>,
     name: String,
     reader: JoinHandle<()>,
     writer: JoinHandle<()>,
@@ -146,11 +149,13 @@ impl Session {
         let handshake = handshake::perform(
             &mut stream,
             &ClientConfig {
+                username: config.username.clone(),
                 password: config.password.clone(),
                 shared: config.shared,
             },
         )
         .await?;
+        let input_key = handshake.input_key;
 
         let width = handshake.server_init.width;
         let height = handshake.server_init.height;
@@ -186,10 +191,15 @@ impl Session {
             commands: command_tx,
             events: AsyncMutex::new(event_rx),
             framebuffer,
+            input_key,
             name,
             reader,
             writer,
         })
+    }
+
+    pub fn has_input_encryption(&self) -> bool {
+        self.input_key.is_some()
     }
 
     pub fn name(&self) -> &str {

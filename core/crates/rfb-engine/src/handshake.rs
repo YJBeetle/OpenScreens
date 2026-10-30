@@ -3,6 +3,7 @@
 use std::fmt;
 use std::io;
 
+use rfb_proto::apple_auth::{MAX_MODULUS_LEN, MIN_MODULUS_LEN, apple_dh_reply};
 use rfb_proto::auth::vnc_auth_response;
 use rfb_proto::security::{SecurityResult, SecurityType};
 use rfb_proto::server_init::{SERVER_INIT_HEADER_LEN, ServerInit, parse_server_init};
@@ -16,6 +17,7 @@ const VNC_CHALLENGE_LEN: usize = 16;
 /// Settings that affect the handshake.
 #[derive(Debug, Clone)]
 pub struct ClientConfig {
+    pub username: Option<String>,
     pub password: Option<String>,
     pub shared: bool,
 }
@@ -23,6 +25,7 @@ pub struct ClientConfig {
 impl Default for ClientConfig {
     fn default() -> Self {
         Self {
+            username: None,
             password: None,
             shared: true,
         }
@@ -34,6 +37,9 @@ impl Default for ClientConfig {
 pub struct Handshake {
     pub version: ProtocolVersion,
     pub server_init: ServerInit,
+    /// MD5(DH shared secret) for Apple-encrypted input events, when Apple
+    /// authentication was used.
+    pub input_key: Option<[u8; 16]>,
 }
 
 #[derive(Debug)]
@@ -43,6 +49,7 @@ pub enum HandshakeError {
     ConnectionRefused(String),
     UnsupportedVersion(ProtocolVersion),
     UnsupportedSecurityType(SecurityType),
+    MissingUsername,
     MissingPassword,
     AuthenticationFailed(SecurityResult),
     ServerNameTooLong(usize),
@@ -62,8 +69,11 @@ impl fmt::Display for HandshakeError {
             Self::UnsupportedSecurityType(security) => {
                 write!(f, "unsupported security type {security:?}")
             }
+            Self::MissingUsername => {
+                f.write_str("server requires Apple authentication but no username is configured")
+            }
             Self::MissingPassword => {
-                f.write_str("server requires VNC authentication but no password is configured")
+                f.write_str("server requires authentication but no password is configured")
             }
             Self::AuthenticationFailed(result) => write!(f, "authentication failed: {result:?}"),
             Self::ServerNameTooLong(length) => {
@@ -121,6 +131,19 @@ where
             .await?;
     }
 
+    let mut input_key = None;
+    if matches!(security, SecurityType::Other(30) | SecurityType::Other(32)) {
+        let username = config
+            .username
+            .as_deref()
+            .ok_or(HandshakeError::MissingUsername)?;
+        let password = config
+            .password
+            .as_deref()
+            .ok_or(HandshakeError::MissingPassword)?;
+        input_key = Some(perform_apple_dh(stream, username, password).await?);
+    }
+
     // 3.8 always sends a SecurityResult; 3.7 and 3.3 only for authenticated
     // security types.
     if version.is_at_least(ProtocolVersion::RFB_3_8) || security != SecurityType::None {
@@ -135,6 +158,7 @@ where
     Ok(Handshake {
         version,
         server_init,
+        input_key,
     })
 }
 
@@ -148,6 +172,32 @@ fn negotiate_version(server: ProtocolVersion) -> ProtocolVersion {
     }
 }
 
+async fn perform_apple_dh<T>(
+    stream: &mut T,
+    username: &str,
+    password: &str,
+) -> Result<[u8; 16], HandshakeError>
+where
+    T: AsyncRead + AsyncWrite + Unpin,
+{
+    let mut header = [0u8; 4];
+    stream.read_exact(&mut header).await?;
+    let generator = u16::from_be_bytes([header[0], header[1]]);
+    let key_length = usize::from(u16::from_be_bytes([header[2], header[3]]));
+    if !(MIN_MODULUS_LEN..=MAX_MODULUS_LEN).contains(&key_length) {
+        return Err(HandshakeError::Protocol("invalid Apple DH key length"));
+    }
+
+    let mut params = vec![0u8; key_length * 2];
+    stream.read_exact(&mut params).await?;
+    let (modulus, server_key) = params.split_at(key_length);
+    let reply = apple_dh_reply(generator, modulus, server_key, username, password)
+        .map_err(|_| HandshakeError::Protocol("Apple DH authentication failed"))?;
+    stream.write_all(&reply.credentials_ciphertext).await?;
+    stream.write_all(&reply.client_public_key).await?;
+    Ok(reply.aes_key)
+}
+
 async fn read_security_3_3<T>(stream: &mut T) -> Result<SecurityType, HandshakeError>
 where
     T: AsyncRead + Unpin,
@@ -158,6 +208,7 @@ where
         )),
         1 => Ok(SecurityType::None),
         2 => Ok(SecurityType::VncAuthentication),
+        value @ (30 | 32) => Ok(SecurityType::Other(value as u8)),
         other => {
             let byte = u8::try_from(other)
                 .map_err(|_| HandshakeError::Protocol("invalid security type"))?;
@@ -189,16 +240,30 @@ where
         .map(|&value| SecurityType::from_u8(value))
         .collect();
 
-    let selected =
-        if config.password.is_some() && offered.contains(&SecurityType::VncAuthentication) {
-            SecurityType::VncAuthentication
-        } else if offered.contains(&SecurityType::None) {
-            SecurityType::None
-        } else if offered.contains(&SecurityType::VncAuthentication) {
-            return Err(HandshakeError::MissingPassword);
-        } else {
-            return Err(HandshakeError::UnsupportedSecurityType(offered[0]));
-        };
+    let apple = if offered.contains(&SecurityType::Other(30)) {
+        Some(SecurityType::Other(30))
+    } else if offered.contains(&SecurityType::Other(32)) {
+        Some(SecurityType::Other(32))
+    } else {
+        None
+    };
+
+    let selected = if let (Some(apple_type), true) = (
+        apple,
+        config.username.is_some() && config.password.is_some(),
+    ) {
+        apple_type
+    } else if config.password.is_some() && offered.contains(&SecurityType::VncAuthentication) {
+        SecurityType::VncAuthentication
+    } else if offered.contains(&SecurityType::None) {
+        SecurityType::None
+    } else if offered.contains(&SecurityType::VncAuthentication) {
+        return Err(HandshakeError::MissingPassword);
+    } else if apple.is_some() {
+        return Err(HandshakeError::MissingUsername);
+    } else {
+        return Err(HandshakeError::UnsupportedSecurityType(offered[0]));
+    };
 
     stream.write_all(&[selected.to_u8()]).await?;
     Ok(selected)
@@ -338,6 +403,7 @@ mod tests {
         });
 
         let config = ClientConfig {
+            username: None,
             password: Some(password.to_owned()),
             shared: true,
         };
@@ -361,6 +427,7 @@ mod tests {
         });
 
         let config = ClientConfig {
+            username: None,
             password: Some("wrong".to_owned()),
             shared: true,
         };

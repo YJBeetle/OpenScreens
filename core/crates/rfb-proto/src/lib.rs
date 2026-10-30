@@ -3,8 +3,11 @@
 //! This crate contains no networking or rendering code. It parses and encodes
 //! wire messages so that transports and frontends stay thin.
 
+pub mod encoding;
+pub mod messages;
 pub mod pixel_format;
 pub mod security;
+pub mod server_init;
 pub mod version;
 
 use std::fmt;

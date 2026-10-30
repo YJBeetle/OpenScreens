@@ -1594,6 +1594,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "rfb-ffi-bindgen"
+version = "0.1.0"
+dependencies = [
+ "uniffi",
+]
+
+[[package]]
 name = "rfb-io"
 version = "0.1.0"
 dependencies = [

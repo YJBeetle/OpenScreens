@@ -25,7 +25,7 @@ const READ_CHUNK: usize = 64 * 1024;
 const MAX_CUT_TEXT_LEN: usize = 16 * 1024 * 1024;
 
 /// Encodings advertised to the server, most preferred first.
-const ENCODINGS: [i32; 8] = [
+const ENCODINGS: [i32; 7] = [
     Encoding::Zrle.to_id(),
     Encoding::Hextile.to_id(),
     Encoding::CopyRect.to_id(),
@@ -33,7 +33,6 @@ const ENCODINGS: [i32; 8] = [
     Encoding::Zlib.to_id(),
     Encoding::DesktopSize.to_id(),
     Encoding::LastRect.to_id(),
-    Encoding::Cursor.to_id(),
 ];
 
 #[derive(Debug, Clone)]

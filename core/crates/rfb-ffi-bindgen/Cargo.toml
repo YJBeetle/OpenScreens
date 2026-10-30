@@ -1,0 +1,15 @@
+[package]
+name = "rfb-ffi-bindgen"
+description = "Bindings generator for the OpenScreens UniFFI surface"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "uniffi-bindgen"
+path = "src/main.rs"
+
+[dependencies]
+uniffi = { version = "0.32", features = ["cli"] }

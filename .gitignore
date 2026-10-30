@@ -2,3 +2,11 @@ target/
 .DS_Store
 var/
 **/*.rs.bk
+
+core/artifacts/
+core/bindings/
+
+apps/**/.build/
+apps/**/.swiftpm/
+apps/**/DerivedData/
+apps/**/*.xcodeproj

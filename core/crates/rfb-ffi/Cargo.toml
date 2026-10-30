@@ -15,7 +15,7 @@ rfb-codec = { path = "../rfb-codec" }
 rfb-engine = { path = "../rfb-engine" }
 thiserror = "2"
 tokio = { version = "1", features = ["rt-multi-thread", "sync"] }
-uniffi = { version = "0.32", features = ["cli", "tokio"] }
+uniffi = { version = "0.32", features = ["tokio"] }
 
 [lints.rust]
 unsafe_code = "forbid"

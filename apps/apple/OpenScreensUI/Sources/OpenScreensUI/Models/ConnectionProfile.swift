@@ -282,6 +282,8 @@ public struct ControlPreferences: Codable, Hashable, Sendable {
     public var scaling: RemoteContentMode
     public var autoReconnect: Bool
     public var keepScreenAwake: Bool
+    /// Optional so profiles saved before pinch zoom existed still decode.
+    public var zoomEnabled: Bool?
 
     public init(
         startInObserveMode: Bool = false,
@@ -289,7 +291,8 @@ public struct ControlPreferences: Codable, Hashable, Sendable {
         cursorMode: CursorMode = .touch,
         scaling: RemoteContentMode = .fit,
         autoReconnect: Bool = true,
-        keepScreenAwake: Bool = true
+        keepScreenAwake: Bool = true,
+        zoomEnabled: Bool? = nil
     ) {
         self.startInObserveMode = startInObserveMode
         self.sharedClipboard = sharedClipboard
@@ -297,6 +300,7 @@ public struct ControlPreferences: Codable, Hashable, Sendable {
         self.scaling = scaling
         self.autoReconnect = autoReconnect
         self.keepScreenAwake = keepScreenAwake
+        self.zoomEnabled = zoomEnabled
     }
 }
 

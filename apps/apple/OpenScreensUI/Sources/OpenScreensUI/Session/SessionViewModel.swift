@@ -23,6 +23,7 @@ public final class SessionViewModel {
     public var isObserving: Bool
     public var scaling: RemoteContentMode
     public var showsChrome = true
+    public var zoomEnabled: Bool { profile.controls.zoomEnabled ?? true }
     public var isKeyboardActive = false
     public var keyboardModifiers: RemoteModifiers = []
 
@@ -55,6 +56,7 @@ public final class SessionViewModel {
     @ObservationIgnored private var reconnectTask: Task<Void, Never>?
     @ObservationIgnored private var messageTask: Task<Void, Never>?
     @ObservationIgnored private var dragAnchor: CGPoint?
+    @ObservationIgnored private var pressedButton: PointerButton?
     @ObservationIgnored private var isStopping = false
     @ObservationIgnored private var reconnectAttempts = 0
     @ObservationIgnored private var lastHoverPixel: CGPoint?
@@ -363,6 +365,34 @@ public final class SessionViewModel {
 
     public func endDrag() {
         dragAnchor = nil
+    }
+
+    /// Starts a held-button drag (long press): the button goes down under the
+    /// finger and stays down until `endPress`.
+    public func beginPress(button: PointerButton, at point: CGPoint, in size: CGSize) {
+        guard state.isConnected, !isObserving, size.width > 0, size.height > 0 else { return }
+        let target = normalized(point, in: size)
+        remoteCursor = target
+        pressedButton = button
+        queuePointer([
+            PointerEvent(action: .move, x: target.x, y: target.y),
+            PointerEvent(action: .down, button: button, x: target.x, y: target.y)
+        ])
+    }
+
+    public func movePress(to point: CGPoint, in size: CGSize) {
+        guard pressedButton != nil, state.isConnected, !isObserving else { return }
+        let target = normalized(point, in: size)
+        remoteCursor = target
+        queuePointer([PointerEvent(action: .move, x: target.x, y: target.y)])
+    }
+
+    public func endPress() {
+        guard let button = pressedButton else { return }
+        pressedButton = nil
+        queuePointer([
+            PointerEvent(action: .up, button: button, x: remoteCursor.x, y: remoteCursor.y)
+        ])
     }
 
     /// Tracks the pointer on pointer-capable platforms and forwards absolute

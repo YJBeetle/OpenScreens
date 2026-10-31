@@ -702,12 +702,19 @@ public struct ConnectionEditorView: View {
                     Text(mode.title).tag(mode)
                 }
             }
+            Toggle(
+                "Allow Pinching to Zoom",
+                isOn: Binding(
+                    get: { draft.controls.zoomEnabled ?? true },
+                    set: { draft.controls.zoomEnabled = $0 }
+                )
+            )
             Toggle("Reconnect Automatically", isOn: $draft.controls.autoReconnect)
             Toggle("Keep Screen Awake", isOn: $draft.controls.keepScreenAwake)
         } header: {
             Text("Display")
         } footer: {
-            Text("Scaling controls how the framebuffer fits the session window. Automatic reconnect retries up to three times after an unexpected close.")
+            Text("Scaling controls how the framebuffer fits the session window. Pinching zooms the remote desktop; turn it off to reserve two-finger gestures for scrolling. Automatic reconnect retries up to three times after an unexpected close.")
         }
     }
 

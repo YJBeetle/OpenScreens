@@ -192,7 +192,8 @@
 "Reconnect Automatically" = "自动重新连接";
 "Keep Screen Awake" = "保持屏幕常亮";
 "Display" = "显示器";
-"Scaling controls how the framebuffer fits the session window. Automatic reconnect retries up to three times after an unexpected close." = "缩放决定画面如何适配会话窗口。意外断开后，自动重连最多重试三次。";
+"Allow Pinching to Zoom" = "允许捏合缩放";
+"Scaling controls how the framebuffer fits the session window. Pinching zooms the remote desktop; turn it off to reserve two-finger gestures for scrolling. Automatic reconnect retries up to three times after an unexpected close." = "缩放决定画面如何适配会话窗口。捏合可放大远端桌面；关闭后将双指手势保留给滚动。意外断开后，自动重连最多重试三次。";
 
 /* MARK: - Session toolbar and menus */
 "Show Toolbar" = "显示工具栏";

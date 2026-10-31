@@ -19,6 +19,7 @@ public struct SessionScreen: View {
     @State private var showingDownloadDialog = false
     @State private var downloadPath = ""
     @State private var pinchStart: (zoom: CGFloat, pan: CGSize, focal: CGPoint)?
+    @State private var pressIndicator: PressIndicator?
 
     #if os(macOS)
     @FocusState private var keyboardFocused: Bool
@@ -53,6 +54,16 @@ public struct SessionScreen: View {
 
             cursorOverlay
             pointerSurface
+            if let indicator = pressIndicator {
+                Circle()
+                    .fill(indicator.color.opacity(0.9))
+                    .frame(width: 22, height: 22)
+                    .overlay(Circle().stroke(.white.opacity(0.85), lineWidth: 2))
+                    .shadow(color: indicator.color.opacity(0.55), radius: 8)
+                    .position(indicator.point)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
             #if os(macOS)
             if model.state.isConnected {
                 RemoteDragOutHandle(model: model)
@@ -243,10 +254,11 @@ public struct SessionScreen: View {
                 onDragZoomed: { model.panZoom(by: $0, in: proxy.size) },
                 isZoomed: { model.zoom > 1.001 },
                 onPinchBegan: { focal in
+                    guard model.zoomEnabled else { return }
                     pinchStart = (model.zoom, model.pan, focal)
                 },
                 onPinchChanged: { scale, focal in
-                    guard let start = pinchStart else { return }
+                    guard model.zoomEnabled, let start = pinchStart else { return }
                     model.applyPinch(
                         scale: scale,
                         startZoom: start.zoom,
@@ -256,7 +268,31 @@ public struct SessionScreen: View {
                         in: proxy.size
                     )
                 },
-                onPinchEnded: { pinchStart = nil }
+                onPinchEnded: { pinchStart = nil },
+                onPressBegan: { button, point in
+                    model.beginPress(button: button, at: point, in: proxy.size)
+                    pressIndicator = PressIndicator(
+                        color: Self.indicatorColor(for: button),
+                        point: point
+                    )
+                },
+                onPressMoved: { point in
+                    model.movePress(to: point, in: proxy.size)
+                    pressIndicator?.point = point
+                },
+                onPressEnded: {
+                    model.endPress()
+                    pressIndicator = nil
+                },
+                onThreeFingerSwipe: { direction in
+                    let key: RemoteKey = switch direction {
+                    case .up: .arrowUp
+                    case .down: .arrowDown
+                    case .left: .arrowLeft
+                    default: .arrowRight
+                    }
+                    model.sendKey(key, extraModifiers: [.control])
+                }
             )
             #endif
         }
@@ -269,6 +305,14 @@ public struct SessionScreen: View {
         }
         .accessibilityAction(named: "Toggle Observe Mode") {
             model.toggleObserveMode()
+        }
+    }
+
+    private static func indicatorColor(for button: PointerButton) -> Color {
+        switch button {
+        case .left: Color(red: 0.29, green: 0.56, blue: 1)
+        case .right: Color(red: 1, green: 0.35, blue: 0.32)
+        case .middle: Color(red: 0.20, green: 0.78, blue: 0.35)
         }
     }
 
@@ -800,4 +844,9 @@ private extension RemoteModifiers {
         if eventModifiers.contains(.shift) { value.insert(.shift) }
         self = value
     }
+}
+
+private struct PressIndicator {
+    var color: Color
+    var point: CGPoint
 }

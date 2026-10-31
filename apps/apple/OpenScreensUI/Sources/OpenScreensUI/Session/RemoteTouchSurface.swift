@@ -20,6 +20,10 @@ struct RemoteTouchSurface: UIViewRepresentable {
     var onPinchBegan: (CGPoint) -> Void
     var onPinchChanged: (CGFloat, CGPoint) -> Void
     var onPinchEnded: () -> Void
+    var onPressBegan: (PointerButton, CGPoint) -> Void
+    var onPressMoved: (CGPoint) -> Void
+    var onPressEnded: () -> Void
+    var onThreeFingerSwipe: (UISwipeGestureRecognizer.Direction) -> Void
 
     func makeUIView(context: Context) -> TouchGestureView {
         let view = TouchGestureView()
@@ -37,6 +41,8 @@ final class TouchGestureView: UIView, UIGestureRecognizerDelegate {
 
     private var twoPanTranslation = CGPoint.zero
     private var pinchActive = false
+    private var pressActive = false
+    private var suppressSingleTap = false
     private var twoPan: UIPanGestureRecognizer!
     private var pinch: UIPinchGestureRecognizer!
 
@@ -78,6 +84,33 @@ final class TouchGestureView: UIView, UIGestureRecognizerDelegate {
         pinch.delegate = self
         addGestureRecognizer(pinch)
         self.pinch = pinch
+
+        let held = UILongPressGestureRecognizer(target: self, action: #selector(handleLongPress))
+        held.numberOfTouchesRequired = 1
+        held.allowableMovement = 12
+        held.minimumPressDuration = 0.45
+        addGestureRecognizer(held)
+
+        let heldRight = UILongPressGestureRecognizer(target: self, action: #selector(handleLongPress))
+        heldRight.numberOfTouchesRequired = 2
+        heldRight.allowableMovement = 12
+        heldRight.minimumPressDuration = 0.45
+        addGestureRecognizer(heldRight)
+        twoTap.require(toFail: heldRight)
+
+        let heldMiddle = UILongPressGestureRecognizer(target: self, action: #selector(handleLongPress))
+        heldMiddle.numberOfTouchesRequired = 3
+        heldMiddle.allowableMovement = 12
+        heldMiddle.minimumPressDuration = 0.45
+        addGestureRecognizer(heldMiddle)
+        threeTap.require(toFail: heldMiddle)
+
+        for direction: UISwipeGestureRecognizer.Direction in [.up, .down, .left, .right] {
+            let swipe = UISwipeGestureRecognizer(target: self, action: #selector(handleThreeFingerSwipe))
+            swipe.numberOfTouchesRequired = 3
+            swipe.direction = direction
+            addGestureRecognizer(swipe)
+        }
     }
 
     @available(*, unavailable)
@@ -98,19 +131,29 @@ final class TouchGestureView: UIView, UIGestureRecognizerDelegate {
     @objc private func handleSinglePan(_ gesture: UIPanGestureRecognizer) {
         let location = gesture.location(in: self)
         switch gesture.state {
+        case .began:
+            suppressSingleTap = false
         case .changed:
+            guard !pressActive else { return }
             let translation = gesture.translation(in: self)
             if (translation.x * translation.x + translation.y * translation.y).squareRoot() > 3 {
                 handlers?.onDrag(location)
             }
         case .ended:
             let translation = gesture.translation(in: self)
-            if (translation.x * translation.x + translation.y * translation.y).squareRoot() <= 6 {
+            let tapped = (translation.x * translation.x + translation.y * translation.y).squareRoot() <= 6
+            if suppressSingleTap {
+                suppressSingleTap = false
+            } else if tapped && !pressActive {
                 handlers?.onTap(location)
             }
-            handlers?.onDragEnd()
+            if !pressActive {
+                handlers?.onDragEnd()
+            }
         case .cancelled, .failed:
-            handlers?.onDragEnd()
+            if !pressActive {
+                handlers?.onDragEnd()
+            }
         default:
             break
         }
@@ -122,7 +165,7 @@ final class TouchGestureView: UIView, UIGestureRecognizerDelegate {
         case .began:
             twoPanTranslation = .zero
         case .changed:
-            guard !pinchActive else {
+            guard !pinchActive, !pressActive else {
                 twoPanTranslation = translation
                 return
             }
@@ -162,6 +205,7 @@ final class TouchGestureView: UIView, UIGestureRecognizerDelegate {
             pinchActive = true
             handlers?.onPinchBegan(focal)
         case .changed:
+            guard !pressActive else { return }
             pinchActive = true
             handlers?.onPinchChanged(gesture.scale, focal)
         case .ended, .cancelled, .failed:
@@ -170,6 +214,32 @@ final class TouchGestureView: UIView, UIGestureRecognizerDelegate {
         default:
             break
         }
+    }
+
+    @objc private func handleLongPress(_ gesture: UILongPressGestureRecognizer) {
+        let button: PointerButton = switch gesture.numberOfTouchesRequired {
+        case 1: .left
+        case 2: .right
+        default: .middle
+        }
+        let location = gesture.location(in: self)
+        switch gesture.state {
+        case .began:
+            pressActive = true
+            suppressSingleTap = true
+            handlers?.onPressBegan(button, location)
+        case .changed:
+            handlers?.onPressMoved(location)
+        case .ended, .cancelled, .failed:
+            pressActive = false
+            handlers?.onPressEnded()
+        default:
+            break
+        }
+    }
+
+    @objc private func handleThreeFingerSwipe(_ gesture: UISwipeGestureRecognizer) {
+        handlers?.onThreeFingerSwipe(gesture.direction)
     }
 }
 #endif

@@ -544,7 +544,12 @@ fun SessionScreen(
             .fillMaxSize()
             .background(SessionBackdrop),
     ) {
-        val aspect = (remoteWidth.toFloat() / remoteHeight.toFloat()).coerceAtLeast(0.1f)
+        val aspect = if (remoteWidth > 0 && remoteHeight > 0) {
+            (remoteWidth.toFloat() / remoteHeight.toFloat()).coerceAtLeast(0.1f)
+        } else {
+            // Unknown until Connected; keep layout valid (NaN aspectRatio crashes).
+            16f / 9f
+        }
         val canvasWidth = min(maxWidth.value, maxHeight.value * aspect).dp
 
         // Subscribe only to the region the viewport shows, and ask for a
@@ -611,6 +616,9 @@ fun SessionScreen(
                 .background(FramebufferBackground)
                 .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(16.dp))
                 .pointerInput(session, remoteWidth, remoteHeight, trackpadMode) {
+                    // No framebuffer yet: pointer math would divide by zero and
+                    // round NaN coordinates.
+                    if (remoteWidth <= 1 || remoteHeight <= 1) return@pointerInput
                     val touchSlop = viewConfiguration.touchSlop
                     val doubleTapTimeout = viewConfiguration.doubleTapTimeoutMillis.toLong()
                     val doubleTapSlop = touchSlop * 2.5f

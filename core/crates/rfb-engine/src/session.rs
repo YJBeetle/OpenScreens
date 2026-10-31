@@ -1201,6 +1201,13 @@ where
             let payload = state.buffer[..payload_len].to_vec();
             state.buffer.advance(payload_len);
             if let Ok(info) = apple_displays::parse_apple_desktop_info(&payload) {
+                {
+                    let mut framebuffer = state
+                        .framebuffer
+                        .lock()
+                        .map_err(|_| SessionError::Protocol("framebuffer lock poisoned"))?;
+                    framebuffer.resize(info.width, info.height);
+                }
                 layout = Some((
                     info.width,
                     info.height,
@@ -1228,6 +1235,13 @@ where
             let payload = state.buffer[..payload_len].to_vec();
             state.buffer.advance(payload_len);
             if let Ok(info) = apple_displays::parse_apple_desktop_info2(&payload) {
+                {
+                    let mut framebuffer = state
+                        .framebuffer
+                        .lock()
+                        .map_err(|_| SessionError::Protocol("framebuffer lock poisoned"))?;
+                    framebuffer.resize(info.width, info.height);
+                }
                 layout = Some((
                     info.width,
                     info.height,

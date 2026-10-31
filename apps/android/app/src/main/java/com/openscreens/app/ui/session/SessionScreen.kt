@@ -47,6 +47,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.outlined.Backspace
+import androidx.compose.material.icons.automirrored.outlined.ExitToApp
 import androidx.compose.material.icons.automirrored.outlined.KeyboardReturn
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
@@ -60,7 +61,6 @@ import androidx.compose.material.icons.outlined.Keyboard
 import androidx.compose.material.icons.outlined.KeyboardHide
 import androidx.compose.material.icons.outlined.Monitor
 import androidx.compose.material.icons.outlined.Mouse
-import androidx.compose.material.icons.outlined.PowerSettingsNew
 import androidx.compose.material.icons.outlined.TouchApp
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.outlined.Visibility
@@ -1385,7 +1385,6 @@ fun SessionScreen(
                 serverName = connection.name,
                 statusText = statusText,
                 statusColor = statusColor(status),
-                onDisconnect = exitSession,
                 modifier = Modifier
                     .align(Alignment.TopCenter)
                     .windowInsetsPadding(WindowInsets.safeDrawing)
@@ -1451,6 +1450,7 @@ fun SessionScreen(
                 onDownload = { showDownloadDialog = true },
                 onToggleFullscreen = { isFullscreen = !isFullscreen },
                 onHideChrome = { chromeVisible = false },
+                onDisconnect = exitSession,
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .windowInsetsPadding(WindowInsets.safeDrawing)
@@ -1688,7 +1688,6 @@ private fun SessionTopBar(
     serverName: String,
     statusText: String,
     statusColor: Color,
-    onDisconnect: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Surface(
@@ -1701,7 +1700,7 @@ private fun SessionTopBar(
         contentColor = Color.White,
     ) {
         Row(
-            modifier = Modifier.padding(start = 16.dp, end = 4.dp, top = 2.dp, bottom = 2.dp),
+            modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 2.dp, bottom = 2.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(
@@ -1727,12 +1726,6 @@ private fun SessionTopBar(
                     color = Color.White.copy(alpha = 0.65f),
                 )
             }
-            IconButton(onClick = onDisconnect) {
-                Icon(
-                    imageVector = Icons.Outlined.PowerSettingsNew,
-                    contentDescription = stringResource(R.string.session_disconnect),
-                )
-            }
         }
     }
 }
@@ -1756,6 +1749,7 @@ private fun SessionToolbar(
     onDownload: () -> Unit,
     onToggleFullscreen: () -> Unit,
     onHideChrome: () -> Unit,
+    onDisconnect: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Surface(
@@ -1880,6 +1874,11 @@ private fun SessionToolbar(
                 icon = Icons.Outlined.VisibilityOff,
                 label = stringResource(R.string.session_hide_controls),
                 onClick = onHideChrome,
+            )
+            ToolbarButton(
+                icon = Icons.AutoMirrored.Outlined.ExitToApp,
+                label = stringResource(R.string.session_disconnect),
+                onClick = onDisconnect,
             )
         }
     }

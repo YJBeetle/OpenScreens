@@ -641,6 +641,12 @@ public protocol RemoteSessionProtocol: AnyObject, Sendable {
      */
     func announceUpload(handle: UInt32, fileUrls: [String]) async throws 
     
+    /**
+     * Starts an Apple drag-out sequence (message 0x0E) and returns the handle
+     * used. The server answers with `SessionEvent.DragOutInfo`.
+     */
+    func beginDragOut(handle: UInt32?) async throws  -> UInt32
+    
     func cancelTransfer(handle: UInt32) async throws 
     
     /**
@@ -785,6 +791,26 @@ open func announceUpload(handle: UInt32, fileUrls: [String])async throws   {
             completeFunc: ffi_rfb_ffi_rust_future_complete_void,
             freeFunc: ffi_rfb_ffi_rust_future_free_void,
             liftFunc: { $0 },
+            errorHandler: FfiConverterTypeSessionFailure_lift
+        )
+}
+    
+    /**
+     * Starts an Apple drag-out sequence (message 0x0E) and returns the handle
+     * used. The server answers with `SessionEvent.DragOutInfo`.
+     */
+open func beginDragOut(handle: UInt32?)async throws  -> UInt32  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_rfb_ffi_fn_method_remotesession_begin_drag_out(
+                        self.uniffiCloneHandle(),FfiConverterOptionUInt32.lower(handle)
+                )
+            },
+            pollFunc: ffi_rfb_ffi_rust_future_poll_u32,
+            completeFunc: ffi_rfb_ffi_rust_future_complete_u32,
+            freeFunc: ffi_rfb_ffi_rust_future_free_u32,
+            liftFunc: FfiConverterUInt32.lift,
             errorHandler: FfiConverterTypeSessionFailure_lift
         )
 }
@@ -1352,6 +1378,85 @@ public func FfiConverterTypeRect_lower(_ value: Rect) -> RustBuffer {
 }
 
 
+/**
+ * One remote item offered by a drag-out (Apple message 0x20).
+ */
+public struct RemoteFileInfo: Equatable, Hashable {
+    /**
+     * Original `file://` URL from the remote pasteboard.
+     */
+    public var url: String
+    /**
+     * Absolute POSIX path on the remote computer.
+     */
+    public var path: String
+    /**
+     * Last path component, suitable as a local file name.
+     */
+    public var name: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Original `file://` URL from the remote pasteboard.
+         */url: String, 
+        /**
+         * Absolute POSIX path on the remote computer.
+         */path: String, 
+        /**
+         * Last path component, suitable as a local file name.
+         */name: String) {
+        self.url = url
+        self.path = path
+        self.name = name
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension RemoteFileInfo: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRemoteFileInfo: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RemoteFileInfo {
+        return
+            try RemoteFileInfo(
+                url: FfiConverterString.read(from: &buf), 
+                path: FfiConverterString.read(from: &buf), 
+                name: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RemoteFileInfo, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.url, into: &buf)
+        FfiConverterString.write(value.path, into: &buf)
+        FfiConverterString.write(value.name, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRemoteFileInfo_lift(_ buf: RustBuffer) throws -> RemoteFileInfo {
+    return try FfiConverterTypeRemoteFileInfo.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRemoteFileInfo_lower(_ value: RemoteFileInfo) -> RustBuffer {
+    return FfiConverterTypeRemoteFileInfo.lower(value)
+}
+
+
 public struct SessionConfig: Equatable, Hashable {
     public var host: String
     public var port: UInt16
@@ -1627,6 +1732,10 @@ public enum SessionEvent: Equatable, Hashable {
     )
     case clipboard(text: String
     )
+    /**
+     * The Apple server asked for the local clipboard (message 0x14 subtype 2).
+     */
+    case clipboardRequest
     case bell
     case cursor(hotspotX: UInt16, hotspotY: UInt16, width: UInt16, height: UInt16, pixels: Data
     )
@@ -1634,7 +1743,10 @@ public enum SessionEvent: Equatable, Hashable {
     )
     case uploadRequest(handle: UInt32, path: String
     )
-    case dragInfo(handle: UInt32, pasteboard: Data
+    /**
+     * Remote file URLs offered by an Apple drag-out sequence.
+     */
+    case dragOutInfo(handle: UInt32, files: [RemoteFileInfo]
     )
     case fileTransfer(subtype: UInt16, handle: UInt32, payload: Data
     )
@@ -1680,30 +1792,32 @@ public struct FfiConverterTypeSessionEvent: FfiConverterRustBuffer {
         case 5: return .clipboard(text: try FfiConverterString.read(from: &buf)
         )
         
-        case 6: return .bell
+        case 6: return .clipboardRequest
         
-        case 7: return .cursor(hotspotX: try FfiConverterUInt16.read(from: &buf), hotspotY: try FfiConverterUInt16.read(from: &buf), width: try FfiConverterUInt16.read(from: &buf), height: try FfiConverterUInt16.read(from: &buf), pixels: try FfiConverterData.read(from: &buf)
+        case 7: return .bell
+        
+        case 8: return .cursor(hotspotX: try FfiConverterUInt16.read(from: &buf), hotspotY: try FfiConverterUInt16.read(from: &buf), width: try FfiConverterUInt16.read(from: &buf), height: try FfiConverterUInt16.read(from: &buf), pixels: try FfiConverterData.read(from: &buf)
         )
         
-        case 8: return .pointerPosition(x: try FfiConverterUInt16.read(from: &buf), y: try FfiConverterUInt16.read(from: &buf)
+        case 9: return .pointerPosition(x: try FfiConverterUInt16.read(from: &buf), y: try FfiConverterUInt16.read(from: &buf)
         )
         
-        case 9: return .uploadRequest(handle: try FfiConverterUInt32.read(from: &buf), path: try FfiConverterString.read(from: &buf)
+        case 10: return .uploadRequest(handle: try FfiConverterUInt32.read(from: &buf), path: try FfiConverterString.read(from: &buf)
         )
         
-        case 10: return .dragInfo(handle: try FfiConverterUInt32.read(from: &buf), pasteboard: try FfiConverterData.read(from: &buf)
+        case 11: return .dragOutInfo(handle: try FfiConverterUInt32.read(from: &buf), files: try FfiConverterSequenceTypeRemoteFileInfo.read(from: &buf)
         )
         
-        case 11: return .fileTransfer(subtype: try FfiConverterUInt16.read(from: &buf), handle: try FfiConverterUInt32.read(from: &buf), payload: try FfiConverterData.read(from: &buf)
+        case 12: return .fileTransfer(subtype: try FfiConverterUInt16.read(from: &buf), handle: try FfiConverterUInt32.read(from: &buf), payload: try FfiConverterData.read(from: &buf)
         )
         
-        case 12: return .downloadProgress(handle: try FfiConverterUInt32.read(from: &buf), name: try FfiConverterOptionString.read(from: &buf), bytes: try FfiConverterUInt64.read(from: &buf), total: try FfiConverterUInt64.read(from: &buf)
+        case 13: return .downloadProgress(handle: try FfiConverterUInt32.read(from: &buf), name: try FfiConverterOptionString.read(from: &buf), bytes: try FfiConverterUInt64.read(from: &buf), total: try FfiConverterUInt64.read(from: &buf)
         )
         
-        case 13: return .downloadComplete(handle: try FfiConverterUInt32.read(from: &buf), files: try FfiConverterUInt32.read(from: &buf), directories: try FfiConverterUInt32.read(from: &buf), bytes: try FfiConverterUInt64.read(from: &buf), error: try FfiConverterOptionString.read(from: &buf)
+        case 14: return .downloadComplete(handle: try FfiConverterUInt32.read(from: &buf), files: try FfiConverterUInt32.read(from: &buf), directories: try FfiConverterUInt32.read(from: &buf), bytes: try FfiConverterUInt64.read(from: &buf), error: try FfiConverterOptionString.read(from: &buf)
         )
         
-        case 14: return .disconnected(reason: try FfiConverterString.read(from: &buf)
+        case 15: return .disconnected(reason: try FfiConverterString.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -1745,12 +1859,16 @@ public struct FfiConverterTypeSessionEvent: FfiConverterRustBuffer {
             FfiConverterString.write(text, into: &buf)
             
         
-        case .bell:
+        case .clipboardRequest:
             writeInt(&buf, Int32(6))
         
         
-        case let .cursor(hotspotX,hotspotY,width,height,pixels):
+        case .bell:
             writeInt(&buf, Int32(7))
+        
+        
+        case let .cursor(hotspotX,hotspotY,width,height,pixels):
+            writeInt(&buf, Int32(8))
             FfiConverterUInt16.write(hotspotX, into: &buf)
             FfiConverterUInt16.write(hotspotY, into: &buf)
             FfiConverterUInt16.write(width, into: &buf)
@@ -1759,32 +1877,32 @@ public struct FfiConverterTypeSessionEvent: FfiConverterRustBuffer {
             
         
         case let .pointerPosition(x,y):
-            writeInt(&buf, Int32(8))
+            writeInt(&buf, Int32(9))
             FfiConverterUInt16.write(x, into: &buf)
             FfiConverterUInt16.write(y, into: &buf)
             
         
         case let .uploadRequest(handle,path):
-            writeInt(&buf, Int32(9))
+            writeInt(&buf, Int32(10))
             FfiConverterUInt32.write(handle, into: &buf)
             FfiConverterString.write(path, into: &buf)
             
         
-        case let .dragInfo(handle,pasteboard):
-            writeInt(&buf, Int32(10))
+        case let .dragOutInfo(handle,files):
+            writeInt(&buf, Int32(11))
             FfiConverterUInt32.write(handle, into: &buf)
-            FfiConverterData.write(pasteboard, into: &buf)
+            FfiConverterSequenceTypeRemoteFileInfo.write(files, into: &buf)
             
         
         case let .fileTransfer(subtype,handle,payload):
-            writeInt(&buf, Int32(11))
+            writeInt(&buf, Int32(12))
             FfiConverterUInt16.write(subtype, into: &buf)
             FfiConverterUInt32.write(handle, into: &buf)
             FfiConverterData.write(payload, into: &buf)
             
         
         case let .downloadProgress(handle,name,bytes,total):
-            writeInt(&buf, Int32(12))
+            writeInt(&buf, Int32(13))
             FfiConverterUInt32.write(handle, into: &buf)
             FfiConverterOptionString.write(name, into: &buf)
             FfiConverterUInt64.write(bytes, into: &buf)
@@ -1792,7 +1910,7 @@ public struct FfiConverterTypeSessionEvent: FfiConverterRustBuffer {
             
         
         case let .downloadComplete(handle,files,directories,bytes,error):
-            writeInt(&buf, Int32(13))
+            writeInt(&buf, Int32(14))
             FfiConverterUInt32.write(handle, into: &buf)
             FfiConverterUInt32.write(files, into: &buf)
             FfiConverterUInt32.write(directories, into: &buf)
@@ -1801,7 +1919,7 @@ public struct FfiConverterTypeSessionEvent: FfiConverterRustBuffer {
             
         
         case let .disconnected(reason):
-            writeInt(&buf, Int32(14))
+            writeInt(&buf, Int32(15))
             FfiConverterString.write(reason, into: &buf)
             
         }
@@ -2383,6 +2501,31 @@ fileprivate struct FfiConverterSequenceTypeRect: FfiConverterRustBuffer {
         return seq
     }
 }
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeRemoteFileInfo: FfiConverterRustBuffer {
+    typealias SwiftType = [RemoteFileInfo]
+
+    public static func write(_ value: [RemoteFileInfo], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeRemoteFileInfo.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [RemoteFileInfo] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [RemoteFileInfo]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeRemoteFileInfo.read(from: &buf))
+        }
+        return seq
+    }
+}
 private let UNIFFI_RUST_FUTURE_POLL_READY: Int8 = 0
 private let UNIFFI_RUST_FUTURE_POLL_WAKE: Int8 = 1
 
@@ -2535,6 +2678,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_rfb_ffi_checksum_method_remotesession_announce_upload() != 54961) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_rfb_ffi_checksum_method_remotesession_begin_drag_out() != 61368) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_rfb_ffi_checksum_method_remotesession_cancel_transfer() != 22553) {

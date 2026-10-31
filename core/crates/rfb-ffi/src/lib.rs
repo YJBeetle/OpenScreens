@@ -141,6 +141,17 @@ pub struct DisplayScreen {
     pub flags: u32,
 }
 
+/// One remote item offered by a drag-out (Apple message 0x20).
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct RemoteFileInfo {
+    /// Original `file://` URL from the remote pasteboard.
+    pub url: String,
+    /// Absolute POSIX path on the remote computer.
+    pub path: String,
+    /// Last path component, suitable as a local file name.
+    pub name: String,
+}
+
 #[derive(Debug, Clone, uniffi::Enum)]
 pub enum SessionEvent {
     Connected {
@@ -164,6 +175,8 @@ pub enum SessionEvent {
     Clipboard {
         text: String,
     },
+    /// The Apple server asked for the local clipboard (message 0x14 subtype 2).
+    ClipboardRequest,
     Bell,
     Cursor {
         hotspot_x: u16,
@@ -180,9 +193,10 @@ pub enum SessionEvent {
         handle: u32,
         path: String,
     },
-    DragInfo {
+    /// Remote file URLs offered by an Apple drag-out sequence.
+    DragOutInfo {
         handle: u32,
-        pasteboard: Vec<u8>,
+        files: Vec<RemoteFileInfo>,
     },
     FileTransfer {
         subtype: u16,
@@ -244,6 +258,7 @@ impl From<EngineEvent> for SessionEvent {
                     .collect(),
             },
             EngineEvent::Clipboard { text } => Self::Clipboard { text },
+            EngineEvent::ClipboardRequest => Self::ClipboardRequest,
             EngineEvent::Bell => Self::Bell,
             EngineEvent::Cursor(shape) => Self::Cursor {
                 hotspot_x: shape.hotspot_x,
@@ -254,7 +269,17 @@ impl From<EngineEvent> for SessionEvent {
             },
             EngineEvent::PointerPosition { x, y } => Self::PointerPosition { x, y },
             EngineEvent::UploadRequest { handle, path } => Self::UploadRequest { handle, path },
-            EngineEvent::DragInfo { handle, pasteboard } => Self::DragInfo { handle, pasteboard },
+            EngineEvent::DragOutInfo { handle, files } => Self::DragOutInfo {
+                handle,
+                files: files
+                    .into_iter()
+                    .map(|file| RemoteFileInfo {
+                        url: file.url,
+                        path: file.path,
+                        name: file.name,
+                    })
+                    .collect(),
+            },
             EngineEvent::FileTransfer {
                 subtype,
                 handle,
@@ -480,6 +505,15 @@ impl RemoteSession {
     pub async fn cancel_transfer(&self, handle: u32) -> Result<(), SessionFailure> {
         self.session
             .cancel_transfer(handle)
+            .await
+            .map_err(to_failure)
+    }
+
+    /// Starts an Apple drag-out sequence (message 0x0E) and returns the handle
+    /// used. The server answers with `SessionEvent.DragOutInfo`.
+    pub async fn begin_drag_out(&self, handle: Option<u32>) -> Result<u32, SessionFailure> {
+        self.session
+            .begin_drag_out(handle)
             .await
             .map_err(to_failure)
     }

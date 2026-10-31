@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/rfb-codec", "crates/rfb-engine", "crates/rfb-ffi", "crates/rfb-ffi-bindgen", "crates/rfb-io", "crates/rfb-proto", "crates/rfb-tunnel"]
+members = ["crates/rfb-codec", "crates/rfb-engine", "crates/rfb-ffi", "crates/rfb-ffi-bindgen", "crates/rfb-io", "crates/rfb-openvpn", "crates/rfb-proto", "crates/rfb-tunnel"]
 
 [workspace.package]
 version = "0.1.0"

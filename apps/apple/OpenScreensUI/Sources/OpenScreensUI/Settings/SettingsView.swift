@@ -166,8 +166,6 @@ public struct SettingsView: View {
     }
 
     #if os(macOS)
-    private static let installedSnapshotKey = "openscreens.update.installedSnapshot"
-
     private var isChecking: Bool {
         if case .checking = updateStatus { return true }
         return false
@@ -188,7 +186,7 @@ public struct SettingsView: View {
         guard !isChecking else { return }
         updateStatus = .checking
         let channel = settings.settings.updateChannel
-        let installed = UserDefaults.standard.string(forKey: Self.installedSnapshotKey)
+        let installed = UpdateStateStore.installedSnapshot()
         Task {
             do {
                 let result = try await UpdateChecker.check(
@@ -229,7 +227,7 @@ public struct SettingsView: View {
                 try FileManager.default.moveItem(at: temporary, to: destination)
                 NSWorkspace.shared.open(destination)
                 if release.tag.caseInsensitiveCompare("snapshot") == .orderedSame {
-                    UserDefaults.standard.set(release.label, forKey: Self.installedSnapshotKey)
+                    UpdateStateStore.markInstallStarted(release.label)
                 }
             } catch {
                 updateStatus = .failed(error.localizedDescription)

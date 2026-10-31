@@ -92,7 +92,7 @@ fun SettingsScreen(
             updateState = UpdateChecker.check(
                 BuildConfig.VERSION_NAME,
                 updateChannel,
-                updateStore.installedSnapshot,
+                updateStore.installedSnapshot(),
             ).fold(
                 onSuccess = { result ->
                     when (result) {
@@ -115,7 +115,7 @@ fun SettingsScreen(
                 updater.install(file)
             }.onSuccess {
                 if (info.tag.equals("snapshot", ignoreCase = true)) {
-                    updateStore.installedSnapshot = info.label
+                    updateStore.markInstallStarted(info.label)
                 }
                 updateState = UpdateUiState.Available(info, installerOpened = true)
             }.onFailure {
@@ -323,9 +323,7 @@ fun SettingsScreen(
                                 Text(stringResource(R.string.settings_check_updates))
                             }
                         }
-                        if (available?.info?.downloadUrl != null &&
-                            !available.downloading && !available.installerOpened
-                        ) {
+                        if (available?.info?.downloadUrl != null && !available.downloading) {
                             Button(onClick = { downloadAndInstall(available.info) }) {
                                 Text(stringResource(R.string.settings_download_install))
                             }

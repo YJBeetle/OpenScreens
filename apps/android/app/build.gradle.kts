@@ -34,8 +34,10 @@ android {
         applicationId = "com.openscreens.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = providers.gradleProperty("openscreens.versionCode")
+            .map(String::toInt)
+            .getOrElse(1)
+        versionName = providers.gradleProperty("openscreens.versionName").getOrElse("0.1.0")
         buildConfigField("String", "BUILD_VERSION", "\"$buildVersion\"")
 
         ndk {

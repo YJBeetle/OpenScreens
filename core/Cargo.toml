@@ -1,10 +1,10 @@
 [workspace]
 resolver = "3"
-members = ["crates/rfb-codec", "crates/rfb-engine", "crates/rfb-ffi", "crates/rfb-ffi-bindgen", "crates/rfb-io", "crates/rfb-proto"]
+members = ["crates/rfb-codec", "crates/rfb-engine", "crates/rfb-ffi", "crates/rfb-ffi-bindgen", "crates/rfb-io", "crates/rfb-proto", "crates/rfb-tunnel"]
 
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.91"
 license = "AGPL-3.0-only"
 repository = "https://github.com/YJBeetle/OpenScreens"

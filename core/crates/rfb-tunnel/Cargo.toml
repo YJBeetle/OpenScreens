@@ -1,0 +1,51 @@
+[package]
+name = "rfb-tunnel"
+description = "Userspace WireGuard tunnel with an in-memory smoltcp TCP/IP stack"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+base64 = "0.22"
+boringtun = "0.7.1"
+ipnet = "2"
+rand = "0.10"
+smoltcp = { version = "0.14", default-features = false, features = [
+  "std",
+  "alloc",
+  "medium-ip",
+  "proto-ipv4",
+  "socket-tcp",
+  "socket-udp",
+  "socket-dns",
+  "proto-dns",
+  "iface-max-addr-count-4",
+  "iface-max-route-count-4",
+  "dns-max-result-count-4",
+  "dns-max-server-count-2",
+] }
+socket2 = "0.6"
+thiserror = "2"
+tokio = { version = "1", features = ["net", "io-util", "rt", "sync", "time", "macros"] }
+zeroize = "1"
+
+[dev-dependencies]
+boringtun = "0.7.1"
+smoltcp = { version = "0.14", default-features = false, features = [
+  "std",
+  "alloc",
+  "medium-ip",
+  "proto-ipv4",
+  "socket-tcp",
+  "iface-max-addr-count-4",
+  "iface-max-route-count-4",
+] }
+tokio = { version = "1", features = ["full"] }
+
+[features]
+mock-clock = ["boringtun/mock-instant"]
+
+[lints.rust]
+unsafe_code = "forbid"

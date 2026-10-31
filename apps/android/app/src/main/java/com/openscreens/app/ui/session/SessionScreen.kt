@@ -2311,8 +2311,11 @@ private fun Modifier.touchBarrier(): Modifier = pointerInput(Unit) {
  */
 private fun clampPan(value: Offset, zoom: Float, band: IntSize, screen: IntSize): Offset {
     val safeZoom = zoom.coerceAtLeast(0.01f)
-    val maxX = max(0f, (band.width * safeZoom - screen.width) / (2f * safeZoom))
-    val maxY = max(0f, (band.height * safeZoom - screen.height) / (2f * safeZoom))
+    // When the band covers the screen, keep its edges outside; when it is
+    // smaller, let it move inside so a pinch stays anchored between the fingers
+    // instead of snapping back to the centre.
+    val maxX = abs(band.width * safeZoom - screen.width) / (2f * safeZoom)
+    val maxY = abs(band.height * safeZoom - screen.height) / (2f * safeZoom)
     return Offset(
         x = value.x.coerceIn(-maxX, maxX),
         y = value.y.coerceIn(-maxY, maxY),

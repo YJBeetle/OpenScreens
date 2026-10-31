@@ -19,6 +19,17 @@
     <string name="library_empty_action">添加第一个连接</string>
     <string name="library_edit_connection">编辑连接</string>
     <string name="library_connection_thumbnail">服务器缩略图</string>
+    <string name="library_quick_connect">快速连接</string>
+    <string name="library_quick_connect_subtitle">输入 URL 以启动连接。</string>
+    <string name="library_quick_connect_url">连接地址</string>
+    <string name="library_quick_connect_hint">例如 vnc://user@host:5900</string>
+    <string name="library_quick_connect_invalid">请输入有效的 vnc:// 地址。</string>
+    <string name="library_quick_connect_action">连接</string>
+    <string name="library_view_options">视图选项</string>
+    <string name="library_view_grid">网格</string>
+    <string name="library_view_list">列表</string>
+    <string name="library_more">更多</string>
+    <string name="library_cancel">取消</string>
 
     <!-- 连接编辑器 -->
     <string name="editor_new_title">新建连接</string>

@@ -19,6 +19,17 @@
     <string name="library_empty_action">Add your first connection</string>
     <string name="library_edit_connection">Edit connection</string>
     <string name="library_connection_thumbnail">Server thumbnail</string>
+    <string name="library_quick_connect">Quick Connect</string>
+    <string name="library_quick_connect_subtitle">Enter a URL to start connecting.</string>
+    <string name="library_quick_connect_url">URL</string>
+    <string name="library_quick_connect_hint">Example: vnc://user@host:5900</string>
+    <string name="library_quick_connect_invalid">Enter a valid vnc:// address.</string>
+    <string name="library_quick_connect_action">Connect</string>
+    <string name="library_view_options">View options</string>
+    <string name="library_view_grid">Grid</string>
+    <string name="library_view_list">List</string>
+    <string name="library_more">More</string>
+    <string name="library_cancel">Cancel</string>
 
     <!-- Connection editor -->
     <string name="editor_new_title">New connection</string>

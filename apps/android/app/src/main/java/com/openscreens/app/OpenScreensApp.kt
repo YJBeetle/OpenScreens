@@ -10,6 +10,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.openscreens.app.data.Connection
 import com.openscreens.app.data.ThemeMode
 import com.openscreens.app.ui.editor.ConnectionEditorScreen
 import com.openscreens.app.ui.library.LibraryScreen
@@ -44,6 +45,19 @@ fun OpenScreensApp(viewModel: MainViewModel = viewModel()) {
                     onAddConnection = { viewModel.navigate(Route.Editor(connectionId = null)) },
                     onEditConnection = { viewModel.navigate(Route.Editor(it.id)) },
                     onOpenSettings = { viewModel.navigate(Route.Settings) },
+                    onQuickConnect = { host, port, username ->
+                        viewModel.navigate(
+                            Route.Editor(
+                                connectionId = null,
+                                draft = Connection(
+                                    name = host,
+                                    host = host,
+                                    port = port,
+                                    username = username.orEmpty(),
+                                ),
+                            ),
+                        )
+                    },
                 )
 
                 Route.Settings -> SettingsScreen(
@@ -66,10 +80,15 @@ fun OpenScreensApp(viewModel: MainViewModel = viewModel()) {
 
                 is Route.Editor -> ConnectionEditorScreen(
                     connection = current.connectionId?.let(viewModel::connection),
+                    initialDraft = current.draft,
                     sshKeys = sshKeys,
                     onSave = {
                         viewModel.saveConnection(it)
-                        viewModel.back()
+                        if (current.draft != null) {
+                            viewModel.navigate(Route.Session(it.id))
+                        } else {
+                            viewModel.back()
+                        }
                     },
                     onCancel = viewModel::back,
                 )

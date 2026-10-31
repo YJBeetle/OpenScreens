@@ -8,6 +8,7 @@ mod compression;
 mod hextile;
 mod pixel;
 mod rre;
+mod tight;
 mod zrle;
 
 use rfb_proto::encoding::Encoding;
@@ -15,6 +16,7 @@ use rfb_proto::pixel_format::PixelFormat;
 
 use crate::compression::Inflater;
 use crate::pixel::{Cursor, store_pixel};
+use crate::tight::TightDecoder;
 
 /// A tightly packed BGRA8888 framebuffer.
 pub struct Framebuffer {
@@ -93,6 +95,7 @@ pub struct Decoder {
     inflated: Vec<u8>,
     zrle: Inflater,
     zlib: Inflater,
+    tight: TightDecoder,
 }
 
 impl Decoder {
@@ -102,6 +105,7 @@ impl Decoder {
             inflated: Vec::new(),
             zrle: Inflater::new(),
             zlib: Inflater::new(),
+            tight: TightDecoder::new(),
         }
     }
 
@@ -141,6 +145,7 @@ impl Decoder {
             }
             Encoding::Zrle => self.decode_zrle(framebuffer, rect, data, pixel_format),
             Encoding::Zlib => self.decode_zlib(framebuffer, rect, data, pixel_format),
+            Encoding::Tight => self.tight.decode(framebuffer, rect, data, pixel_format),
             other => Err(DecodeError::UnsupportedEncoding(other.to_id())),
         }
     }
@@ -695,11 +700,831 @@ mod tests {
             .decode(
                 &mut framebuffer,
                 rect(0, 0, 2, 2),
-                Encoding::Tight,
+                Encoding::Other(1234),
                 &[],
                 PixelFormat::bgra8888(),
             )
             .unwrap_err();
-        assert_eq!(error, DecodeError::UnsupportedEncoding(7));
+        assert_eq!(error, DecodeError::UnsupportedEncoding(1234));
+    }
+
+    struct TightEncoder {
+        encoder: ZlibEncoder<Vec<u8>>,
+    }
+
+    impl TightEncoder {
+        fn new() -> Self {
+            Self {
+                encoder: ZlibEncoder::new(Vec::new(), Compression::default()),
+            }
+        }
+
+        /// Compresses one rectangle worth of filter data with Z_SYNC_FLUSH.
+        fn chunk(&mut self, payload: &[u8]) -> Vec<u8> {
+            let start = self.encoder.get_ref().len();
+            self.encoder.write_all(payload).unwrap();
+            self.encoder.flush().unwrap();
+            self.encoder.get_ref()[start..].to_vec()
+        }
+    }
+
+    /// One rectangle with no stream resets and a Basic compression control.
+    fn tight_wire(stream: u8, filter: Option<u8>, compressed: &[u8]) -> Vec<u8> {
+        let mut control = stream << 4;
+        if filter.is_some() {
+            control |= 0x40;
+        }
+        let mut wire = vec![control];
+        if let Some(filter) = filter {
+            wire.push(filter);
+        }
+        wire.extend_from_slice(compressed);
+        wire
+    }
+
+    fn rgb(colour: [u8; 4]) -> [u8; 3] {
+        [colour[2], colour[1], colour[0]]
+    }
+
+    fn bgras(colours: &[[u8; 4]]) -> Vec<u8> {
+        colours
+            .iter()
+            .flat_map(|colour| colour.iter().copied())
+            .collect()
+    }
+
+    const TINY_JPEG: &[u8] = include_bytes!("testdata/tiny.jpg");
+
+    fn tight_jpeg_wire() -> Vec<u8> {
+        let length = TINY_JPEG.len();
+        let mut wire = vec![0x90];
+        wire.push((length & 0x7f) as u8 | 0x80);
+        wire.push(((length >> 7) & 0x7f) as u8);
+        wire.extend_from_slice(TINY_JPEG);
+        wire
+    }
+
+    #[test]
+    fn tight_decodes_copy_with_rgb_tpixels() {
+        let mut framebuffer = Framebuffer::new(2, 2);
+        let mut decoder = Decoder::new();
+        let colours = [red(), green(), blue(), white()];
+        let mut payload = Vec::new();
+        for colour in colours {
+            payload.extend_from_slice(&rgb(colour));
+        }
+        let compressed = TightEncoder::new().chunk(&payload);
+        let wire = tight_wire(0, None, &compressed);
+        let consumed = decoder
+            .decode(
+                &mut framebuffer,
+                rect(0, 0, 2, 2),
+                Encoding::Tight,
+                &wire,
+                PixelFormat::bgra8888(),
+            )
+            .unwrap();
+        assert_eq!(consumed, wire.len());
+        assert_eq!(framebuffer.pixels(), bgras(&colours));
+    }
+
+    #[test]
+    fn tight_copy_uses_negotiated_pixel_format() {
+        let mut framebuffer = Framebuffer::new(2, 2);
+        let mut decoder = Decoder::new();
+        let mut payload = Vec::new();
+        for pixel in [0xf800u16, 0x07e0, 0x001f, 0xffff] {
+            payload.extend_from_slice(&pixel.to_le_bytes());
+        }
+        let compressed = TightEncoder::new().chunk(&payload);
+        let wire = tight_wire(0, Some(0), &compressed);
+        let consumed = decoder
+            .decode(
+                &mut framebuffer,
+                rect(0, 0, 2, 2),
+                Encoding::Tight,
+                &wire,
+                PixelFormat::rgb565(),
+            )
+            .unwrap();
+        assert_eq!(consumed, wire.len());
+        assert_eq!(
+            framebuffer.pixels(),
+            bgras(&[red(), green(), blue(), white()])
+        );
+    }
+
+    #[test]
+    fn tight_stream_persists_and_stops_at_rect_boundary() {
+        let mut framebuffer = Framebuffer::new(4, 2);
+        let mut decoder = Decoder::new();
+        let mut encoder = TightEncoder::new();
+        let first = encoder.chunk(
+            &[red(), green(), blue(), white()]
+                .iter()
+                .flat_map(|colour| rgb(*colour))
+                .collect::<Vec<_>>(),
+        );
+        let second = encoder.chunk(
+            &[blue(), white(), red(), green()]
+                .iter()
+                .flat_map(|colour| rgb(*colour))
+                .collect::<Vec<_>>(),
+        );
+        let first_wire = tight_wire(0, None, &first);
+        let second_wire = tight_wire(0, None, &second);
+        let mut message = first_wire.clone();
+        message.extend_from_slice(&second_wire);
+
+        let consumed = decoder
+            .decode(
+                &mut framebuffer,
+                rect(0, 0, 2, 2),
+                Encoding::Tight,
+                &message,
+                PixelFormat::bgra8888(),
+            )
+            .unwrap();
+        assert_eq!(consumed, first_wire.len());
+
+        let consumed = decoder
+            .decode(
+                &mut framebuffer,
+                rect(2, 0, 2, 2),
+                Encoding::Tight,
+                &message[consumed..],
+                PixelFormat::bgra8888(),
+            )
+            .unwrap();
+        assert_eq!(consumed, second_wire.len());
+
+        let expected = [
+            red(),
+            green(),
+            blue(),
+            white(),
+            blue(),
+            white(),
+            red(),
+            green(),
+        ];
+        let mut rows = Vec::new();
+        rows.extend_from_slice(&bgras(&expected[..2]));
+        rows.extend_from_slice(&bgras(&expected[4..6]));
+        rows.extend_from_slice(&bgras(&expected[2..4]));
+        rows.extend_from_slice(&bgras(&expected[6..8]));
+        assert_eq!(framebuffer.pixels(), rows);
+    }
+
+    #[test]
+    fn tight_reset_starts_a_fresh_zlib_stream() {
+        let mut framebuffer = Framebuffer::new(4, 2);
+        let mut decoder = Decoder::new();
+        let first = TightEncoder::new().chunk(
+            &[red(), green(), blue(), white()]
+                .iter()
+                .flat_map(|c| rgb(*c))
+                .collect::<Vec<_>>(),
+        );
+        let second = TightEncoder::new().chunk(
+            &[green(), blue(), white(), red()]
+                .iter()
+                .flat_map(|c| rgb(*c))
+                .collect::<Vec<_>>(),
+        );
+
+        let mut first_wire = vec![0x00];
+        first_wire.extend_from_slice(&first);
+        let mut second_wire = vec![0x01];
+        second_wire.extend_from_slice(&second);
+
+        let consumed = decoder
+            .decode(
+                &mut framebuffer,
+                rect(0, 0, 2, 2),
+                Encoding::Tight,
+                &first_wire,
+                PixelFormat::bgra8888(),
+            )
+            .unwrap();
+        assert_eq!(consumed, first_wire.len());
+        let consumed = decoder
+            .decode(
+                &mut framebuffer,
+                rect(2, 0, 2, 2),
+                Encoding::Tight,
+                &second_wire,
+                PixelFormat::bgra8888(),
+            )
+            .unwrap();
+        assert_eq!(consumed, second_wire.len());
+
+        assert_eq!(&framebuffer.pixels()[0..8], &bgras(&[red(), green()]));
+        assert_eq!(&framebuffer.pixels()[8..16], &bgras(&[green(), blue()]));
+        assert_eq!(&framebuffer.pixels()[16..24], &bgras(&[blue(), white()]));
+        assert_eq!(&framebuffer.pixels()[24..32], &bgras(&[white(), red()]));
+    }
+
+    #[test]
+    fn tight_reset_bits_live_in_the_control_low_nibble() {
+        let mut framebuffer = Framebuffer::new(2, 2);
+        let mut decoder = Decoder::new();
+        let wire = [0x81, 0, 0, 0];
+        let consumed = decoder
+            .decode(
+                &mut framebuffer,
+                rect(0, 0, 2, 2),
+                Encoding::Tight,
+                &wire,
+                PixelFormat::bgra8888(),
+            )
+            .unwrap();
+        assert_eq!(consumed, wire.len());
+        assert!(
+            framebuffer
+                .pixels()
+                .chunks_exact(4)
+                .all(|pixel| pixel == [0, 0, 0, 255])
+        );
+    }
+
+    #[test]
+    fn tight_fill_uses_tpixel() {
+        let mut framebuffer = Framebuffer::new(2, 2);
+        let mut decoder = Decoder::new();
+        let wire = [0x80, 50, 100, 200];
+        let consumed = decoder
+            .decode(
+                &mut framebuffer,
+                rect(0, 0, 2, 2),
+                Encoding::Tight,
+                &wire,
+                PixelFormat::bgra8888(),
+            )
+            .unwrap();
+        assert_eq!(consumed, wire.len());
+        assert!(
+            framebuffer
+                .pixels()
+                .chunks_exact(4)
+                .all(|pixel| pixel == [200, 100, 50, 255])
+        );
+    }
+
+    #[test]
+    fn tight_fill_uses_negotiated_pixel_format() {
+        let mut framebuffer = Framebuffer::new(2, 2);
+        let mut decoder = Decoder::new();
+        let wire = [0x80, 0x00, 0xf8];
+        let consumed = decoder
+            .decode(
+                &mut framebuffer,
+                rect(0, 0, 2, 2),
+                Encoding::Tight,
+                &wire,
+                PixelFormat::rgb565(),
+            )
+            .unwrap();
+        assert_eq!(consumed, wire.len());
+        assert!(framebuffer.pixels().chunks_exact(4).all(|p| p == red()));
+    }
+
+    #[test]
+    fn tight_fill_is_incomplete_without_mutation() {
+        let mut framebuffer = Framebuffer::new(2, 2);
+        let mut decoder = Decoder::new();
+        let error = decoder
+            .decode(
+                &mut framebuffer,
+                rect(0, 0, 2, 2),
+                Encoding::Tight,
+                &[0x80, 50, 100],
+                PixelFormat::bgra8888(),
+            )
+            .unwrap_err();
+        assert_eq!(error, DecodeError::Incomplete);
+        assert!(framebuffer.pixels().iter().all(|&byte| byte == 0));
+    }
+
+    #[test]
+    fn tight_decodes_one_bit_palette() {
+        let mut framebuffer = Framebuffer::new(4, 2);
+        let mut decoder = Decoder::new();
+        let mut payload = vec![2];
+        payload.extend_from_slice(&rgb(white()));
+        payload.extend_from_slice(&rgb(red()));
+        payload.extend_from_slice(&[0b0101_0000, 0b1010_0000]);
+        let compressed = TightEncoder::new().chunk(&payload);
+        let wire = tight_wire(0, Some(1), &compressed);
+        let consumed = decoder
+            .decode(
+                &mut framebuffer,
+                rect(0, 0, 4, 2),
+                Encoding::Tight,
+                &wire,
+                PixelFormat::bgra8888(),
+            )
+            .unwrap();
+        assert_eq!(consumed, wire.len());
+        assert_eq!(
+            framebuffer.pixels(),
+            bgras(&[
+                white(),
+                red(),
+                white(),
+                red(),
+                red(),
+                white(),
+                red(),
+                white()
+            ])
+        );
+    }
+
+    #[test]
+    fn tight_palette_pads_each_row() {
+        let mut framebuffer = Framebuffer::new(3, 1);
+        let mut decoder = Decoder::new();
+        let mut payload = vec![3];
+        payload.extend_from_slice(&rgb(red()));
+        payload.extend_from_slice(&rgb(green()));
+        payload.extend_from_slice(&rgb(blue()));
+        payload.push(0b00_01_10_00);
+        let compressed = TightEncoder::new().chunk(&payload);
+        let wire = tight_wire(0, Some(1), &compressed);
+        let consumed = decoder
+            .decode(
+                &mut framebuffer,
+                rect(0, 0, 3, 1),
+                Encoding::Tight,
+                &wire,
+                PixelFormat::bgra8888(),
+            )
+            .unwrap();
+        assert_eq!(consumed, wire.len());
+        assert_eq!(framebuffer.pixels(), bgras(&[red(), green(), blue()]));
+    }
+
+    #[test]
+    fn tight_decodes_eight_bit_palette() {
+        let mut framebuffer = Framebuffer::new(4, 1);
+        let mut decoder = Decoder::new();
+        let size = 130usize;
+        let mut payload = vec![size as u8];
+        for index in 0..size {
+            payload.extend_from_slice(&[(index * 3) as u8, (index * 5) as u8, (index * 7) as u8]);
+        }
+        let indices = [0u8, 129, 64, 3];
+        payload.extend_from_slice(&indices);
+        let compressed = TightEncoder::new().chunk(&payload);
+        let wire = tight_wire(0, Some(1), &compressed);
+        let consumed = decoder
+            .decode(
+                &mut framebuffer,
+                rect(0, 0, 4, 1),
+                Encoding::Tight,
+                &wire,
+                PixelFormat::bgra8888(),
+            )
+            .unwrap();
+        assert_eq!(consumed, wire.len());
+        let expected: Vec<[u8; 4]> = indices
+            .iter()
+            .map(|&index| {
+                let index = usize::from(index);
+                [(index * 7) as u8, (index * 5) as u8, (index * 3) as u8, 255]
+            })
+            .collect();
+        assert_eq!(framebuffer.pixels(), bgras(&expected));
+    }
+
+    #[test]
+    fn tight_rejects_zero_palette_size() {
+        let mut framebuffer = Framebuffer::new(2, 2);
+        let mut decoder = Decoder::new();
+        let compressed = TightEncoder::new().chunk(&[0]);
+        let wire = tight_wire(0, Some(1), &compressed);
+        let error = decoder
+            .decode(
+                &mut framebuffer,
+                rect(0, 0, 2, 2),
+                Encoding::Tight,
+                &wire,
+                PixelFormat::bgra8888(),
+            )
+            .unwrap_err();
+        assert_eq!(error, DecodeError::InvalidData("tight palette size"));
+        assert!(framebuffer.pixels().iter().all(|&byte| byte == 0));
+    }
+
+    #[test]
+    fn tight_rejects_palette_index_out_of_range() {
+        let mut framebuffer = Framebuffer::new(1, 1);
+        let mut decoder = Decoder::new();
+        let mut payload = vec![3];
+        payload.extend_from_slice(&rgb(red()));
+        payload.extend_from_slice(&rgb(green()));
+        payload.extend_from_slice(&rgb(blue()));
+        payload.push(0b11_000000);
+        let compressed = TightEncoder::new().chunk(&payload);
+        let wire = tight_wire(0, Some(1), &compressed);
+        let error = decoder
+            .decode(
+                &mut framebuffer,
+                rect(0, 0, 1, 1),
+                Encoding::Tight,
+                &wire,
+                PixelFormat::bgra8888(),
+            )
+            .unwrap_err();
+        assert_eq!(error, DecodeError::InvalidData("tight palette index"));
+        assert!(framebuffer.pixels().iter().all(|&byte| byte == 0));
+    }
+
+    #[test]
+    fn tight_rejects_gradient_filter() {
+        let mut framebuffer = Framebuffer::new(2, 2);
+        let mut decoder = Decoder::new();
+        let error = decoder
+            .decode(
+                &mut framebuffer,
+                rect(0, 0, 2, 2),
+                Encoding::Tight,
+                &[0x40, 0x02],
+                PixelFormat::bgra8888(),
+            )
+            .unwrap_err();
+        assert_eq!(error, DecodeError::InvalidData("tight gradient filter"));
+    }
+
+    #[test]
+    fn tight_rejects_unknown_compression_type() {
+        let mut framebuffer = Framebuffer::new(2, 2);
+        let mut decoder = Decoder::new();
+        let error = decoder
+            .decode(
+                &mut framebuffer,
+                rect(0, 0, 2, 2),
+                Encoding::Tight,
+                &[0xa0],
+                PixelFormat::bgra8888(),
+            )
+            .unwrap_err();
+        assert_eq!(error, DecodeError::InvalidData("tight compression type"));
+    }
+
+    #[test]
+    fn tight_decodes_jpeg() {
+        let mut framebuffer = Framebuffer::new(8, 8);
+        let mut decoder = Decoder::new();
+        let wire = tight_jpeg_wire();
+        let consumed = decoder
+            .decode(
+                &mut framebuffer,
+                rect(0, 0, 8, 8),
+                Encoding::Tight,
+                &wire,
+                PixelFormat::bgra8888(),
+            )
+            .unwrap();
+        assert_eq!(consumed, wire.len());
+
+        let mut source = zune_jpeg::JpegDecoder::new(std::io::Cursor::new(TINY_JPEG));
+        let rgb = source.decode().unwrap();
+        let mut expected = Vec::new();
+        for pixel in rgb.chunks_exact(3) {
+            expected.extend_from_slice(&[pixel[2], pixel[1], pixel[0], 255]);
+        }
+        assert_eq!(expected.len(), 8 * 8 * 4);
+        assert_eq!(framebuffer.pixels(), expected);
+    }
+
+    #[test]
+    fn tight_jpeg_rejects_dimension_mismatch() {
+        let mut framebuffer = Framebuffer::new(4, 4);
+        let mut decoder = Decoder::new();
+        let wire = tight_jpeg_wire();
+        let error = decoder
+            .decode(
+                &mut framebuffer,
+                rect(0, 0, 4, 4),
+                Encoding::Tight,
+                &wire,
+                PixelFormat::bgra8888(),
+            )
+            .unwrap_err();
+        assert_eq!(error, DecodeError::InvalidData("tight JPEG dimensions"));
+        assert!(framebuffer.pixels().iter().all(|&byte| byte == 0));
+    }
+
+    #[test]
+    fn tight_jpeg_is_incomplete_without_mutation() {
+        let mut framebuffer = Framebuffer::new(8, 8);
+        let mut decoder = Decoder::new();
+        let wire = tight_jpeg_wire();
+        for prefix in [1, 2, 3, wire.len() - 1] {
+            let mut framebuffer = Framebuffer::new(8, 8);
+            let mut decoder = Decoder::new();
+            let error = decoder
+                .decode(
+                    &mut framebuffer,
+                    rect(0, 0, 8, 8),
+                    Encoding::Tight,
+                    &wire[..prefix],
+                    PixelFormat::bgra8888(),
+                )
+                .unwrap_err();
+            assert_eq!(error, DecodeError::Incomplete, "prefix {prefix}");
+            assert!(framebuffer.pixels().iter().all(|&byte| byte == 0));
+        }
+        // Retrying with the complete message succeeds.
+        let consumed = decoder
+            .decode(
+                &mut framebuffer,
+                rect(0, 0, 8, 8),
+                Encoding::Tight,
+                &wire,
+                PixelFormat::bgra8888(),
+            )
+            .unwrap();
+        assert_eq!(consumed, wire.len());
+    }
+
+    #[test]
+    fn tight_incomplete_at_every_prefix() {
+        let colours = [red(), green(), blue(), white()];
+        let mut payload = Vec::new();
+        for colour in colours {
+            payload.extend_from_slice(&rgb(colour));
+        }
+        let compressed = TightEncoder::new().chunk(&payload);
+        let wire = tight_wire(0, None, &compressed);
+
+        let mut decoder = Decoder::new();
+        let mut framebuffer = Framebuffer::new(2, 2);
+        for prefix in 0..=wire.len() {
+            let result = decoder.decode(
+                &mut framebuffer,
+                rect(0, 0, 2, 2),
+                Encoding::Tight,
+                &wire[..prefix],
+                PixelFormat::bgra8888(),
+            );
+            if prefix < wire.len() {
+                assert_eq!(result, Err(DecodeError::Incomplete), "prefix {prefix}");
+                assert!(
+                    framebuffer.pixels().iter().all(|&byte| byte == 0),
+                    "prefix {prefix}"
+                );
+            } else {
+                assert_eq!(result, Ok(wire.len()));
+            }
+        }
+        assert_eq!(framebuffer.pixels(), bgras(&colours));
+    }
+
+    #[test]
+    fn tight_incomplete_prefixes_retry_from_scratch() {
+        let colours = [red(), green(), blue(), white()];
+        let mut payload = Vec::new();
+        for colour in colours {
+            payload.extend_from_slice(&rgb(colour));
+        }
+        let compressed = TightEncoder::new().chunk(&payload);
+        let wire = tight_wire(0, Some(0), &compressed);
+
+        let mut prefixes = vec![0, 1, 2, 3, 4, wire.len() / 2, wire.len() - 1];
+        prefixes.sort_unstable();
+        prefixes.dedup();
+        for prefix in prefixes {
+            let mut framebuffer = Framebuffer::new(2, 2);
+            let mut decoder = Decoder::new();
+            let error = decoder
+                .decode(
+                    &mut framebuffer,
+                    rect(0, 0, 2, 2),
+                    Encoding::Tight,
+                    &wire[..prefix],
+                    PixelFormat::bgra8888(),
+                )
+                .unwrap_err();
+            assert_eq!(error, DecodeError::Incomplete, "prefix {prefix}");
+            assert!(framebuffer.pixels().iter().all(|&byte| byte == 0));
+            let consumed = decoder
+                .decode(
+                    &mut framebuffer,
+                    rect(0, 0, 2, 2),
+                    Encoding::Tight,
+                    &wire,
+                    PixelFormat::bgra8888(),
+                )
+                .unwrap();
+            assert_eq!(consumed, wire.len(), "prefix {prefix}");
+            assert_eq!(framebuffer.pixels(), bgras(&colours), "prefix {prefix}");
+        }
+    }
+
+    #[test]
+    fn tight_persistent_stream_resumes_after_incomplete() {
+        let mut framebuffer = Framebuffer::new(4, 2);
+        let mut decoder = Decoder::new();
+        let mut encoder = TightEncoder::new();
+        let first = encoder.chunk(
+            &[red(), green(), blue(), white()]
+                .iter()
+                .flat_map(|c| rgb(*c))
+                .collect::<Vec<_>>(),
+        );
+        let second = encoder.chunk(
+            &[green(), red(), white(), blue()]
+                .iter()
+                .flat_map(|c| rgb(*c))
+                .collect::<Vec<_>>(),
+        );
+        let first_wire = tight_wire(0, None, &first);
+        let second_wire = tight_wire(0, None, &second);
+
+        decoder
+            .decode(
+                &mut framebuffer,
+                rect(0, 0, 2, 2),
+                Encoding::Tight,
+                &first_wire,
+                PixelFormat::bgra8888(),
+            )
+            .unwrap();
+
+        let truncated = &second_wire[..second_wire.len() - 1];
+        let error = decoder
+            .decode(
+                &mut framebuffer,
+                rect(2, 0, 2, 2),
+                Encoding::Tight,
+                truncated,
+                PixelFormat::bgra8888(),
+            )
+            .unwrap_err();
+        assert_eq!(error, DecodeError::Incomplete);
+
+        let consumed = decoder
+            .decode(
+                &mut framebuffer,
+                rect(2, 0, 2, 2),
+                Encoding::Tight,
+                &second_wire,
+                PixelFormat::bgra8888(),
+            )
+            .unwrap();
+        assert_eq!(consumed, second_wire.len());
+
+        assert_eq!(&framebuffer.pixels()[0..8], &bgras(&[red(), green()]));
+        assert_eq!(&framebuffer.pixels()[8..16], &bgras(&[green(), red()]));
+        assert_eq!(&framebuffer.pixels()[16..24], &bgras(&[blue(), white()]));
+        assert_eq!(&framebuffer.pixels()[24..32], &bgras(&[white(), blue()]));
+    }
+
+    fn patterned_payload(width: u16, height: u16, seed: u8) -> (Vec<u8>, Vec<[u8; 4]>) {
+        let mut payload = Vec::new();
+        let mut colours = Vec::new();
+        for y in 0..height {
+            for x in 0..width {
+                let x = x as u32;
+                let y = y as u32;
+                let r = ((x * 7 + y * 13 + u32::from(seed)) & 0xff) as u8;
+                let g = (((x * 3) ^ (y * 5)) & 0xff) as u8;
+                let b = ((x * y + u32::from(seed) * 11) & 0xff) as u8;
+                payload.extend_from_slice(&[r, g, b]);
+                colours.push([b, g, r, 255]);
+            }
+        }
+        (payload, colours)
+    }
+
+    #[test]
+    fn tight_dense_and_large_rects_consume_exactly() {
+        for (width, height) in [(1u16, 1u16), (3, 3), (48, 48)] {
+            let mut framebuffer = Framebuffer::new(width * 2, height);
+            let mut decoder = Decoder::new();
+            let (first_payload, first_colours) = patterned_payload(width, height, 0);
+            let (second_payload, second_colours) = patterned_payload(width, height, 61);
+            let mut encoder = TightEncoder::new();
+            let first = encoder.chunk(&first_payload);
+            let second = encoder.chunk(&second_payload);
+            let first_wire = tight_wire(0, None, &first);
+            let second_wire = tight_wire(0, None, &second);
+            let mut message = first_wire.clone();
+            message.extend_from_slice(&second_wire);
+
+            let consumed = decoder
+                .decode(
+                    &mut framebuffer,
+                    rect(0, 0, width, height),
+                    Encoding::Tight,
+                    &message,
+                    PixelFormat::bgra8888(),
+                )
+                .unwrap();
+            assert_eq!(consumed, first_wire.len());
+            let row_bytes = usize::from(width) * 4;
+            let frame_stride = row_bytes * 2;
+            let first_pixels = bgras(&first_colours);
+            let second_pixels = bgras(&second_colours);
+            for row in 0..usize::from(height) {
+                let start = row * frame_stride;
+                let expected = row * row_bytes;
+                assert_eq!(
+                    &framebuffer.pixels()[start..start + row_bytes],
+                    &first_pixels[expected..expected + row_bytes]
+                );
+            }
+
+            let consumed = decoder
+                .decode(
+                    &mut framebuffer,
+                    rect(width, 0, width, height),
+                    Encoding::Tight,
+                    &message[consumed..],
+                    PixelFormat::bgra8888(),
+                )
+                .unwrap();
+            assert_eq!(consumed, second_wire.len());
+
+            for row in 0..usize::from(height) {
+                let start = row * frame_stride;
+                let expected = row * row_bytes;
+                assert_eq!(
+                    &framebuffer.pixels()[start..start + row_bytes],
+                    &first_pixels[expected..expected + row_bytes]
+                );
+                assert_eq!(
+                    &framebuffer.pixels()[start + row_bytes..start + row_bytes * 2],
+                    &second_pixels[expected..expected + row_bytes]
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn tight_highly_compressible_rects_consume_exactly() {
+        let width = 256u16;
+        let height = 32u16;
+        let mut framebuffer = Framebuffer::new(width, height * 2);
+        let mut decoder = Decoder::new();
+        let mut payload = Vec::new();
+        for _ in 0..usize::from(width) * usize::from(height) {
+            payload.extend_from_slice(&rgb(blue()));
+        }
+        let mut encoder = TightEncoder::new();
+        let first = encoder.chunk(&payload);
+        let second = encoder.chunk(
+            &[rgb(blue()), rgb(red())]
+                .repeat(usize::from(width) * usize::from(height) / 2)
+                .into_iter()
+                .flatten()
+                .collect::<Vec<_>>(),
+        );
+        let first_wire = tight_wire(0, None, &first);
+        let second_wire = tight_wire(0, None, &second);
+        let mut message = first_wire.clone();
+        message.extend_from_slice(&second_wire);
+
+        let consumed = decoder
+            .decode(
+                &mut framebuffer,
+                rect(0, 0, width, height),
+                Encoding::Tight,
+                &message,
+                PixelFormat::bgra8888(),
+            )
+            .unwrap();
+        assert_eq!(consumed, first_wire.len());
+        for row in 0..usize::from(height) {
+            let start = row * usize::from(width) * 4;
+            let end = start + usize::from(width) * 4;
+            assert!(
+                framebuffer.pixels()[start..end]
+                    .chunks_exact(4)
+                    .all(|pixel| pixel == blue())
+            );
+        }
+
+        let consumed = decoder
+            .decode(
+                &mut framebuffer,
+                rect(0, height, width, height),
+                Encoding::Tight,
+                &message[consumed..],
+                PixelFormat::bgra8888(),
+            )
+            .unwrap();
+        assert_eq!(consumed, second_wire.len());
+        for row in 0..usize::from(height) {
+            let start = (usize::from(height) + row) * usize::from(width) * 4;
+            for column in 0..usize::from(width) {
+                let pixel = &framebuffer.pixels()[start + column * 4..start + column * 4 + 4];
+                let expected = if column % 2 == 0 { blue() } else { red() };
+                assert_eq!(pixel, expected);
+            }
+        }
     }
 }

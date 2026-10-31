@@ -84,6 +84,7 @@ public struct SessionScreen: View {
 
             if model.state.isConnected {
                 chrome
+                    .environment(\.colorScheme, .dark)
                 toast
                 transferStatus
             }
@@ -440,11 +441,12 @@ public struct SessionScreen: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text(model.profile.name)
                     .font(Theme.Typography.overlayTitle)
+                    .foregroundStyle(.white)
                     .lineLimit(1)
 
                 Text(connectionDetail)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.white.opacity(0.7))
                     .lineLimit(1)
             }
 
@@ -461,11 +463,7 @@ public struct SessionScreen: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .strokeBorder(Theme.Colors.hairline, lineWidth: 1)
-        }
+        .glassSurface(in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         .frame(maxWidth: 430)
         .accessibilityElement(children: .combine)
     }

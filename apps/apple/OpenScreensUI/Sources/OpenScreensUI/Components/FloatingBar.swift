@@ -13,12 +13,8 @@ public struct FloatingBar<Content: View>: View {
             content
         }
         .padding(6)
-        .background(.ultraThinMaterial, in: Capsule(style: .continuous))
-        .overlay {
-            Capsule(style: .continuous)
-                .strokeBorder(Theme.Colors.hairline, lineWidth: 1)
-        }
-        .shadow(color: .black.opacity(0.22), radius: 18, y: 8)
+        .glassSurface(in: Capsule(style: .continuous))
+        .shadow(color: .black.opacity(0.28), radius: 18, y: 8)
     }
 }
 

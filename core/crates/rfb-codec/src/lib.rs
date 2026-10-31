@@ -5,6 +5,7 @@
 //! are needed; the framebuffer is left untouched in that case.
 
 mod compression;
+mod cursor;
 mod hextile;
 mod pixel;
 mod rre;
@@ -17,6 +18,8 @@ use rfb_proto::pixel_format::PixelFormat;
 use crate::compression::Inflater;
 use crate::pixel::{Cursor, store_pixel};
 use crate::tight::TightDecoder;
+
+pub use crate::cursor::{CursorShape, decode_cursor};
 
 /// A tightly packed BGRA8888 framebuffer.
 pub struct Framebuffer {

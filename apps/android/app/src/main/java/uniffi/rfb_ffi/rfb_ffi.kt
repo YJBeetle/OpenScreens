@@ -1843,6 +1843,8 @@ data class SessionConfig (
     , 
     var `shared`: kotlin.Boolean
     , 
+    var `localCursor`: kotlin.Boolean
+    , 
     var `sshHost`: kotlin.String?
     , 
     var `sshPort`: kotlin.UShort?
@@ -1873,6 +1875,7 @@ public object FfiConverterTypeSessionConfig: FfiConverterRustBuffer<SessionConfi
             FfiConverterOptionalString.read(buf),
             FfiConverterOptionalString.read(buf),
             FfiConverterBoolean.read(buf),
+            FfiConverterBoolean.read(buf),
             FfiConverterOptionalString.read(buf),
             FfiConverterOptionalUShort.read(buf),
             FfiConverterOptionalString.read(buf),
@@ -1887,6 +1890,7 @@ public object FfiConverterTypeSessionConfig: FfiConverterRustBuffer<SessionConfi
             FfiConverterOptionalString.allocationSize(value.`username`) +
             FfiConverterOptionalString.allocationSize(value.`password`) +
             FfiConverterBoolean.allocationSize(value.`shared`) +
+            FfiConverterBoolean.allocationSize(value.`localCursor`) +
             FfiConverterOptionalString.allocationSize(value.`sshHost`) +
             FfiConverterOptionalUShort.allocationSize(value.`sshPort`) +
             FfiConverterOptionalString.allocationSize(value.`sshUsername`) +
@@ -1900,6 +1904,7 @@ public object FfiConverterTypeSessionConfig: FfiConverterRustBuffer<SessionConfi
             FfiConverterOptionalString.write(value.`username`, buf)
             FfiConverterOptionalString.write(value.`password`, buf)
             FfiConverterBoolean.write(value.`shared`, buf)
+            FfiConverterBoolean.write(value.`localCursor`, buf)
             FfiConverterOptionalString.write(value.`sshHost`, buf)
             FfiConverterOptionalUShort.write(value.`sshPort`, buf)
             FfiConverterOptionalString.write(value.`sshUsername`, buf)
@@ -1993,6 +1998,29 @@ sealed class SessionEvent {
     object Bell : SessionEvent()
     
     
+    data class Cursor(
+        val `hotspotX`: kotlin.UShort, 
+        val `hotspotY`: kotlin.UShort, 
+        val `width`: kotlin.UShort, 
+        val `height`: kotlin.UShort, 
+        val `pixels`: kotlin.ByteArray) : SessionEvent()
+        
+    {
+        
+
+        companion object
+    }
+    
+    data class PointerPosition(
+        val `x`: kotlin.UShort, 
+        val `y`: kotlin.UShort) : SessionEvent()
+        
+    {
+        
+
+        companion object
+    }
+    
     data class Disconnected(
         val `reason`: kotlin.String) : SessionEvent()
         
@@ -2035,7 +2063,18 @@ public object FfiConverterTypeSessionEvent : FfiConverterRustBuffer<SessionEvent
                 FfiConverterString.read(buf),
                 )
             5 -> SessionEvent.Bell
-            6 -> SessionEvent.Disconnected(
+            6 -> SessionEvent.Cursor(
+                FfiConverterUShort.read(buf),
+                FfiConverterUShort.read(buf),
+                FfiConverterUShort.read(buf),
+                FfiConverterUShort.read(buf),
+                FfiConverterByteArray.read(buf),
+                )
+            7 -> SessionEvent.PointerPosition(
+                FfiConverterUShort.read(buf),
+                FfiConverterUShort.read(buf),
+                )
+            8 -> SessionEvent.Disconnected(
                 FfiConverterString.read(buf),
                 )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
@@ -2081,6 +2120,25 @@ public object FfiConverterTypeSessionEvent : FfiConverterRustBuffer<SessionEvent
                 4UL
             )
         }
+        is SessionEvent.Cursor -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterUShort.allocationSize(value.`hotspotX`)
+                + FfiConverterUShort.allocationSize(value.`hotspotY`)
+                + FfiConverterUShort.allocationSize(value.`width`)
+                + FfiConverterUShort.allocationSize(value.`height`)
+                + FfiConverterByteArray.allocationSize(value.`pixels`)
+            )
+        }
+        is SessionEvent.PointerPosition -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterUShort.allocationSize(value.`x`)
+                + FfiConverterUShort.allocationSize(value.`y`)
+            )
+        }
         is SessionEvent.Disconnected -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
@@ -2120,8 +2178,23 @@ public object FfiConverterTypeSessionEvent : FfiConverterRustBuffer<SessionEvent
                 buf.putInt(5)
                 Unit
             }
-            is SessionEvent.Disconnected -> {
+            is SessionEvent.Cursor -> {
                 buf.putInt(6)
+                FfiConverterUShort.write(value.`hotspotX`, buf)
+                FfiConverterUShort.write(value.`hotspotY`, buf)
+                FfiConverterUShort.write(value.`width`, buf)
+                FfiConverterUShort.write(value.`height`, buf)
+                FfiConverterByteArray.write(value.`pixels`, buf)
+                Unit
+            }
+            is SessionEvent.PointerPosition -> {
+                buf.putInt(7)
+                FfiConverterUShort.write(value.`x`, buf)
+                FfiConverterUShort.write(value.`y`, buf)
+                Unit
+            }
+            is SessionEvent.Disconnected -> {
+                buf.putInt(8)
                 FfiConverterString.write(value.`reason`, buf)
                 Unit
             }

@@ -996,6 +996,7 @@ public struct SessionConfig: Equatable, Hashable {
     public var username: String?
     public var password: String?
     public var shared: Bool
+    public var localCursor: Bool
     public var sshHost: String?
     public var sshPort: UInt16?
     public var sshUsername: String?
@@ -1004,12 +1005,13 @@ public struct SessionConfig: Equatable, Hashable {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(host: String, port: UInt16, username: String?, password: String?, shared: Bool, sshHost: String?, sshPort: UInt16?, sshUsername: String?, sshAuth: SshAuthConfig?, sshHostKeyFingerprint: String?) {
+    public init(host: String, port: UInt16, username: String?, password: String?, shared: Bool, localCursor: Bool, sshHost: String?, sshPort: UInt16?, sshUsername: String?, sshAuth: SshAuthConfig?, sshHostKeyFingerprint: String?) {
         self.host = host
         self.port = port
         self.username = username
         self.password = password
         self.shared = shared
+        self.localCursor = localCursor
         self.sshHost = sshHost
         self.sshPort = sshPort
         self.sshUsername = sshUsername
@@ -1038,6 +1040,7 @@ public struct FfiConverterTypeSessionConfig: FfiConverterRustBuffer {
                 username: FfiConverterOptionString.read(from: &buf), 
                 password: FfiConverterOptionString.read(from: &buf), 
                 shared: FfiConverterBool.read(from: &buf), 
+                localCursor: FfiConverterBool.read(from: &buf), 
                 sshHost: FfiConverterOptionString.read(from: &buf), 
                 sshPort: FfiConverterOptionUInt16.read(from: &buf), 
                 sshUsername: FfiConverterOptionString.read(from: &buf), 
@@ -1052,6 +1055,7 @@ public struct FfiConverterTypeSessionConfig: FfiConverterRustBuffer {
         FfiConverterOptionString.write(value.username, into: &buf)
         FfiConverterOptionString.write(value.password, into: &buf)
         FfiConverterBool.write(value.shared, into: &buf)
+        FfiConverterBool.write(value.localCursor, into: &buf)
         FfiConverterOptionString.write(value.sshHost, into: &buf)
         FfiConverterOptionUInt16.write(value.sshPort, into: &buf)
         FfiConverterOptionString.write(value.sshUsername, into: &buf)
@@ -1142,6 +1146,10 @@ public enum SessionEvent: Equatable, Hashable {
     case clipboard(text: String
     )
     case bell
+    case cursor(hotspotX: UInt16, hotspotY: UInt16, width: UInt16, height: UInt16, pixels: Data
+    )
+    case pointerPosition(x: UInt16, y: UInt16
+    )
     case disconnected(reason: String
     )
 
@@ -1179,7 +1187,13 @@ public struct FfiConverterTypeSessionEvent: FfiConverterRustBuffer {
         
         case 5: return .bell
         
-        case 6: return .disconnected(reason: try FfiConverterString.read(from: &buf)
+        case 6: return .cursor(hotspotX: try FfiConverterUInt16.read(from: &buf), hotspotY: try FfiConverterUInt16.read(from: &buf), width: try FfiConverterUInt16.read(from: &buf), height: try FfiConverterUInt16.read(from: &buf), pixels: try FfiConverterData.read(from: &buf)
+        )
+        
+        case 7: return .pointerPosition(x: try FfiConverterUInt16.read(from: &buf), y: try FfiConverterUInt16.read(from: &buf)
+        )
+        
+        case 8: return .disconnected(reason: try FfiConverterString.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -1218,8 +1232,23 @@ public struct FfiConverterTypeSessionEvent: FfiConverterRustBuffer {
             writeInt(&buf, Int32(5))
         
         
-        case let .disconnected(reason):
+        case let .cursor(hotspotX,hotspotY,width,height,pixels):
             writeInt(&buf, Int32(6))
+            FfiConverterUInt16.write(hotspotX, into: &buf)
+            FfiConverterUInt16.write(hotspotY, into: &buf)
+            FfiConverterUInt16.write(width, into: &buf)
+            FfiConverterUInt16.write(height, into: &buf)
+            FfiConverterData.write(pixels, into: &buf)
+            
+        
+        case let .pointerPosition(x,y):
+            writeInt(&buf, Int32(7))
+            FfiConverterUInt16.write(x, into: &buf)
+            FfiConverterUInt16.write(y, into: &buf)
+            
+        
+        case let .disconnected(reason):
+            writeInt(&buf, Int32(8))
             FfiConverterString.write(reason, into: &buf)
             
         }

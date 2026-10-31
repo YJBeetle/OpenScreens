@@ -25,6 +25,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         username: env::var("OPENSCREENS_USERNAME").ok(),
         password: env::var("OPENSCREENS_PASSWORD").ok(),
         shared: true,
+        local_cursor: false,
         ssh: None,
     };
 

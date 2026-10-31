@@ -98,6 +98,7 @@ class UniFfiRemoteSession(
             username = connection.username.ifBlank { null },
             password = connection.vncPassword.ifBlank { null },
             shared = true,
+            localCursor = false,
             sshHost = ssh?.let { it.host.ifBlank { connection.host } },
             sshPort = ssh?.let { it.port.toUShort() },
             sshUsername = ssh?.username?.ifBlank { null },
@@ -201,6 +202,8 @@ class UniFfiRemoteSession(
                     is NativeEvent.Resized -> applySize(event.width.toInt(), event.height.toInt())
                     is NativeEvent.Clipboard -> Log.d(TAG, "remote clipboard: ${event.text.length} chars")
                     NativeEvent.Bell -> Log.d(TAG, "remote bell")
+                    is NativeEvent.Cursor,
+                    is NativeEvent.PointerPosition -> Unit
                     is NativeEvent.Disconnected -> {
                         Log.i(TAG, "remote closed the session: ${event.reason}")
                         break

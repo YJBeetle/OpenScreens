@@ -14,6 +14,7 @@ pub enum Encoding {
     LastRect,
     Cursor,
     XCursor,
+    PointerPos,
     ExtendedDesktopSize,
     Fence,
     ContinuousUpdates,
@@ -34,6 +35,7 @@ impl Encoding {
             -224 => Self::LastRect,
             -239 => Self::Cursor,
             -240 => Self::XCursor,
+            -232 => Self::PointerPos,
             -308 => Self::ExtendedDesktopSize,
             -312 => Self::Fence,
             -313 => Self::ContinuousUpdates,
@@ -54,6 +56,7 @@ impl Encoding {
             Self::LastRect => -224,
             Self::Cursor => -239,
             Self::XCursor => -240,
+            Self::PointerPos => -232,
             Self::ExtendedDesktopSize => -308,
             Self::Fence => -312,
             Self::ContinuousUpdates => -313,
@@ -69,7 +72,7 @@ mod tests {
     #[test]
     fn round_trips_known_encodings() {
         let ids = [
-            0, 1, 2, 5, 6, 7, 16, -223, -224, -239, -240, -308, -312, -313, 1234, -9999,
+            0, 1, 2, 5, 6, 7, 16, -223, -224, -239, -240, -232, -308, -312, -313, 1234, -9999,
         ];
         for id in ids {
             assert_eq!(Encoding::from_id(id).to_id(), id);

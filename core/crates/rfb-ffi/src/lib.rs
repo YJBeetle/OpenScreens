@@ -31,6 +31,7 @@ pub struct SessionConfig {
     pub username: Option<String>,
     pub password: Option<String>,
     pub shared: bool,
+    pub local_cursor: bool,
     pub ssh_host: Option<String>,
     pub ssh_port: Option<u16>,
     pub ssh_username: Option<String>,
@@ -67,6 +68,7 @@ impl From<SessionConfig> for EngineConfig {
             username: config.username,
             password: config.password,
             shared: config.shared,
+            local_cursor: config.local_cursor,
             ssh,
         }
     }
@@ -127,6 +129,17 @@ pub enum SessionEvent {
         text: String,
     },
     Bell,
+    Cursor {
+        hotspot_x: u16,
+        hotspot_y: u16,
+        width: u16,
+        height: u16,
+        pixels: Vec<u8>,
+    },
+    PointerPosition {
+        x: u16,
+        y: u16,
+    },
     Disconnected {
         reason: String,
     },
@@ -151,6 +164,14 @@ impl From<EngineEvent> for SessionEvent {
             EngineEvent::Resized { width, height } => Self::Resized { width, height },
             EngineEvent::Clipboard { text } => Self::Clipboard { text },
             EngineEvent::Bell => Self::Bell,
+            EngineEvent::Cursor(shape) => Self::Cursor {
+                hotspot_x: shape.hotspot_x,
+                hotspot_y: shape.hotspot_y,
+                width: shape.width,
+                height: shape.height,
+                pixels: shape.pixels,
+            },
+            EngineEvent::PointerPosition { x, y } => Self::PointerPosition { x, y },
             EngineEvent::Disconnected { reason } => Self::Disconnected { reason },
         }
     }

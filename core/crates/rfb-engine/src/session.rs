@@ -5,7 +5,7 @@ use std::io;
 use std::sync::{Arc, Mutex};
 
 use bytes::{Buf, BytesMut};
-use rfb_codec::{DecodeError, Decoder, Framebuffer, Rect};
+use rfb_codec::{CursorShape, DecodeError, Decoder, Framebuffer, Rect};
 use rfb_io::{HostKeyPolicy, SshAuth, SshConfig as IoSshConfig};
 use rfb_proto::encoding::Encoding;
 use rfb_proto::messages::{
@@ -26,7 +26,7 @@ const READ_CHUNK: usize = 64 * 1024;
 const MAX_CUT_TEXT_LEN: usize = 16 * 1024 * 1024;
 
 /// Encodings advertised to the server, most preferred first.
-const ENCODINGS: [i32; 9] = [
+const BASE_ENCODINGS: [i32; 9] = [
     Encoding::Tight.to_id(),
     Encoding::Zrle.to_id(),
     Encoding::Hextile.to_id(),
@@ -39,6 +39,15 @@ const ENCODINGS: [i32; 9] = [
     -23,
 ];
 
+fn encodings(local_cursor: bool) -> Vec<i32> {
+    let mut ids = BASE_ENCODINGS.to_vec();
+    if local_cursor {
+        ids.push(Encoding::Cursor.to_id());
+        ids.push(Encoding::PointerPos.to_id());
+    }
+    ids
+}
+
 #[derive(Debug, Clone)]
 pub struct SessionConfig {
     pub host: String,
@@ -46,6 +55,8 @@ pub struct SessionConfig {
     pub username: Option<String>,
     pub password: Option<String>,
     pub shared: bool,
+    /// Advertise the Cursor pseudo-encoding and draw the pointer client-side.
+    pub local_cursor: bool,
     pub ssh: Option<SshSettings>,
 }
 
@@ -77,6 +88,7 @@ impl SessionConfig {
             username: None,
             password: None,
             shared: true,
+            local_cursor: false,
             ssh: None,
         }
     }
@@ -101,6 +113,14 @@ pub enum Event {
         text: String,
     },
     Bell,
+    /// A client-side cursor bitmap (Cursor pseudo-encoding).
+    Cursor(CursorShape),
+    /// The server moved the pointer (PointerPos pseudo-encoding), in
+    /// framebuffer pixels.
+    PointerPosition {
+        x: u16,
+        y: u16,
+    },
     Disconnected {
         reason: String,
     },
@@ -229,7 +249,7 @@ impl Session {
 
         let mut initial = Vec::new();
         initial.extend_from_slice(&set_pixel_format(&PixelFormat::bgra8888()));
-        initial.extend_from_slice(&set_encodings(&ENCODINGS));
+        initial.extend_from_slice(&set_encodings(&encodings(config.local_cursor)));
         initial.extend_from_slice(&framebuffer_update_request(false, 0, 0, width, height));
         command_tx
             .send(initial)
@@ -481,8 +501,34 @@ where
             continue;
         }
 
-        if encoding == Encoding::Cursor || encoding == Encoding::XCursor {
+        if encoding == Encoding::Cursor {
+            let rect = Rect {
+                x,
+                y,
+                width,
+                height,
+            };
+            decode_cursor_shape(read, state, rect, events).await?;
+            continue;
+        }
+
+        if encoding == Encoding::XCursor {
             skip_cursor(read, state, width, height, encoding).await?;
+            continue;
+        }
+
+        if encoding == Encoding::PointerPos {
+            fill_buffer(read, &mut state.buffer, 4).await?;
+            let pointer_x = u16::from_be_bytes([state.buffer[0], state.buffer[1]]);
+            let pointer_y = u16::from_be_bytes([state.buffer[2], state.buffer[3]]);
+            state.buffer.advance(4);
+            events
+                .send(Event::PointerPosition {
+                    x: pointer_x,
+                    y: pointer_y,
+                })
+                .await
+                .map_err(|_| SessionError::Closed)?;
             continue;
         }
 
@@ -544,6 +590,31 @@ where
         match result {
             Ok(consumed) => {
                 state.buffer.advance(consumed);
+                return Ok(());
+            }
+            Err(DecodeError::Incomplete) => read_more(read, &mut state.buffer).await?,
+            Err(error) => return Err(SessionError::Decode(error)),
+        }
+    }
+}
+
+async fn decode_cursor_shape<R>(
+    read: &mut R,
+    state: &mut ReaderState,
+    rect: Rect,
+    events: &mpsc::Sender<Event>,
+) -> Result<(), SessionError>
+where
+    R: AsyncRead + Unpin,
+{
+    loop {
+        match rfb_codec::decode_cursor(rect, &state.buffer, state.pixel_format) {
+            Ok((shape, consumed)) => {
+                state.buffer.advance(consumed);
+                events
+                    .send(Event::Cursor(shape))
+                    .await
+                    .map_err(|_| SessionError::Closed)?;
                 return Ok(());
             }
             Err(DecodeError::Incomplete) => read_more(read, &mut state.buffer).await?,

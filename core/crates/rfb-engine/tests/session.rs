@@ -75,6 +75,93 @@ fn raw_update() -> Vec<u8> {
     update
 }
 
+fn cursor_update() -> Vec<u8> {
+    let mut update = Vec::new();
+    update.push(0);
+    update.push(0);
+    update.extend_from_slice(&2u16.to_be_bytes());
+
+    // Cursor pseudo-rect: 2x2 bitmap with hotspot (1, 1).
+    update.extend_from_slice(&1u16.to_be_bytes());
+    update.extend_from_slice(&1u16.to_be_bytes());
+    update.extend_from_slice(&2u16.to_be_bytes());
+    update.extend_from_slice(&2u16.to_be_bytes());
+    update.extend_from_slice(&(-239i32).to_be_bytes());
+    update.extend_from_slice(&[
+        0, 0, 255, 255, // red
+        0, 0, 255, 255, // red
+        0, 0, 255, 255, // red
+        0, 0, 255, 255, // red
+    ]);
+    update.extend_from_slice(&[0b1100_0000, 0b1100_0000]);
+
+    // PointerPos pseudo-rect at (5, 6).
+    update.extend_from_slice(&5u16.to_be_bytes());
+    update.extend_from_slice(&6u16.to_be_bytes());
+    update.extend_from_slice(&0u16.to_be_bytes());
+    update.extend_from_slice(&0u16.to_be_bytes());
+    update.extend_from_slice(&(-232i32).to_be_bytes());
+    update.extend_from_slice(&[0, 5, 0, 6]);
+    update
+}
+
+#[tokio::test]
+async fn local_cursor_events() {
+    let (client, mut server) = duplex(64 * 1024);
+
+    let server_task = tokio::spawn(async move {
+        perform_handshake(&mut server).await;
+        let encoding_count = read_setup(&mut server).await;
+        assert_eq!(encoding_count, 11);
+
+        server.write_all(&cursor_update()).await.unwrap();
+
+        let mut request = [0u8; 10];
+        server.read_exact(&mut request).await.unwrap();
+        assert_eq!(request[0], 3);
+        assert_eq!(request[1], 1);
+    });
+
+    let mut config = SessionConfig::new("mock", 5900);
+    config.local_cursor = true;
+    let session = Session::connect_stream(client, config).await.unwrap();
+
+    let connected = timeout(Duration::from_secs(2), session.next_event())
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(matches!(connected, Event::Connected { .. }));
+
+    let cursor = timeout(Duration::from_secs(2), session.next_event())
+        .await
+        .unwrap()
+        .unwrap();
+    match cursor {
+        Event::Cursor(shape) => {
+            assert_eq!((shape.hotspot_x, shape.hotspot_y), (1, 1));
+            assert_eq!((shape.width, shape.height), (2, 2));
+            assert_eq!(shape.pixels.len(), 2 * 2 * 4);
+            assert_eq!(shape.pixels[3], 255);
+            assert_eq!(shape.pixels[4 * 2 + 3], 255);
+        }
+        other => panic!("expected cursor, got {other:?}"),
+    }
+
+    let position = timeout(Duration::from_secs(2), session.next_event())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(position, Event::PointerPosition { x: 5, y: 6 });
+
+    let disconnected = timeout(Duration::from_secs(2), session.next_event())
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(matches!(disconnected, Event::Disconnected { .. }));
+
+    server_task.await.unwrap();
+}
+
 #[tokio::test]
 async fn session_round_trip() {
     let (client, mut server) = duplex(64 * 1024);

@@ -107,9 +107,9 @@ jobs:
         working-directory: apps/macos
         run: |
           xcodegen generate
-          xcodebuild -project OpenScreens.xcodeproj -scheme OpenScreens -configuration Debug -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO OPENSCREENS_BUILD_VERSION="$(git describe --tags --always --dirty)" build
+          xcodebuild -project OpenScreens.xcodeproj -scheme OpenScreens -configuration Debug -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO OPENSCREENS_BUILD_VERSION="$(git describe --tags --always --dirty)" CURRENT_PROJECT_VERSION="$(git rev-list --count HEAD)" build
       - name: Build iOS app
         working-directory: apps/ios
         run: |
           xcodegen generate
-          xcodebuild -project OpenScreens.xcodeproj -target OpenScreens -configuration Debug -sdk iphoneos -arch arm64 CODE_SIGNING_ALLOWED=NO SYMROOT="$PWD/build" OPENSCREENS_BUILD_VERSION="$(git describe --tags --always --dirty)" build
+          xcodebuild -project OpenScreens.xcodeproj -target OpenScreens -configuration Debug -sdk iphoneos -arch arm64 CODE_SIGNING_ALLOWED=NO SYMROOT="$PWD/build" OPENSCREENS_BUILD_VERSION="$(git describe --tags --always --dirty)" CURRENT_PROJECT_VERSION="$(git rev-list --count HEAD)" build

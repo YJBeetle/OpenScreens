@@ -6,6 +6,7 @@ struct OpenScreensMacApp: App {
     @State private var connections = ConnectionStore()
     @State private var settings = SettingsStore()
     @State private var sshKeys = SSHKeyVault()
+    @State private var updater = AppUpdater()
 
     var body: some Scene {
         WindowGroup {
@@ -15,10 +16,19 @@ struct OpenScreensMacApp: App {
                 .environment(sshKeys)
                 .preferredColorScheme(settings.settings.appearance.colorScheme)
                 .tint(Theme.Colors.accent)
+                .onAppear {
+                    updater.start(channel: settings.settings.updateChannel)
+                }
         }
         .defaultSize(width: 1080, height: 700)
         .commands {
             SidebarCommands()
+            CommandGroup(after: .appInfo) {
+                Button("Check for Updates…") {
+                    updater.check()
+                }
+                .disabled(!updater.canCheck)
+            }
         }
 
         WindowGroup(id: MacSceneID.session, for: SessionRoute.self) { $route in
@@ -42,7 +52,11 @@ struct OpenScreensMacApp: App {
         .defaultSize(width: 1120, height: 760)
 
         Settings {
-            MacSettingsView(appVersion: MacAppInfo.version, buildVersion: MacAppInfo.buildVersion)
+            MacSettingsView(
+                appVersion: MacAppInfo.version,
+                buildVersion: MacAppInfo.buildVersion,
+                updater: updater
+            )
                 .environment(connections)
                 .environment(settings)
                 .environment(sshKeys)
@@ -78,11 +92,17 @@ struct SessionRoute: Codable, Hashable {
 }
 
 struct MacSettingsView: View {
+    @Environment(SettingsStore.self) private var settings
+
     let appVersion: String
     let buildVersion: String
+    let updater: AppUpdater
 
     var body: some View {
         SettingsView(appVersion: appVersion, buildVersion: buildVersion)
             .frame(width: 620, height: 620)
+            .onChange(of: settings.settings.updateChannel) { _, channel in
+                updater.setChannel(channel)
+            }
     }
 }

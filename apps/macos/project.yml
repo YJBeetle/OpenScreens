@@ -29,6 +29,9 @@ packages:
     path: ../apple/OpenScreensUI
   OpenScreensClient:
     path: ../apple/OpenScreensClient
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle
+    exactVersion: 2.10.0
 
 targets:
   OpenScreens:
@@ -44,6 +47,8 @@ targets:
         product: OpenScreensCanvas
       - package: OpenScreensClient
         product: OpenScreensClient
+      - package: Sparkle
+        product: Sparkle
     settings:
       base:
         PRODUCT_NAME: OpenScreens

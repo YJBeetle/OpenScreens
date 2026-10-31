@@ -28,5 +28,13 @@
 	<string>AGPL-3.0 · OpenScreens contributors</string>
 	<key>OpenScreensBuildVersion</key>
 	<string>$(OPENSCREENS_BUILD_VERSION)</string>
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
+	<key>SUFeedURL</key>
+	<string>https://github.com/YJBeetle/OpenScreens/releases/download/appcast/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>cz01tYyIdgD1pgwxm292AKRdOnKlqxLrqXla0/RWqco=</string>
+	<key>SUScheduledCheckInterval</key>
+	<integer>86400</integer>
 </dict>
 </plist>

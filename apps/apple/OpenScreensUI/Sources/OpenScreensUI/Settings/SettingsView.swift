@@ -1,9 +1,5 @@
 import SwiftUI
 
-#if os(macOS)
-import AppKit
-#endif
-
 /// Settings form shared by the macOS Settings scene and the iOS settings sheet.
 public struct SettingsView: View {
     @Environment(SettingsStore.self) private var settings
@@ -12,10 +8,6 @@ public struct SettingsView: View {
     private let appVersion: String
     private let buildVersion: String?
     @State private var confirmingRestore = false
-    #if os(macOS)
-    @State private var updateStatus: MacUpdateStatus = .idle
-    @State private var isDownloadingUpdate = false
-    #endif
 
     public init(appVersion: String = "1.0", buildVersion: String? = nil) {
         self.appVersion = appVersion
@@ -67,53 +59,10 @@ public struct SettingsView: View {
                     }
                 }
                 .pickerStyle(.segmented)
-                .onChange(of: settings.settings.updateChannel) { _, _ in
-                    updateStatus = .idle
-                }
-
-                HStack(alignment: .firstTextBaseline) {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(updateStatusText)
-                            .foregroundStyle(.secondary)
-                        if case .available(let release) = updateStatus {
-                            Text("Version \(release.label) is available")
-                                .font(.callout.weight(.medium))
-                        }
-                    }
-                    Spacer()
-                    Button(checkButtonTitle) {
-                        checkForUpdates()
-                    }
-                    .disabled(isChecking || isDownloadingUpdate)
-                }
-
-                if case .available(let release) = updateStatus {
-                    if !release.notes.isEmpty {
-                        Text(release.notes)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(6)
-                    }
-                    HStack {
-                        if let pageURL = release.pageURL {
-                            Link("Release Notes", destination: pageURL)
-                        }
-                        if release.downloadURL != nil {
-                            Button(downloadButtonTitle) {
-                                downloadUpdate(release)
-                            }
-                            .disabled(isDownloadingUpdate)
-                        } else {
-                            Text("No macOS asset in this release")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
             } header: {
                 Text("Updates")
             } footer: {
-                Text("Release receives stable builds, pre-release includes betas, and snapshot follows development builds. Installers are downloaded from GitHub Releases.")
+                Text("Release receives stable builds, pre-release includes betas, and snapshot follows development builds. Use Check for Updates in the OpenScreens menu.")
             }
             #endif
 
@@ -166,111 +115,7 @@ public struct SettingsView: View {
             Text("The demo hosts are added to your library again. Existing connections are kept.")
         }
     }
-
-    #if os(macOS)
-    private var isChecking: Bool {
-        if case .checking = updateStatus { return true }
-        return false
-    }
-
-    private var checkButtonTitle: String {
-        isChecking
-            ? NSLocalizedString("Checking…", comment: "Update status")
-            : NSLocalizedString("Check for Updates", comment: "Update action")
-    }
-
-    private var downloadButtonTitle: String {
-        isDownloadingUpdate
-            ? NSLocalizedString("Downloading…", comment: "Update status")
-            : NSLocalizedString("Download & Open Installer", comment: "Update action")
-    }
-
-    private var updateStatusText: String {
-        switch updateStatus {
-        case .idle:
-            NSLocalizedString("Check GitHub Releases for a newer build.", comment: "Update status")
-        case .checking:
-            NSLocalizedString("Checking…", comment: "Update status")
-        case .upToDate:
-            NSLocalizedString("You're on the latest version for this channel.", comment: "Update status")
-        case .noReleases:
-            NSLocalizedString("No releases published for this channel yet.", comment: "Update status")
-        case .available:
-            NSLocalizedString("A new build is available.", comment: "Update status")
-        case .failed(let message):
-            String(
-                format: NSLocalizedString("Couldn't check for updates: %@", comment: "Update error"),
-                message
-            )
-        }
-    }
-
-    private func checkForUpdates() {
-        guard !isChecking else { return }
-        updateStatus = .checking
-        let channel = settings.settings.updateChannel
-        let installed = UpdateStateStore.installedSnapshot()
-        Task {
-            do {
-                let result = try await UpdateChecker.check(
-                    currentVersion: appVersion,
-                    channel: channel,
-                    installedSnapshot: installed
-                )
-                switch result {
-                case .available(let release):
-                    updateStatus = .available(release)
-                case .upToDate:
-                    updateStatus = .upToDate
-                case .noReleases:
-                    updateStatus = .noReleases
-                }
-            } catch {
-                updateStatus = .failed(error.localizedDescription)
-            }
-        }
-    }
-
-    private func downloadUpdate(_ release: AppRelease) {
-        guard let url = release.downloadURL else { return }
-        isDownloadingUpdate = true
-        Task {
-            do {
-                let (temporary, response) = try await URLSession.shared.download(from: url)
-                if let http = response as? HTTPURLResponse,
-                   !(200..<300).contains(http.statusCode) {
-                    throw URLError(.badServerResponse)
-                }
-                let directory = FileManager.default.urls(
-                    for: .downloadsDirectory,
-                    in: .userDomainMask
-                ).first ?? temporary.deletingLastPathComponent()
-                let destination = directory.appendingPathComponent(url.lastPathComponent)
-                try? FileManager.default.removeItem(at: destination)
-                try FileManager.default.moveItem(at: temporary, to: destination)
-                NSWorkspace.shared.open(destination)
-                if release.tag.caseInsensitiveCompare("snapshot") == .orderedSame {
-                    UpdateStateStore.markInstallStarted(release.label)
-                }
-            } catch {
-                updateStatus = .failed(error.localizedDescription)
-            }
-            isDownloadingUpdate = false
-        }
-    }
-    #endif
 }
-
-#if os(macOS)
-private enum MacUpdateStatus {
-    case idle
-    case checking
-    case upToDate
-    case noReleases
-    case available(AppRelease)
-    case failed(String)
-}
-#endif
 
 /// Settings presented as a sheet from the iOS library.
 public struct SettingsSheet: View {

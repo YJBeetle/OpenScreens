@@ -85,7 +85,8 @@ jobs:
             -configuration Release -destination 'platform=macOS' \
             ARCHS=arm64 ONLY_ACTIVE_ARCH=YES \
             CODE_SIGNING_ALLOWED=NO SYMROOT="$PWD/build" \
-            OPENSCREENS_BUILD_VERSION="$(git describe --tags --always --dirty)" build
+            OPENSCREENS_BUILD_VERSION="$(git describe --tags --always --dirty)" \
+            CURRENT_PROJECT_VERSION="$(git rev-list --count HEAD)" build
       - name: Sign, notarize and package
         id: package
         working-directory: apps/macos
@@ -131,6 +132,23 @@ jobs:
           name: OpenScreens-snapshot-macos
           path: OpenScreens-snapshot-macos.zip
           if-no-files-found: error
+      - name: Generate Sparkle update feed
+        if: steps.package.outputs.notarized == 'true'
+        env:
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        run: |
+          python3 -B scripts/ci/update-feed.py \
+            --app "$PWD/apps/macos/build/Release/OpenScreens.app" \
+            --archive "$GITHUB_WORKSPACE/OpenScreens-snapshot-macos.zip" \
+            --channel snapshot \
+            --enclosure-url "https://github.com/${{ github.repository }}/releases/download/snapshot/OpenScreens-snapshot-macos.zip" \
+            --output "$GITHUB_WORKSPACE/dist-feed"
+      - uses: actions/upload-artifact@v4
+        if: steps.package.outputs.notarized == 'true'
+        with:
+          name: OpenScreens-appcast
+          path: dist-feed/appcast.xml
+          if-no-files-found: ignore
 
   publish:
     needs: [android, macos]
@@ -167,4 +185,27 @@ jobs:
           else
             gh release create snapshot --repo "$GITHUB_REPOSITORY" dist/* \
               --title "$title" --notes-file notes.md --prerelease --latest=false
+          fi
+      - uses: actions/download-artifact@v4
+        if: needs.macos.outputs.notarized == 'true'
+        continue-on-error: true
+        with:
+          name: OpenScreens-appcast
+          path: feed
+      - name: Publish Sparkle update feed
+        if: needs.macos.outputs.notarized == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if [[ ! -f feed/appcast.xml ]]; then
+            echo "No appcast was generated; skipping the update feed."
+            exit 0
+          fi
+          if gh release view appcast --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload appcast feed/appcast.xml --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            gh release create appcast feed/appcast.xml --repo "$GITHUB_REPOSITORY" \
+              --title "Update feed" --notes "Sparkle appcast for OpenScreens." \
+              --prerelease --latest=false
           fi

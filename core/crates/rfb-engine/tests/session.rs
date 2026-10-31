@@ -789,3 +789,63 @@ async fn download_receives_file() {
     assert_eq!(std::fs::read(root.join("hello.txt")).unwrap(), b"hello");
     std::fs::remove_dir_all(&root).ok();
 }
+
+#[tokio::test]
+async fn apple_desktop_info_populates_displays() {
+    let (client, mut server) = duplex(64 * 1024);
+    let task = tokio::spawn(async move {
+        Session::connect_stream(client, SessionConfig::new("mock", 5900))
+            .await
+            .unwrap()
+    });
+    perform_handshake(&mut server).await;
+    let _ = read_setup(&mut server).await;
+    let session = task.await.unwrap();
+    let connected = timeout(Duration::from_secs(1), session.next_event())
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(matches!(connected, Event::Connected { .. }));
+
+    let mut payload = Vec::new();
+    payload.extend_from_slice(&3840u16.to_be_bytes());
+    payload.extend_from_slice(&2160u16.to_be_bytes());
+    payload.extend_from_slice(&0u32.to_be_bytes());
+    payload.extend_from_slice(&1u16.to_be_bytes());
+    payload.extend_from_slice(&7u32.to_be_bytes());
+    payload.extend_from_slice(&1920u16.to_be_bytes());
+    payload.extend_from_slice(&1080u16.to_be_bytes());
+    payload.extend_from_slice(&0u32.to_be_bytes());
+    payload.extend_from_slice(&[32, 24, 0, 1]);
+    payload.extend_from_slice(&255u16.to_be_bytes());
+    payload.extend_from_slice(&255u16.to_be_bytes());
+    payload.extend_from_slice(&255u16.to_be_bytes());
+    payload.extend_from_slice(&[16, 8, 0, 0, 0, 0]);
+
+    let mut update = vec![0, 0];
+    update.extend_from_slice(&1u16.to_be_bytes());
+    update.extend_from_slice(&0u16.to_be_bytes());
+    update.extend_from_slice(&0u16.to_be_bytes());
+    update.extend_from_slice(&0u16.to_be_bytes());
+    update.extend_from_slice(&0u16.to_be_bytes());
+    update.extend_from_slice(&1101i32.to_be_bytes());
+    update.extend_from_slice(&payload);
+    server.write_all(&update).await.unwrap();
+
+    let event = timeout(Duration::from_secs(1), session.next_event())
+        .await
+        .unwrap()
+        .unwrap();
+    let Event::DesktopLayout {
+        width,
+        height,
+        screens,
+    } = event
+    else {
+        panic!("unexpected event: {event:?}");
+    };
+    assert_eq!((width, height), (3840, 2160));
+    assert_eq!(screens.len(), 1);
+    assert_eq!(screens[0].id, 7);
+    assert_eq!((screens[0].width, screens[0].height), (1920, 1080));
+}

@@ -23,6 +23,7 @@ use tokio::sync::Mutex as AsyncMutex;
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 
+use crate::apple_displays;
 use crate::apple_download::{DownloadEvent as AppleDownloadEvent, DownloadTransfer};
 use crate::apple_file_transfer;
 use crate::apple_input;
@@ -68,12 +69,18 @@ fn tight_quality_id(quality: u8) -> i32 {
     -23 - i32::from(9u8.saturating_sub(quality.min(9)))
 }
 
-fn encodings(local_cursor: bool, quality: u8) -> Vec<i32> {
+fn encodings(local_cursor: bool, quality: u8, apple: bool) -> Vec<i32> {
     let mut ids = BASE_ENCODINGS.to_vec();
     ids.push(tight_quality_id(quality));
     if local_cursor {
         ids.push(Encoding::Cursor.to_id());
         ids.push(Encoding::PointerPos.to_id());
+    }
+    if apple {
+        // Apple's display-list pseudo-encodings. The macOS server sends the
+        // display records only when they are advertised.
+        ids.push(Encoding::AppleDesktopInfo.to_id());
+        ids.push(Encoding::AppleDesktopInfo2.to_id());
     }
     ids
 }
@@ -391,6 +398,7 @@ impl Session {
         initial.extend_from_slice(&set_encodings(&encodings(
             config.local_cursor,
             config.quality,
+            apple_session,
         )));
         initial.extend_from_slice(&framebuffer_update_request(false, 0, 0, width, height));
         command_tx
@@ -413,6 +421,7 @@ impl Session {
             viewport.clone(),
             config.local_cursor,
             config.quality,
+            apple_session,
             bytes_read.clone(),
             downloads.clone(),
         ));
@@ -759,6 +768,7 @@ async fn reader_task<R>(
     viewport: Arc<Mutex<Option<Rect>>>,
     local_cursor: bool,
     quality: u8,
+    apple_session: bool,
     bytes_read: Arc<AtomicU64>,
     downloads: Arc<Mutex<HashMap<u32, DownloadTransfer>>>,
 ) where
@@ -798,7 +808,11 @@ async fn reader_task<R>(
                     last_bytes = total_bytes;
                     if let Some(level) = adaptive.observe(now, update_bytes)
                         && commands
-                            .send(set_encodings(&encodings(local_cursor, level)))
+                            .send(set_encodings(&encodings(
+                                local_cursor,
+                                level,
+                                apple_session,
+                            )))
                             .await
                             .is_err()
                     {
@@ -923,6 +937,7 @@ where
 }
 
 const MAX_TRANSFER_PAYLOAD: usize = 8 * 1024 * 1024;
+const APPLE_DISPLAY_RECORD_LEN: usize = 28;
 
 async fn handle_upload_request<R>(
     read: &mut R,
@@ -1175,6 +1190,60 @@ where
                 framebuffer.resize(new_width, new_height);
             }
             layout = Some((new_width, new_height, screens));
+            continue;
+        }
+
+        if encoding == Encoding::AppleDesktopInfo {
+            fill_buffer(read, &mut state.buffer, 10).await?;
+            let count = usize::from(u16::from_be_bytes([state.buffer[8], state.buffer[9]]));
+            let payload_len = 10 + count.saturating_mul(APPLE_DISPLAY_RECORD_LEN);
+            fill_buffer(read, &mut state.buffer, payload_len).await?;
+            let payload = state.buffer[..payload_len].to_vec();
+            state.buffer.advance(payload_len);
+            if let Ok(info) = apple_displays::parse_apple_desktop_info(&payload) {
+                layout = Some((
+                    info.width,
+                    info.height,
+                    info.displays
+                        .iter()
+                        .map(|display| DisplayScreen {
+                            id: display.id,
+                            x: 0,
+                            y: 0,
+                            width: display.width,
+                            height: display.height,
+                            flags: display.flags,
+                        })
+                        .collect(),
+                ));
+            }
+            continue;
+        }
+
+        if encoding == Encoding::AppleDesktopInfo2 {
+            fill_buffer(read, &mut state.buffer, 2).await?;
+            let declared = usize::from(u16::from_be_bytes([state.buffer[0], state.buffer[1]]));
+            let payload_len = 2 + declared;
+            fill_buffer(read, &mut state.buffer, payload_len).await?;
+            let payload = state.buffer[..payload_len].to_vec();
+            state.buffer.advance(payload_len);
+            if let Ok(info) = apple_displays::parse_apple_desktop_info2(&payload) {
+                layout = Some((
+                    info.width,
+                    info.height,
+                    info.displays
+                        .iter()
+                        .map(|display| DisplayScreen {
+                            id: display.id,
+                            x: 0,
+                            y: 0,
+                            width: display.pixel_rect.width(),
+                            height: display.pixel_rect.height(),
+                            flags: display.flags,
+                        })
+                        .collect(),
+                ));
+            }
             continue;
         }
 
@@ -1523,16 +1592,21 @@ mod tests {
 
     #[test]
     fn advertises_quality_and_cursor_encodings() {
-        let ids = encodings(false, 6);
+        let ids = encodings(false, 6, false);
         assert_eq!(ids.len(), 10);
         assert_eq!(*ids.last().unwrap(), -26);
         assert!(ids.contains(&Encoding::ExtendedDesktopSize.to_id()));
 
-        let ids = encodings(true, 3);
+        let ids = encodings(true, 3, false);
         assert_eq!(ids.len(), 12);
         assert_eq!(ids[ids.len() - 3], -29);
         assert!(ids.contains(&Encoding::Cursor.to_id()));
         assert!(ids.contains(&Encoding::PointerPos.to_id()));
+
+        let ids = encodings(false, 6, true);
+        assert_eq!(ids.len(), 12);
+        assert!(ids.contains(&Encoding::AppleDesktopInfo.to_id()));
+        assert!(ids.contains(&Encoding::AppleDesktopInfo2.to_id()));
     }
 
     fn screen_bytes(screens: &[(u32, u16, u16, u16, u16, u32)]) -> Vec<u8> {

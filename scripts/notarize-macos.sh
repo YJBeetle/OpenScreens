@@ -16,9 +16,10 @@ if [[ -z "$IDENTITY" ]]; then
   exit 1
 fi
 
-DD="$ROOT/var/dd-macos-release"
+DD="$WORKSPACE/var/dd-macos-release"
 APP="$DD/Build/Products/Release/OpenScreens.app"
-ZIP="$ROOT/var/OpenScreens-macos.zip"
+ZIP="$WORKSPACE/var/OpenScreens-macos.zip"
+mkdir -p "$WORKSPACE/var"
 
 cd "$ROOT/apps/macos"
 xcodegen generate >/dev/null

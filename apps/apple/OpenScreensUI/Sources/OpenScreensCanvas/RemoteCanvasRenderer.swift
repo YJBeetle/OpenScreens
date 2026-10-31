@@ -236,20 +236,27 @@ public final class RemoteCanvasRenderer {
             float2( 3.0, -1.0),
             float2(-1.0,  3.0)
         };
-        const float2 textureCoordinates[3] = {
+        // Full-screen triangle; screenUV is 0..1 over the visible viewport.
+        const float2 screenUVs[3] = {
             float2(0.0, 1.0),
             float2(2.0, 1.0),
             float2(0.0, -1.0)
         };
 
         CanvasVertexOut out;
-        out.position = float4(positions[vertexID] * uniforms.scale, 0.0, 1.0);
-        out.texCoord = textureCoordinates[vertexID];
+        out.position = float4(positions[vertexID], 0.0, 1.0);
+        // Map the viewport onto the letterboxed image rect. Coordinates outside
+        // 0..1 fall in the letterbox and are discarded by the fragment stage.
+        out.texCoord = (screenUVs[vertexID] - 0.5) / uniforms.scale + 0.5;
         return out;
     }
 
     fragment float4 canvasFragment(CanvasVertexOut in [[stage_in]],
                                    texture2d<float> remoteTexture [[texture(0)]]) {
+        if (in.texCoord.x < 0.0 || in.texCoord.x > 1.0 ||
+            in.texCoord.y < 0.0 || in.texCoord.y > 1.0) {
+            discard_fragment();
+        }
         constexpr sampler remoteSampler(coord::normalized,
                                         address::clamp_to_edge,
                                         filter::linear);

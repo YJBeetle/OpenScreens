@@ -94,6 +94,11 @@ public enum RemoteSessionEvent: Sendable {
     case pointerPosition(x: Double, y: Double)
     case clipboard(String)
     case bell
+    /// Upload status for files dropped onto the remote screen. `name` is the
+    /// remote file currently being received; `fraction` is 0...1 when known.
+    case transferProgress(name: String?, fraction: Double?)
+    /// An upload finished or was aborted. `name` is the last known file.
+    case transferFinished(name: String?)
     case failure(String)
 }
 
@@ -196,6 +201,14 @@ public protocol RemoteSessionProtocol: Sendable {
     func sendClipboard(_ text: String) async
     func requestClipboard() async
     func setObserveMode(_ observing: Bool) async
+    /// Sends local files to the remote desktop through Apple's drag-and-drop
+    /// file transfer protocol. Progress and completion arrive as events.
+    func uploadFiles(_ urls: [URL]) async
+}
+
+public extension RemoteSessionProtocol {
+    /// Transports without file transfer support ignore the request.
+    func uploadFiles(_ urls: [URL]) async {}
 }
 
 public protocol RemoteSessionService: Sendable {

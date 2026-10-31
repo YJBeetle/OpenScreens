@@ -31,6 +31,10 @@ public final class SessionViewModel {
     public private(set) var receivedFrames = 0
     public private(set) var remoteCursorShape: RemoteCursorShape?
     public private(set) var remoteCursorImage: CGImage?
+    /// Name of the file currently being received by the remote desktop.
+    public private(set) var uploadFileName: String?
+    /// Overall transfer progress (0...1) when the server reports it.
+    public private(set) var uploadFraction: Double?
     /// Last known pointer position, normalized to the remote framebuffer.
     public private(set) var remoteCursor = CGPoint(x: 0.5, y: 0.55)
 
@@ -169,6 +173,7 @@ public final class SessionViewModel {
         connectTask = nil
         eventTask?.cancel()
         eventTask = nil
+        clearUploadState()
         if let active {
             Task { await active.disconnect() }
         }
@@ -185,6 +190,7 @@ public final class SessionViewModel {
                 failureMessage = nil
             }
             if case .disconnected(let reason) = newState {
+                clearUploadState()
                 handleRemoteClose(reason: reason)
             }
 
@@ -232,6 +238,17 @@ public final class SessionViewModel {
 
         case .bell:
             PlatformFeedback.selection()
+
+        case .transferProgress(let name, let fraction):
+            if let name, !name.isEmpty {
+                uploadFileName = name
+            }
+            if let fraction {
+                uploadFraction = min(max(fraction, 0), 1)
+            }
+
+        case .transferFinished:
+            clearUploadState()
 
         case .failure(let message):
             failureMessage = message
@@ -465,6 +482,27 @@ public final class SessionViewModel {
     public func fetchRemoteClipboard() {
         guard state.isConnected, !isObserving, let session else { return }
         Task { await session.requestClipboard() }
+    }
+
+    // MARK: - File transfer
+
+    /// Sends files dropped onto the remote screen. The transport announces the
+    /// drag first and uploads once the server answers with a destination.
+    public func uploadFiles(_ urls: [URL]) {
+        guard state.isConnected, !urls.isEmpty, let session else { return }
+        if urls.count == 1 {
+            let name = urls[0].lastPathComponent
+            uploadFileName = name.isEmpty ? "file" : name
+        } else {
+            uploadFileName = "\(urls.count) files"
+        }
+        uploadFraction = nil
+        Task { await session.uploadFiles(urls) }
+    }
+
+    private func clearUploadState() {
+        uploadFileName = nil
+        uploadFraction = nil
     }
 
     // MARK: - Session controls

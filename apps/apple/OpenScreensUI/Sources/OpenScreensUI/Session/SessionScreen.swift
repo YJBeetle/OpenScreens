@@ -1,5 +1,6 @@
 import OpenScreensCanvas
 import SwiftUI
+import UniformTypeIdentifiers
 
 #if os(macOS)
 import AppKit
@@ -15,6 +16,7 @@ public struct SessionScreen: View {
     private let onClose: () -> Void
 
     @State private var confirmingDisconnect = false
+    @State private var isDropTargeted = false
 
     #if os(macOS)
     @FocusState private var keyboardFocused: Bool
@@ -53,9 +55,25 @@ public struct SessionScreen: View {
             if model.state.isConnected {
                 chrome
                 toast
+                uploadStatus
+            }
+
+            if isDropTargeted {
+                dropTargetOverlay
             }
         }
         .background(Theme.Colors.canvas)
+        #if os(macOS)
+        .onDrop(of: [.fileURL], isTargeted: $isDropTargeted) { providers in
+            handleDrop(providers: providers)
+        }
+        #else
+        .dropDestination(for: URL.self) { urls, _ in
+            handleDrop(urls: urls)
+        } isTargeted: { targeted in
+            isDropTargeted = targeted
+        }
+        #endif
         .onAppear {
             model.start()
             focusHardwareKeyboard()
@@ -412,6 +430,66 @@ public struct SessionScreen: View {
         }
     }
 
+    /// Upload status for dropped files, below the session header.
+    @ViewBuilder
+    private var uploadStatus: some View {
+        if let name = model.uploadFileName {
+            VStack {
+                HStack(spacing: 8) {
+                    ProgressView()
+                        .controlSize(.small)
+
+                    Text(uploadStatusText(name))
+                        .font(.footnote.weight(.medium))
+                        .lineLimit(1)
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
+                .background(.ultraThinMaterial, in: Capsule())
+                .overlay {
+                    Capsule().strokeBorder(Theme.Colors.hairline, lineWidth: 1)
+                }
+                .frame(maxWidth: 420)
+                .padding(.top, model.showsChrome ? 74 : 16)
+
+                Spacer()
+            }
+            .allowsHitTesting(false)
+            .transition(.opacity)
+            .animation(.snappy, value: model.uploadFileName)
+            .accessibilityAddTraits(.isStaticText)
+        }
+    }
+
+    private func uploadStatusText(_ name: String) -> String {
+        if let fraction = model.uploadFraction {
+            return "Sending \(name)… \(Int((fraction * 100).rounded()))%"
+        }
+        return "Sending \(name)…"
+    }
+
+    private var dropTargetOverlay: some View {
+        RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
+            .strokeBorder(
+                Theme.Colors.accent,
+                style: StrokeStyle(lineWidth: 3, dash: [10, 6])
+            )
+            .padding(10)
+            .overlay(alignment: .bottom) {
+                Label("Drop files to send", systemImage: "arrow.up.doc.fill")
+                    .font(.footnote.weight(.semibold))
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .background(.ultraThinMaterial, in: Capsule())
+                    .overlay {
+                        Capsule().strokeBorder(Theme.Colors.hairline, lineWidth: 1)
+                    }
+                    .padding(.bottom, 96)
+            }
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+    }
+
     // MARK: - State helpers
 
     private var statusColor: Color {
@@ -433,6 +511,58 @@ public struct SessionScreen: View {
     private var accessibilityStatus: String {
         "\(model.state.label), \(model.cursorMode.title) cursor mode"
     }
+
+    // MARK: - Drop to send
+
+    #if os(macOS)
+    private func handleDrop(providers: [NSItemProvider]) -> Bool {
+        guard model.state.isConnected else { return false }
+        let fileProviders = providers.filter {
+            $0.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier)
+        }
+        guard !fileProviders.isEmpty else { return false }
+
+        Task { @MainActor in
+            var urls: [URL] = []
+            for provider in fileProviders {
+                if let url = await loadFileURL(from: provider) {
+                    urls.append(url)
+                }
+            }
+            if !urls.isEmpty {
+                model.uploadFiles(urls)
+            }
+        }
+        return true
+    }
+
+    private func loadFileURL(from provider: NSItemProvider) async -> URL? {
+        await withCheckedContinuation { continuation in
+            provider.loadItem(
+                forTypeIdentifier: UTType.fileURL.identifier,
+                options: nil
+            ) { item, _ in
+                if let url = item as? URL {
+                    continuation.resume(returning: url)
+                } else if let data = item as? Data,
+                          let url = URL(dataRepresentation: data, relativeTo: nil) {
+                    continuation.resume(returning: url)
+                } else if let string = item as? String,
+                          let url = URL(string: string) {
+                    continuation.resume(returning: url)
+                } else {
+                    continuation.resume(returning: nil)
+                }
+            }
+        }
+    }
+    #else
+    private func handleDrop(urls: [URL]) -> Bool {
+        guard model.state.isConnected, !urls.isEmpty else { return false }
+        model.uploadFiles(urls)
+        return true
+    }
+    #endif
 
     // MARK: - Actions
 

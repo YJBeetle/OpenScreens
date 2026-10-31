@@ -33,8 +33,16 @@ struct ClientProbe {
                     if frames >= 2 { exit(0) }
                 case .clipboard(let text):
                     print("clipboard: \(text.count) chars")
+                case .cursor(let shape):
+                    print("cursor: \(shape.width)x\(shape.height)")
+                case .pointerPosition(let x, let y):
+                    print("pointer: \(x), \(y)")
                 case .bell:
                     print("bell")
+                case .transferProgress(let name, let fraction):
+                    print("transfer: \(name ?? "-") \(fraction.map { String(format: "%.0f%%", $0 * 100) } ?? "")")
+                case .transferFinished(let name):
+                    print("transfer finished: \(name ?? "-")")
                 case .failure(let reason):
                     print("failure: \(reason)")
                 }

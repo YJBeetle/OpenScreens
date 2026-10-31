@@ -30,6 +30,14 @@ private enum InputCommand: Sendable {
     case clipboard(String)
 }
 
+/// A regular file described for the Apple drag-and-drop upload protocol.
+private struct UploadFile: Sendable {
+    let url: URL
+    let name: String
+    let size: UInt64
+    let entry: OpenScreensCore.TransferEntry
+}
+
 public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
     public nonisolated let events: AsyncStream<OpenScreensUI.RemoteSessionEvent>
 
@@ -53,8 +61,20 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
     private var observing = false
     private var finished = false
 
+    /// Files announced to the server, keyed by their transfer handle. The
+    /// server answers a drag-in with `.uploadRequest(handle:path:)`.
+    private var pendingUploads: [UInt32: [URL]] = [:]
+    /// Last file name seen for an upload, so a bare ack can clear the UI.
+    private var uploadFileNames: [UInt32: String] = [:]
+
     private let logger = Logger(subsystem: "app.openscreens", category: "Session")
     private static let displayTargetWidth = 2560
+    private static let uploadChunkSize = 64 * 1024
+    /// POSIX 0100644: a plain file owned by the uploading user.
+    private static let uploadFileMode: UInt16 = 0o100644
+    private static let epoch1904Offset: UInt64 = 2_082_844_800
+    private static let transferProgressSubtype: UInt16 = 0x00C8
+    private static let transferAckSubtype: UInt16 = 0x012C
 
     public init() {
         let (stream, continuation) = AsyncStream.makeStream(
@@ -233,6 +253,187 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
         self.observing = observing
     }
 
+    // MARK: - File upload
+
+    /// Announces dropped files to the server. The upload itself starts when
+    /// the server answers with an `.uploadRequest` carrying the destination.
+    public func uploadFiles(_ urls: [URL]) async {
+        guard let session, !finished else { return }
+        let files = urls.filter(Self.isUploadable)
+        guard !files.isEmpty else {
+            continuation.yield(.failure("Only regular files can be sent to the remote computer."))
+            continuation.yield(.transferFinished(name: nil))
+            return
+        }
+
+        let handle = session.nextTransferHandle()
+        pendingUploads[handle] = files
+        uploadFileNames[handle] = files[0].lastPathComponent
+        do {
+            try await session.announceUpload(
+                handle: handle,
+                fileUrls: files.map(\.absoluteString)
+            )
+        } catch {
+            pendingUploads[handle] = nil
+            uploadFileNames[handle] = nil
+            logger.error(
+                "upload announce failed: \(error.localizedDescription, privacy: .public)"
+            )
+            continuation.yield(.failure("Could not send files: \(error.localizedDescription)"))
+            continuation.yield(.transferFinished(name: nil))
+        }
+    }
+
+    private static func isUploadable(_ url: URL) -> Bool {
+        guard url.isFileURL else { return false }
+        let accessing = url.startAccessingSecurityScopedResource()
+        defer {
+            if accessing { url.stopAccessingSecurityScopedResource() }
+        }
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory),
+              !isDirectory.boolValue
+        else { return false }
+        let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
+        return values?.isRegularFile != false && values?.isSymbolicLink != true
+    }
+
+    /// Uploads one announcement's files through the handle the server picked.
+    private func performUpload(
+        handle: UInt32,
+        destination: String,
+        urls: [URL],
+        session: OpenScreensCore.RemoteSession
+    ) async {
+        let files = urls.compactMap(Self.describeUpload)
+        guard !files.isEmpty else {
+            try? await session.cancelTransfer(handle: handle)
+            continuation.yield(.failure("The dropped items could not be read."))
+            continuation.yield(.transferFinished(name: nil))
+            return
+        }
+
+        let totalBytes = files.reduce(UInt64(0)) { $0 + $1.size }
+        var sentBytes: UInt64 = 0
+        do {
+            try await session.uploadDestination(handle: handle, folder: destination)
+            try await session.uploadSummary(
+                handle: handle,
+                totalBytes: totalBytes,
+                files: UInt32(files.count),
+                directories: 0
+            )
+
+            for file in files {
+                continuation.yield(.transferProgress(name: file.name, fraction: nil))
+                try await session.uploadEntry(handle: handle, entry: file.entry)
+
+                // iOS hands out security-scoped URLs; macOS grants dragged
+                // files directly and this is a no-op returning false.
+                let accessing = file.url.startAccessingSecurityScopedResource()
+                defer {
+                    if accessing { file.url.stopAccessingSecurityScopedResource() }
+                }
+                let source = try FileHandle(forReadingFrom: file.url)
+                defer { try? source.close() }
+
+                while let chunk = try source.read(upToCount: Self.uploadChunkSize),
+                      !chunk.isEmpty {
+                    try await session.uploadData(handle: handle, chunk: chunk)
+                    sentBytes += UInt64(chunk.count)
+                    if totalBytes > 0 {
+                        continuation.yield(.transferProgress(
+                            name: file.name,
+                            fraction: min(1, Double(sentBytes) / Double(totalBytes))
+                        ))
+                    }
+                }
+            }
+
+            try await session.uploadComplete(handle: handle)
+            logger.info(
+                "uploaded \(files.count) file(s), \(sentBytes) bytes to \(destination, privacy: .public)"
+            )
+            continuation.yield(.transferFinished(name: files.last?.name))
+        } catch {
+            logger.error("upload failed: \(error.localizedDescription, privacy: .public)")
+            try? await session.cancelTransfer(handle: handle)
+            continuation.yield(.failure("File transfer failed: \(error.localizedDescription)"))
+            continuation.yield(.transferFinished(name: nil))
+        }
+        uploadFileNames.removeValue(forKey: handle)
+    }
+
+    private static func describeUpload(_ url: URL) -> UploadFile? {
+        let accessing = url.startAccessingSecurityScopedResource()
+        defer {
+            if accessing { url.stopAccessingSecurityScopedResource() }
+        }
+
+        let attributes = try? FileManager.default.attributesOfItem(atPath: url.path)
+        let values = try? url.resourceValues(forKeys: [.fileSizeKey])
+        guard let size = (attributes?[.size] as? NSNumber)?.uint64Value
+            ?? values?.fileSize.map({ UInt64($0) })
+        else { return nil }
+
+        let modified = attributes?[.modificationDate] as? Date ?? Date()
+        let created = attributes?[.creationDate] as? Date ?? modified
+        let name = url.lastPathComponent.isEmpty ? "file" : url.lastPathComponent
+        let stamp = appleTimestamp(modified)
+
+        return UploadFile(
+            url: url,
+            name: name,
+            size: size,
+            entry: OpenScreensCore.TransferEntry(
+                kind: .file,
+                name: name,
+                dataSize: size,
+                resourceSize: 0,
+                mode: uploadFileMode,
+                nesting: 0,
+                created: appleTimestamp(created),
+                accessed: stamp,
+                changed: stamp,
+                modified: stamp,
+                finderInfo: Data(count: 32),
+                linkTarget: nil
+            )
+        )
+    }
+
+    /// Apple file transfer timestamps count seconds since 1904-01-01.
+    private static func appleTimestamp(_ date: Date) -> UInt32 {
+        let unix = UInt64(max(0, date.timeIntervalSince1970))
+        return UInt32(truncatingIfNeeded: unix &+ epoch1904Offset)
+    }
+
+    private func handleFileTransfer(subtype: UInt16, handle: UInt32, payload: Data) {
+        switch subtype {
+        case Self.transferProgressSubtype:
+            guard let progress = OpenScreensCore.parseTransferProgress(payload: payload)
+            else { return }
+            switch progress {
+            case .ratio(let value):
+                continuation.yield(.transferProgress(
+                    name: uploadFileNames[handle],
+                    fraction: min(max(value, 0), 1)
+                ))
+            case .name(let name):
+                uploadFileNames[handle] = name
+                continuation.yield(.transferProgress(name: name, fraction: nil))
+            }
+        case Self.transferAckSubtype:
+            if let ack = OpenScreensCore.parseTransferAck(payload: payload), !ack.isEmpty {
+                logger.info("file transfer ack: \(ack, privacy: .public)")
+            }
+            continuation.yield(.transferFinished(name: uploadFileNames.removeValue(forKey: handle)))
+        default:
+            break
+        }
+    }
+
     private func startEventPump(_ session: OpenScreensCore.RemoteSession) {
         eventTask = Task { [weak self] in
             while let event = await session.nextEvent() {
@@ -320,6 +521,24 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
                 y: Double(y) / Double(height)
             ))
 
+        case .uploadRequest(let handle, let path):
+            guard let urls = pendingUploads.removeValue(forKey: handle) else { return }
+            Task {
+                await self.performUpload(
+                    handle: handle,
+                    destination: path,
+                    urls: urls,
+                    session: session
+                )
+            }
+
+        case .dragInfo:
+            // Drags out of the remote desktop are not exposed by the UI yet.
+            break
+
+        case .fileTransfer(let subtype, let handle, let payload):
+            handleFileTransfer(subtype: subtype, handle: handle, payload: payload)
+
         case .disconnected(let reason):
             finish(reason: reason)
         }
@@ -348,6 +567,8 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
     private func finish(reason: String?) {
         guard !finished else { return }
         finished = true
+        pendingUploads.removeAll()
+        uploadFileNames.removeAll()
         continuation.yield(.state(.disconnected(reason: reason)))
         continuation.finish()
         eventTask?.cancel()

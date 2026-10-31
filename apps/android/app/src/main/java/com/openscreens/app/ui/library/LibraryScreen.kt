@@ -9,15 +9,12 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -44,6 +41,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -52,6 +50,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -96,6 +95,7 @@ private enum class LibraryView(@StringRes val labelRes: Int) {
     List(R.string.library_view_list),
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LibraryScreen(
     connections: List<Connection>,
@@ -146,18 +146,9 @@ fun LibraryScreen(
 
     Scaffold(
         topBar = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .windowInsetsPadding(WindowInsets.statusBars),
-            ) {
-                if (searchActive) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
+            if (searchActive) {
+                TopAppBar(
+                    navigationIcon = {
                         IconButton(
                             onClick = {
                                 searchActive = false
@@ -170,6 +161,8 @@ fun LibraryScreen(
                                 contentDescription = stringResource(R.string.library_close_search),
                             )
                         }
+                    },
+                    title = {
                         BasicTextField(
                             value = query,
                             onValueChange = { query = it },
@@ -179,7 +172,7 @@ fun LibraryScreen(
                             ),
                             cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                             modifier = Modifier
-                                .weight(1f)
+                                .fillMaxWidth()
                                 .focusRequester(focusRequester),
                             decorationBox = { innerTextField ->
                                 Box(Modifier.fillMaxWidth()) {
@@ -194,15 +187,17 @@ fun LibraryScreen(
                                 }
                             },
                         )
-                    }
-                } else {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(start = 8.dp, end = 4.dp, top = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Spacer(Modifier.weight(1f))
+                    },
+                )
+            } else {
+                TopAppBar(
+                    title = {
+                        Text(
+                            text = stringResource(R.string.library_title),
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    },
+                    actions = {
                         IconButton(onClick = { searchActive = true }) {
                             Icon(
                                 imageVector = Icons.Outlined.Search,
@@ -269,25 +264,8 @@ fun LibraryScreen(
                                 )
                             }
                         }
-                    }
-                    Text(
-                        text = stringResource(R.string.library_title),
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 2.dp),
-                    )
-                    Text(
-                        text = stringResource(R.string.library_count, visible.size),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(
-                            start = 20.dp,
-                            end = 20.dp,
-                            top = 2.dp,
-                            bottom = 8.dp,
-                        ),
-                    )
-                }
+                    },
+                )
             }
         },
     ) { innerPadding ->
@@ -304,6 +282,17 @@ fun LibraryScreen(
                     .fillMaxSize()
                     .padding(innerPadding),
             ) {
+                Text(
+                    text = stringResource(R.string.library_count, visible.size),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(
+                        start = 16.dp,
+                        end = 16.dp,
+                        top = 8.dp,
+                        bottom = 4.dp,
+                    ),
+                )
                 if (visible.isEmpty()) {
                     Box(
                         modifier = Modifier

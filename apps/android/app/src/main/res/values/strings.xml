@@ -131,6 +131,7 @@
     <string name="settings_downloading">Downloading…</string>
     <string name="settings_installer_opened">Installer opened. Follow the system prompt to update.</string>
     <string name="settings_view_release">View release</string>
+    <string name="settings_open_release">Open release page</string>
     <string name="settings_update_failed">Couldn’t check for updates: %1$s</string>
     <string name="settings_update_no_asset">This release has no APK asset.</string>
     <string name="settings_update_note">The APK must be signed with the same key as this installation.</string>

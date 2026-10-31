@@ -323,15 +323,15 @@ fun SettingsScreen(
                                 Text(stringResource(R.string.settings_check_updates))
                             }
                         }
-                        if (available?.info?.downloadUrl != null && !available.downloading) {
-                            Button(onClick = { downloadAndInstall(available.info) }) {
-                                Text(stringResource(R.string.settings_download_install))
+                        if (available != null) {
+                            Button(onClick = { openReleasePage(available.info) }) {
+                                Text(stringResource(R.string.settings_open_release))
                             }
                         }
-                        if (available != null) {
-                            TextButton(onClick = { openReleasePage(available.info) }) {
-                                Text(stringResource(R.string.settings_view_release))
-                            }
+                    }
+                    if (available?.info?.downloadUrl != null && !available.downloading) {
+                        TextButton(onClick = { downloadAndInstall(available.info) }) {
+                            Text(stringResource(R.string.settings_download_install))
                         }
                     }
 

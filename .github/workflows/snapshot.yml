@@ -56,6 +56,9 @@ jobs:
 
   macos:
     runs-on: macos-15
+    environment: Build
+    env:
+      HAS_MAC_SIGNING: ${{ secrets.SIGNING_CERTIFICATE_P12_BASE64 != '' }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -75,9 +78,42 @@ jobs:
           xcodebuild -project OpenScreens.xcodeproj -scheme OpenScreens \
             -configuration Release -destination 'platform=macOS' \
             CODE_SIGNING_ALLOWED=NO SYMROOT="$PWD/build" build
+      - name: Sign, notarize and package
+        working-directory: apps/macos
+        env:
+          SIGNING_CERTIFICATE_P12_BASE64: ${{ secrets.SIGNING_CERTIFICATE_P12_BASE64 }}
+          SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.SIGNING_CERTIFICATE_PASSWORD }}
+          SIGNING_IDENTITY: ${{ vars.SIGNING_IDENTITY }}
+          SIGNING_TEAM_ID: ${{ vars.SIGNING_TEAM_ID }}
+          NOTARY_APPLE_ID: ${{ secrets.NOTARY_APPLE_ID }}
+          NOTARY_APP_PASSWORD: ${{ secrets.NOTARY_APP_PASSWORD }}
+        run: |
+          set -euo pipefail
+          APP="$PWD/build/Release/OpenScreens.app"
+          if [[ "${HAS_MAC_SIGNING:-false}" == "true" ]]; then
+            KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
+            security create-keychain -p actions "$KEYCHAIN"
+            security set-keychain-settings -lut 21600 "$KEYCHAIN"
+            security unlock-keychain -p actions "$KEYCHAIN"
+            printf '%s' "$SIGNING_CERTIFICATE_P12_BASE64" | base64 --decode > "$RUNNER_TEMP/signing.p12"
+            security import "$RUNNER_TEMP/signing.p12" -k "$KEYCHAIN" \
+              -P "$SIGNING_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+            security set-key-partition-list -S apple-tool:,apple:,codesign: \
+              -s -k actions "$KEYCHAIN" >/dev/null
+            security list-keychains -d user -s "$KEYCHAIN" login.keychain-db
+            rm -f "$RUNNER_TEMP/signing.p12"
+            codesign --force --options runtime --timestamp --sign "$SIGNING_IDENTITY" "$APP"
+            codesign --verify --deep --strict --verbose=2 "$APP"
+            ditto -c -k --keepParent "$APP" "$RUNNER_TEMP/OpenScreens-notarize.zip"
+            xcrun notarytool submit "$RUNNER_TEMP/OpenScreens-notarize.zip" \
+              --apple-id "$NOTARY_APPLE_ID" --password "$NOTARY_APP_PASSWORD" \
+              --team-id "$SIGNING_TEAM_ID" --wait
+            xcrun stapler staple "$APP"
+            xcrun stapler validate "$APP"
+            spctl -a -vvv "$APP"
+          fi
           ditto -c -k --sequesterRsrc --keepParent \
-            "$PWD/build/Release/OpenScreens.app" \
-            "$GITHUB_WORKSPACE/OpenScreens-snapshot-macos.zip"
+            "$APP" "$GITHUB_WORKSPACE/OpenScreens-snapshot-macos.zip"
       - uses: actions/upload-artifact@v4
         with:
           name: OpenScreens-snapshot-macos

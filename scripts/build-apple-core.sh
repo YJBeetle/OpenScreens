@@ -8,7 +8,8 @@ HEADERS="$CORE/target/apple-headers"
 TARGETS=(aarch64-apple-darwin aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios)
 
 if command -v rustup >/dev/null 2>&1; then
-  CARGO=(rustup run stable cargo)
+  TOOLCHAIN_BIN="$(dirname "$(rustup which rustc)")"
+  CARGO=(env "PATH=$TOOLCHAIN_BIN:$PATH" cargo)
   rustup target add "${TARGETS[@]}" >/dev/null
 else
   CARGO=(cargo)

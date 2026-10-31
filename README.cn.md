@@ -7,12 +7,12 @@
 已实现：
 
 - RFB 3.3/3.7/3.8 客户端，支持 VNC 密码认证与 Apple DH 认证（macOS 屏幕共享）
-- Raw、CopyRect、RRE、Hextile、ZRLE、zlib 解码到 BGRA 帧缓冲
-- TCP 与 SSH（direct-tcpip）传输
+- Raw、CopyRect、RRE、Hextile、ZRLE、zlib、Tight/JPEG 解码到 BGRA 帧缓冲
+- TCP 与 SSH（direct-tcpip）传输；Android 编辑器已提供 SSH 配置
 - macOS 与 iOS/iPadOS 的 SwiftUI 应用，Metal 画布
 - Android 的 Compose Material 3 应用
 
-尚未实现：Tight/JPEG 与 Apple Adaptive DCT、自适应画质、WireGuard/OpenVPN、文件传输。
+尚未实现：Apple Adaptive DCT、自适应画质、本地光标渲染、多显示器选择、文件传输、WireGuard/OpenVPN。
 
 ## 目录
 
@@ -59,10 +59,15 @@ macOS 的签名与公证（需要 Developer ID 证书和 `notarytool` 凭据）�
 DEVELOPER_ID_IDENTITY="Developer ID Application: ..." ./scripts/notarize-macos.sh <notarytool-profile>
 ```
 
-Android：
+Android（改动 Rust core 后需要重编原生库）：
 
 ```sh
-cd apps/android
+cd core
+export ANDROID_NDK_HOME="$HOME/Library/Android/sdk/ndk/27.2.12479018"
+cargo ndk -t arm64-v8a -t armeabi-v7a -t x86_64 \
+  -o ../apps/android/app/src/main/jniLibs build -p rfb-ffi --release
+
+cd ../apps/android
 ./gradlew :app:assembleRelease
 ```
 

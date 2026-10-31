@@ -7,12 +7,12 @@ Open-source remote desktop client for macOS, iOS, iPadOS and Android, built on a
 Implemented:
 
 - RFB 3.3/3.7/3.8 client with VNC password and Apple DH authentication (macOS Screen Sharing)
-- Raw, CopyRect, RRE, Hextile, ZRLE and zlib decoding into a BGRA framebuffer
-- TCP and SSH (`direct-tcpip`) transports
+- Raw, CopyRect, RRE, Hextile, ZRLE, zlib and Tight/JPEG decoding into a BGRA framebuffer
+- TCP and SSH (`direct-tcpip`) transports; SSH is exposed in the Android editor
 - Native SwiftUI apps for macOS and iOS/iPadOS with a Metal canvas
 - Compose Material 3 app for Android
 
-Not yet implemented: Tight/JPEG and Apple Adaptive DCT, adaptive quality scaling, WireGuard/OpenVPN, file transfer.
+Not yet implemented: Apple Adaptive DCT, adaptive quality scaling, local cursor rendering, multi-display selection, file transfer, WireGuard/OpenVPN.
 
 ## Layout
 
@@ -60,10 +60,15 @@ For a signed and notarized macOS build (requires a Developer ID identity and a
 DEVELOPER_ID_IDENTITY="Developer ID Application: ..." ./scripts/notarize-macos.sh <notarytool-profile>
 ```
 
-Android:
+Android (after changing the Rust core, rebuild the native libraries):
 
 ```sh
-cd apps/android
+cd core
+export ANDROID_NDK_HOME="$HOME/Library/Android/sdk/ndk/27.2.12479018"
+cargo ndk -t arm64-v8a -t armeabi-v7a -t x86_64 \
+  -o ../apps/android/app/src/main/jniLibs build -p rfb-ffi --release
+
+cd ../apps/android
 ./gradlew :app:assembleRelease
 ```
 

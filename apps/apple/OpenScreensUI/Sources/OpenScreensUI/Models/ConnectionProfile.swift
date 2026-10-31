@@ -18,7 +18,6 @@ public enum LibrarySection: String, Codable, CaseIterable, Identifiable, Sendabl
     case nearby
     case links
     case connect
-    case tailscale
     case custom
 
     public var id: String { rawValue }
@@ -28,7 +27,6 @@ public enum LibrarySection: String, Codable, CaseIterable, Identifiable, Sendabl
         case .nearby: NSLocalizedString("Nearby", comment: "Library section")
         case .links: NSLocalizedString("Links", comment: "Library section")
         case .connect: NSLocalizedString("Connect", comment: "Library section")
-        case .tailscale: "Tailscale"
         case .custom: NSLocalizedString("Custom", comment: "Library section")
         }
     }
@@ -44,7 +42,6 @@ public enum LibrarySection: String, Codable, CaseIterable, Identifiable, Sendabl
         case .nearby: "dot.radiowaves.left.and.right"
         case .links: "link"
         case .connect: "cloud"
-        case .tailscale: "network"
         case .custom: "square.grid.2x2"
         }
     }
@@ -52,13 +49,12 @@ public enum LibrarySection: String, Codable, CaseIterable, Identifiable, Sendabl
     /// Service-backed sections are informational in this build; selecting one
     /// explains how to connect without an account.
     public var isService: Bool {
-        self == .connect || self == .tailscale
+        self == .connect
     }
 
     public var serviceStatus: String? {
         switch self {
         case .connect: NSLocalizedString("Not configured", comment: "Service status")
-        case .tailscale: NSLocalizedString("Optional", comment: "Service status")
         default: nil
         }
     }

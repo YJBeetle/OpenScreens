@@ -17,7 +17,6 @@ public struct LibrarySidebar: View {
             }
             Section("Services") {
                 row(.connect)
-                row(.tailscale)
             }
             Section("Custom") {
                 row(.custom)

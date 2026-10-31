@@ -176,11 +176,6 @@ public struct LibrarySectionView: View {
                 "OpenScreens connects directly to your computers. There is no relay account: use a LAN address, an SSH tunnel or your own VPN.",
                 comment: "Connect service explanation"
             )
-        case .tailscale:
-            NSLocalizedString(
-                "Enter a Tailscale 100.x address as a hostname today. A native Tailscale integration is not part of this build.",
-                comment: "Tailscale service explanation"
-            )
         default:
             ""
         }

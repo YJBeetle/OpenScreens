@@ -4,7 +4,7 @@
 
    English is the development language: the keys are the English source
    strings, so a missing entry simply falls back to English at runtime.
-   Protocol and product names (VNC, SSH, WireGuard, Tailscale, OpenScreens)
+   Protocol and product names (VNC, SSH, WireGuard, OpenScreens)
    are intentionally left untranslated.
 */
 
@@ -57,7 +57,6 @@
 "Connections shared with you as links appear here." = "以链接分享给你的连接会显示在这里。";
 "Add a computer to start a remote session." = "添加一台电脑以开始远程会话。";
 "OpenScreens connects directly to your computers. There is no relay account: use a LAN address, an SSH tunnel or your own VPN." = "OpenScreens 会直接连接你的电脑，无需中继账号：可使用局域网地址、SSH 隧道或你自己的 VPN。";
-"Enter a Tailscale 100.x address as a hostname today. A native Tailscale integration is not part of this build." = "目前可将 Tailscale 的 100.x 地址作为主机名填写。此版本暂未内置 Tailscale 集成。";
 
 /* MARK: - Phone library subtitles */
 "1 computer discovered" = "发现 1 台电脑";

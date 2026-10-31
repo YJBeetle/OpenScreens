@@ -93,6 +93,7 @@ jobs:
           xcodebuild -project OpenScreens.xcodeproj -scheme OpenScreens \
             -configuration Release -destination 'platform=macOS' \
             ARCHS=arm64 ONLY_ACTIVE_ARCH=YES \
+            MARKETING_VERSION="$(git describe --tags --always --dirty)" \
             CODE_SIGNING_ALLOWED=NO SYMROOT="$PWD/build" \
             OPENSCREENS_BUILD_VERSION="$(git describe --tags --always --dirty)" \
             CURRENT_PROJECT_VERSION="$(git rev-list --count HEAD)" build

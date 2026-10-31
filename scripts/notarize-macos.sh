@@ -26,6 +26,7 @@ xcodegen generate >/dev/null
 xcodebuild -project OpenScreens.xcodeproj -scheme OpenScreens -configuration Release \
   -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO ARCHS=arm64 ONLY_ACTIVE_ARCH=YES \
   -derivedDataPath "$DD" \
+  MARKETING_VERSION="$(git -C "$ROOT" describe --tags --always --dirty)" \
   OPENSCREENS_BUILD_VERSION="$(git -C "$ROOT" describe --tags --always --dirty)" \
   CURRENT_PROJECT_VERSION="$(git -C "$ROOT" rev-list --count HEAD)" build
 

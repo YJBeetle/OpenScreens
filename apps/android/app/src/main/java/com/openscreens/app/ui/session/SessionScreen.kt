@@ -147,6 +147,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import kotlin.math.abs
+import kotlin.math.ceil
+import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -557,6 +559,17 @@ fun SessionScreen(
         // or pan settles before the region is re-requested.
         val density = LocalDensity.current
         val canvasPixelWidth = with(density) { canvasWidth.toPx() }
+        val canvasPixelHeight = canvasPixelWidth / aspect
+        val screenPixelWidth = with(density) { maxWidth.toPx() }
+        val screenPixelHeight = with(density) { maxHeight.toPx() }
+        val screenSizePx = IntSize(
+            screenPixelWidth.roundToInt(),
+            screenPixelHeight.roundToInt(),
+        )
+        val bandSizePx = IntSize(
+            canvasPixelWidth.roundToInt(),
+            canvasPixelHeight.roundToInt(),
+        )
         LaunchedEffect(
             session,
             status,
@@ -565,6 +578,9 @@ fun SessionScreen(
             remoteWidth,
             remoteHeight,
             canvasPixelWidth,
+            canvasPixelHeight,
+            screenPixelWidth,
+            screenPixelHeight,
         ) {
             if (status != SessionStatus.Connected ||
                 remoteWidth <= 1 || remoteHeight <= 1 || canvasPixelWidth < 1f
@@ -575,8 +591,10 @@ fun SessionScreen(
             val rect = visibleServerRect(
                 zoom = zoom,
                 pan = pan,
-                viewWidth = canvasPixelWidth,
-                viewHeight = canvasPixelWidth / aspect,
+                bandWidth = canvasPixelWidth,
+                bandHeight = canvasPixelHeight,
+                screenWidth = screenPixelWidth,
+                screenHeight = screenPixelHeight,
                 serverWidth = remoteWidth,
                 serverHeight = remoteHeight,
             )
@@ -585,19 +603,9 @@ fun SessionScreen(
                 rect[1],
                 rect[2],
                 rect[3],
-                canvasPixelWidth.roundToInt(),
+                screenPixelWidth.roundToInt(),
             )
         }
-
-        // Letterboxed area around the framebuffer: tapping it toggles the session chrome
-        // without stealing taps from the canvas, which sits above this layer.
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .pointerInput(Unit) {
-                    detectTapGestures { chromeVisible = !chromeVisible }
-                },
-        )
 
         HiddenKeyboardField(
             focusRequester = focusRequester,
@@ -607,14 +615,13 @@ fun SessionScreen(
             modifier = Modifier.align(Alignment.TopStart),
         )
 
+        val zoomed = zoom > ZOOM_ACTIVE_EPSILON
         Box(
             modifier = Modifier
-                .align(Alignment.Center)
-                .width(canvasWidth)
-                .aspectRatio(aspect)
-                .clip(RoundedCornerShape(16.dp))
-                .background(FramebufferBackground)
-                .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(16.dp))
+                .fillMaxSize()
+                // Gestures use screen coordinates: the band below is scaled by a
+                // graphicsLayer, and pointer deltas read inside that layer would
+                // feed the new zoom back into the next delta.
                 .pointerInput(session, remoteWidth, remoteHeight, trackpadMode) {
                     // No framebuffer yet: pointer math would divide by zero and
                     // round NaN coordinates.
@@ -623,6 +630,16 @@ fun SessionScreen(
                     val doubleTapTimeout = viewConfiguration.doubleTapTimeoutMillis.toLong()
                     val doubleTapSlop = touchSlop * 2.5f
                     val wheelStep = WHEEL_STEP_PX
+                    val screenSize = size
+
+                    fun isInsideContent(position: Offset): Boolean {
+                        val halfWidth = bandSizePx.width * zoom / 2f
+                        val halfHeight = bandSizePx.height * zoom / 2f
+                        val centerX = screenSize.width / 2f + pan.x * zoom
+                        val centerY = screenSize.height / 2f + pan.y * zoom
+                        return abs(position.x - centerX) <= halfWidth &&
+                            abs(position.y - centerY) <= halfHeight
+                    }
 
                     fun sendPointerClick(x: Int, y: Int) {
                         session.sendPointer(x, y, 0)
@@ -661,10 +678,10 @@ fun SessionScreen(
 
                     fun toggleZoom() {
                         val targetZoom = if (zoom > ZOOM_ACTIVE_EPSILON) 1f else DOUBLE_TAP_ZOOM
-                        // Keep the image point at the view centre fixed while zooming.
-                        val targetPan = pan * (targetZoom / zoom)
+                        // Pan is anchored at the screen centre, so zooming needs no
+                        // pan correction; just re-clamp to the new content size.
                         zoom = targetZoom
-                        pan = clampPan(targetPan, targetZoom, size)
+                        pan = clampPan(pan, targetZoom, bandSizePx, screenSizePx)
                     }
 
                     fun sendWheel(mask: Int, labelRes: Int) {
@@ -680,6 +697,25 @@ fun SessionScreen(
 
                     awaitEachGesture {
                         val down = awaitFirstDown(requireUnconsumed = false)
+                        if (!isInsideContent(down.position)) {
+                            // Letterbox taps still toggle the session chrome; they
+                            // must not reach the remote pointer.
+                            var moved = false
+                            while (true) {
+                                val event = withTimeoutOrNull(50L) { awaitPointerEvent() }
+                                    ?: continue
+                                val pressed = event.changes.filter { it.pressed }
+                                if (pressed.isEmpty()) break
+                                if (pressed.size > 1 ||
+                                    (pressed.first().position - down.position)
+                                        .getDistance() > touchSlop
+                                ) {
+                                    moved = true
+                                }
+                            }
+                            if (!moved) chromeVisible = !chromeVisible
+                            return@awaitEachGesture
+                        }
                         val previousTap = taps.pending
                         val isDoubleTap = previousTap != null &&
                             down.uptimeMillis - previousTap.time <= doubleTapTimeout &&
@@ -689,7 +725,15 @@ fun SessionScreen(
                         }
 
                         var mode = GestureMode.Pending
-                        var start = remotePoint(down.position, size, remoteWidth, remoteHeight, zoom, pan)
+                        var start = remotePoint(
+                            down.position,
+                            screenSize,
+                            bandSizePx,
+                            remoteWidth,
+                            remoteHeight,
+                            zoom,
+                            pan,
+                        )
                         var last = start
                         var lastTouch = down.position
                         var lastZoom = zoom
@@ -769,12 +813,11 @@ fun SessionScreen(
                                                 .coerceIn(1f, MAX_ZOOM)
                                             // Zoom about the visible centre; two-finger
                                             // drags translate the view afterwards.
-                                            val anchored =
-                                                multiTouchStartPan * (newZoom / multiTouchStartZoom)
                                             val newPan = clampPan(
-                                                anchored + multiTouchPan,
+                                                multiTouchStartPan + multiTouchPan / newZoom,
                                                 newZoom,
-                                                size,
+                                                bandSizePx,
+                                                screenSizePx,
                                             )
                                             zoom = newZoom
                                             pan = newPan
@@ -799,12 +842,11 @@ fun SessionScreen(
                                                 .coerceIn(1f, MAX_ZOOM)
                                             // Zoom about the visible centre; two-finger
                                             // drags translate the view afterwards.
-                                            val anchored =
-                                                multiTouchStartPan * (newZoom / multiTouchStartZoom)
                                             val newPan = clampPan(
-                                                anchored + multiTouchPan,
+                                                multiTouchStartPan + multiTouchPan / newZoom,
                                                 newZoom,
-                                                size,
+                                                bandSizePx,
+                                                screenSizePx,
                                             )
                                             zoom = newZoom
                                             pan = newPan
@@ -865,9 +907,12 @@ fun SessionScreen(
                                         if (zoomChange != 1f || panChange != Offset.Zero) {
                                             val newZoom =
                                                 (lastZoom * zoomChange).coerceIn(1f, MAX_ZOOM)
-                                            val anchored = lastPan * (newZoom / lastZoom)
-                                            val newPan =
-                                                clampPan(anchored + panChange, newZoom, size)
+                                            val newPan = clampPan(
+                                                lastPan + panChange / newZoom,
+                                                newZoom,
+                                                bandSizePx,
+                                                screenSizePx,
+                                            )
                                             zoom = newZoom
                                             pan = newPan
                                             lastZoom = newZoom
@@ -907,7 +952,15 @@ fun SessionScreen(
                                 }
                             }
                             if (mode == GestureMode.Drag) {
-                                last = remotePoint(change.position, size, remoteWidth, remoteHeight, zoom, pan)
+                                last = remotePoint(
+                                    change.position,
+                                    screenSize,
+                                    bandSizePx,
+                                    remoteWidth,
+                                    remoteHeight,
+                                    zoom,
+                                    pan,
+                                )
                                 session.sendPointer(last.first, last.second, 1)
                                 trackPointer(last.first, last.second)
                                 change.consume()
@@ -917,20 +970,13 @@ fun SessionScreen(
                                 val region = viewport
                                 val base = trackpadPointer
                                     ?: IntOffset(remoteWidth / 2, remoteHeight / 2)
-                                val scaleX = if (region != null && size.width > 0) {
-                                    region.width.toFloat() / size.width
-                                } else if (size.width > 0) {
-                                    remoteWidth.toFloat() / size.width
-                                } else {
-                                    1f
-                                }
-                                val scaleY = if (region != null && size.height > 0) {
-                                    region.height.toFloat() / size.height
-                                } else if (size.height > 0) {
-                                    remoteHeight.toFloat() / size.height
-                                } else {
-                                    1f
-                                }
+                                // The cursor follows the finger 1:1 on screen, so a
+                                // screen pixel maps to a smaller framebuffer step
+                                // as the image is magnified.
+                                val scaleX = remoteWidth.toFloat() /
+                                    (bandSizePx.width * zoom).coerceAtLeast(1f)
+                                val scaleY = remoteHeight.toFloat() /
+                                    (bandSizePx.height * zoom).coerceAtLeast(1f)
                                 val minX = region?.x ?: 0
                                 val minY = region?.y ?: 0
                                 val maxX = (region?.let { it.x + it.width } ?: remoteWidth) - 1
@@ -972,60 +1018,84 @@ fun SessionScreen(
                     }
                 },
         ) {
-            val live = frame
-            if (live != null) {
-                Canvas(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .graphicsLayer {
-                            scaleX = zoom
-                            scaleY = zoom
-                            translationX = pan.x
-                            translationY = pan.y
-                            transformOrigin = TransformOrigin.Center
+            Box(
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .width(canvasWidth)
+                    .aspectRatio(aspect)
+                    // The letterbox frame only exists at 1x; once zoomed the image
+                    // has to spill out and cover the local screen edge to edge.
+                    .then(
+                        if (zoomed) {
+                            Modifier
+                        } else {
+                            Modifier
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(FramebufferBackground)
+                                .border(
+                                    1.dp,
+                                    Color.White.copy(alpha = 0.08f),
+                                    RoundedCornerShape(16.dp),
+                                )
                         },
-                ) {
-                    val crop = viewport
-                    val sourceX = crop?.x ?: 0
-                    val sourceY = crop?.y ?: 0
-                    val sourceWidth = crop?.width ?: remoteWidth
-                    val sourceHeight = crop?.height ?: remoteHeight
-                    val destination = IntRect(
-                        left = (sourceX.toFloat() / remoteWidth * size.width).roundToInt(),
-                        top = (sourceY.toFloat() / remoteHeight * size.height).roundToInt(),
-                        right = ((sourceX + sourceWidth).toFloat() / remoteWidth * size.width)
-                            .roundToInt(),
-                        bottom = ((sourceY + sourceHeight).toFloat() / remoteHeight * size.height)
-                            .roundToInt(),
                     )
-                    drawImage(
-                        image = live.bitmap.asImageBitmap(),
-                        srcOffset = IntOffset.Zero,
-                        srcSize = IntSize(live.bitmap.width, live.bitmap.height),
-                        dstOffset = IntOffset(destination.left, destination.top),
-                        dstSize = IntSize(
-                            (destination.right - destination.left).coerceAtLeast(1),
-                            (destination.bottom - destination.top).coerceAtLeast(1),
-                        ),
-                        filterQuality = if (zoom > 1.2f) FilterQuality.Medium else FilterQuality.Low,
+                    .graphicsLayer {
+                        scaleX = zoom
+                        scaleY = zoom
+                        // Pan is stored in band units; the layer moves content
+                        // in parent pixels.
+                        translationX = pan.x * zoom
+                        translationY = pan.y * zoom
+                        transformOrigin = TransformOrigin.Center
+                    },
+            ) {
+                val live = frame
+                if (live != null) {
+                    Canvas(modifier = Modifier.fillMaxSize()) {
+                        val crop = viewport
+                        val sourceX = crop?.x ?: 0
+                        val sourceY = crop?.y ?: 0
+                        val sourceWidth = crop?.width ?: remoteWidth
+                        val sourceHeight = crop?.height ?: remoteHeight
+                        val destination = IntRect(
+                            left = (sourceX.toFloat() / remoteWidth * size.width).roundToInt(),
+                            top = (sourceY.toFloat() / remoteHeight * size.height).roundToInt(),
+                            right = ((sourceX + sourceWidth).toFloat() / remoteWidth * size.width)
+                                .roundToInt(),
+                            bottom = ((sourceY + sourceHeight).toFloat() / remoteHeight * size.height)
+                                .roundToInt(),
+                        )
+                        drawImage(
+                            image = live.bitmap.asImageBitmap(),
+                            srcOffset = IntOffset.Zero,
+                            srcSize = IntSize(live.bitmap.width, live.bitmap.height),
+                            dstOffset = IntOffset(destination.left, destination.top),
+                            dstSize = IntSize(
+                                (destination.right - destination.left).coerceAtLeast(1),
+                                (destination.bottom - destination.top).coerceAtLeast(1),
+                            ),
+                            filterQuality = if (zoom > 1.2f) FilterQuality.Medium else FilterQuality.Low,
+                        )
+                        drawRemoteCursor(cursor, cursorPosition, remoteWidth.toFloat(), size)
+                    }
+                } else {
+                    RemoteCanvasPlaceholder(
+                        remoteWidth = remoteWidth,
+                        remoteHeight = remoteHeight,
+                        modifier = Modifier.align(Alignment.Center),
                     )
-                    drawRemoteCursor(cursor, cursorPosition, remoteWidth.toFloat(), size)
                 }
-            } else {
-                RemoteCanvasPlaceholder(
-                    remoteWidth = remoteWidth,
-                    remoteHeight = remoteHeight,
-                    modifier = Modifier.align(Alignment.Center),
-                )
             }
-            lastAction?.let { action ->
-                InputBadge(
-                    text = action,
-                    modifier = Modifier
-                        .align(Alignment.BottomStart)
-                        .padding(12.dp),
-                )
-            }
+        }
+
+        lastAction?.let { action ->
+            InputBadge(
+                text = action,
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .windowInsetsPadding(WindowInsets.safeDrawing)
+                    .padding(12.dp),
+            )
         }
 
         if (chromeVisible) {
@@ -1198,38 +1268,34 @@ private fun viewportFits(viewport: SessionEvent.Viewport?, width: Int, height: I
     return viewport.x + viewport.width <= width && viewport.y + viewport.height <= height
 }
 
-/** Framebuffer region visible under the current zoom/pan, in server pixels. */
+/** Framebuffer region visible through the screen-sized window under zoom/pan. */
 private fun visibleServerRect(
     zoom: Float,
     pan: Offset,
-    viewWidth: Float,
-    viewHeight: Float,
+    bandWidth: Float,
+    bandHeight: Float,
+    screenWidth: Float,
+    screenHeight: Float,
     serverWidth: Int,
     serverHeight: Int,
 ): IntArray {
     val safeZoom = zoom.coerceAtLeast(0.01f)
-    val center = Offset(viewWidth / 2f, viewHeight / 2f)
-
-    fun toImage(point: Offset): Offset =
-        (point - center - pan) / safeZoom + center
-
-    val first = toImage(Offset.Zero)
-    val second = toImage(Offset(viewWidth, viewHeight))
-    val scaleX = serverWidth / viewWidth
-    val scaleY = serverHeight / viewHeight
-    val left = (min(first.x, second.x) * scaleX)
-        .roundToInt()
-        .coerceIn(0, serverWidth - 1)
-    val top = (min(first.y, second.y) * scaleY)
-        .roundToInt()
-        .coerceIn(0, serverHeight - 1)
-    val right = (max(first.x, second.x) * scaleX)
-        .roundToInt()
-        .coerceIn(left + 1, serverWidth)
-    val bottom = (max(first.y, second.y) * scaleY)
-        .roundToInt()
-        .coerceIn(top + 1, serverHeight)
-    return intArrayOf(left, top, right - left, bottom - top)
+    // The band is the 1x fit rect, scaled about its centre and panned in band
+    // units; inverting the screen rect gives the visible band region.
+    val halfScreenX = screenWidth / (2f * safeZoom)
+    val halfScreenY = screenHeight / (2f * safeZoom)
+    val left = (bandWidth / 2f - halfScreenX - pan.x).coerceIn(0f, bandWidth)
+    val right = (bandWidth / 2f + halfScreenX - pan.x).coerceIn(0f, bandWidth)
+    val top = (bandHeight / 2f - halfScreenY - pan.y).coerceIn(0f, bandHeight)
+    val bottom = (bandHeight / 2f + halfScreenY - pan.y).coerceIn(0f, bandHeight)
+    val scaleX = serverWidth / bandWidth
+    val scaleY = serverHeight / bandHeight
+    // Round outward so the delivered crop always covers the visible edges.
+    val outLeft = floor(left * scaleX).toInt().coerceIn(0, serverWidth - 1)
+    val outTop = floor(top * scaleY).toInt().coerceIn(0, serverHeight - 1)
+    val outRight = ceil(right * scaleX).toInt().coerceIn(outLeft + 1, serverWidth)
+    val outBottom = ceil(bottom * scaleY).toInt().coerceIn(outTop + 1, serverHeight)
+    return intArrayOf(outLeft, outTop, outRight - outLeft, outBottom - outTop)
 }
 
 /**
@@ -1946,28 +2012,40 @@ private fun Modifier.touchBarrier(): Modifier = pointerInput(Unit) {
     }
 }
 
-private fun clampPan(value: Offset, zoom: Float, size: IntSize): Offset {
-    val maxX = size.width * (zoom - 1f) / 2f
-    val maxY = size.height * (zoom - 1f) / 2f
+/**
+ * Keeps the pan inside the range where the scaled band still covers the local
+ * screen on that axis; content smaller than the screen stays centred.
+ */
+private fun clampPan(value: Offset, zoom: Float, band: IntSize, screen: IntSize): Offset {
+    val safeZoom = zoom.coerceAtLeast(0.01f)
+    val maxX = max(0f, (band.width * safeZoom - screen.width) / (2f * safeZoom))
+    val maxY = max(0f, (band.height * safeZoom - screen.height) / (2f * safeZoom))
     return Offset(
         x = value.x.coerceIn(-maxX, maxX),
         y = value.y.coerceIn(-maxY, maxY),
     )
 }
 
+/**
+ * Maps a screen-space touch to the framebuffer. The band is drawn at the zoom-1
+ * fit rect and scaled about its centre with a pan offset, so the inverse
+ * transform lands in band coordinates, which map linearly to server pixels.
+ */
 private fun remotePoint(
-    offset: Offset,
-    size: IntSize,
+    position: Offset,
+    screen: IntSize,
+    band: IntSize,
     remoteWidth: Int,
     remoteHeight: Int,
     zoom: Float,
     pan: Offset,
 ): Pair<Int, Int> {
-    if (size.width == 0 || size.height == 0) return 0 to 0
-    val center = Offset(size.width / 2f, size.height / 2f)
-    val local = (offset - pan - center) / zoom + center
-    val x = (local.x / size.width * remoteWidth).roundToInt().coerceIn(0, remoteWidth - 1)
-    val y = (local.y / size.height * remoteHeight).roundToInt().coerceIn(0, remoteHeight - 1)
+    if (band.width == 0 || band.height == 0) return 0 to 0
+    val safeZoom = zoom.coerceAtLeast(0.01f)
+    val bandX = band.width / 2f + (position.x - screen.width / 2f) / safeZoom - pan.x
+    val bandY = band.height / 2f + (position.y - screen.height / 2f) / safeZoom - pan.y
+    val x = (bandX / band.width * remoteWidth).roundToInt().coerceIn(0, remoteWidth - 1)
+    val y = (bandY / band.height * remoteHeight).roundToInt().coerceIn(0, remoteHeight - 1)
     return x to y
 }
 

@@ -45,6 +45,8 @@
     <string name="accent_sky">Sky</string>
     <string name="editor_show_password">Show password</string>
     <string name="editor_hide_password">Hide password</string>
+    <string name="editor_zoom_toggle">Allow pinching to zoom</string>
+    <string name="editor_zoom_description">Pinching magnifies the remote screen. Turn it off to reserve two-finger gestures for scrolling.</string>
     <string name="editor_ssh_toggle">Tunnel through SSH</string>
     <string name="editor_ssh_description">Route VNC traffic through an SSH jump host. The VNC address is resolved from that host.</string>
     <string name="editor_ssh_host">SSH jump host</string>

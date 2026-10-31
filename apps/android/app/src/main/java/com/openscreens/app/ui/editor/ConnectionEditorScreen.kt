@@ -117,6 +117,9 @@ fun ConnectionEditorScreen(
     var quality by rememberSaveable(editorKey) {
         mutableStateOf(connection?.quality ?: QualityPreset.Balanced)
     }
+    var zoomEnabled by rememberSaveable(editorKey) {
+        mutableStateOf(connection?.zoomEnabled ?: true)
+    }
     var username by rememberSaveable(editorKey) {
         mutableStateOf(connection?.username.orEmpty())
     }
@@ -294,6 +297,7 @@ fun ConnectionEditorScreen(
                 username = username.trim(),
                 vncPassword = vncPassword,
                 quality = quality,
+                zoomEnabled = zoomEnabled,
                 ssh = ssh,
                 wireGuardConfig = wireGuardConfig?.takeIf { it.isNotBlank() },
                 openVpnConfig = openVpnConfig?.takeIf { it.isNotBlank() },
@@ -507,6 +511,35 @@ fun ConnectionEditorScreen(
                             )
                         }
                     }
+                }
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .toggleable(
+                            value = zoomEnabled,
+                            role = Role.Switch,
+                            onValueChange = { zoomEnabled = it },
+                        )
+                        .padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                        Text(
+                            text = stringResource(R.string.editor_zoom_toggle),
+                            style = MaterialTheme.typography.bodyLarge,
+                        )
+                        Text(
+                            text = stringResource(R.string.editor_zoom_description),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Switch(checked = zoomEnabled, onCheckedChange = null)
                 }
 
                 HorizontalDivider(Modifier.padding(vertical = 4.dp))

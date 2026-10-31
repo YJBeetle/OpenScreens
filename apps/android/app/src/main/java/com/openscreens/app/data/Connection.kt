@@ -29,6 +29,8 @@ data class Connection(
     val openVpnConfig: String? = null,
     /** Streaming quality for this device. */
     val quality: QualityPreset = QualityPreset.Balanced,
+    /** Two-finger pinch magnifies the remote image; off reserves two fingers for scrolling. */
+    val zoomEnabled: Boolean = true,
     val lastConnectedAt: Long? = null,
 ) {
     val address: String

@@ -31,6 +31,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.isImeVisible
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
@@ -93,6 +94,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
@@ -186,6 +188,7 @@ fun SessionScreen(
     var lastAction by remember { mutableStateOf<String?>(null) }
     var zoom by remember { mutableFloatStateOf(1f) }
     var pan by remember { mutableStateOf(Offset.Zero) }
+    var pressIndicator by remember { mutableStateOf<PressIndicator?>(null) }
     var showClipboardDialog by rememberSaveable { mutableStateOf(false) }
     var qualityMenuExpanded by remember { mutableStateOf(false) }
     var isFullscreen by rememberSaveable { mutableStateOf(true) }
@@ -618,18 +621,22 @@ fun SessionScreen(
         )
 
         val zoomed = zoom > ZOOM_ACTIVE_EPSILON
+        val zoomEnabled = connection.zoomEnabled
+        val longPressSlop = with(density) { 12.dp.toPx() }
+        val swipeThreshold = with(density) { 48.dp.toPx() }
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 // Gestures use screen coordinates: the band below is scaled by a
                 // graphicsLayer, and pointer deltas read inside that layer would
                 // feed the new zoom back into the next delta.
-                .pointerInput(session, remoteWidth, remoteHeight, trackpadMode) {
+                .pointerInput(session, remoteWidth, remoteHeight, trackpadMode, zoomEnabled) {
                     // No framebuffer yet: pointer math would divide by zero and
                     // round NaN coordinates.
                     if (remoteWidth <= 1 || remoteHeight <= 1) return@pointerInput
                     val touchSlop = viewConfiguration.touchSlop
                     val doubleTapTimeout = viewConfiguration.doubleTapTimeoutMillis.toLong()
+                    val longPressTimeout = viewConfiguration.longPressTimeoutMillis
                     val doubleTapSlop = touchSlop * 2.5f
                     val wheelStep = WHEEL_STEP_PX
                     val screenSize = size
@@ -747,6 +754,102 @@ fun SessionScreen(
                             screenSize.height / 2f,
                         )
 
+                        // Long press holds a button down for dragging: one finger
+                        // holds the left button, two the right, three the middle.
+                        // Movement or a change in finger count cancels it.
+                        var holdTouches = 1
+                        var holdStartedAt = down.uptimeMillis
+                        var holdAnchor = down.position
+                        var currentTouches = 1
+                        var currentCentroid = down.position
+                        var pressActive = false
+                        var pressTouches = 0
+                        var pressButton = 0
+                        var pressTarget = start
+                        var threeFingerSwipe: SwipeDirection? = null
+                        var threeFingerStart = Offset.Zero
+
+                        fun movePress(position: Offset) {
+                            currentCentroid = position
+                            pressIndicator = pressIndicator?.copy(position = position)
+                            if (!trackpadMode) {
+                                pressTarget = remotePoint(
+                                    position,
+                                    screenSize,
+                                    bandSizePx,
+                                    remoteWidth,
+                                    remoteHeight,
+                                    zoom,
+                                    pan,
+                                )
+                            }
+                            session.sendPointer(pressTarget.first, pressTarget.second, pressButton)
+                            trackPointer(pressTarget.first, pressTarget.second)
+                        }
+
+                        fun beginPress() {
+                            if (pressActive || holdTouches == 0 ||
+                                currentTouches != holdTouches
+                            ) {
+                                return
+                            }
+                            if (SystemClock.uptimeMillis() - holdStartedAt < longPressTimeout) return
+                            if (!isInsideContent(currentCentroid)) {
+                                holdTouches = 0
+                                return
+                            }
+                            val button = when (currentTouches) {
+                                1 -> 1
+                                2 -> 1 shl 2
+                                else -> 1 shl 1
+                            }
+                            pressTarget = if (trackpadMode) {
+                                trackpadPointer?.let { it.x to it.y }
+                                    ?: remotePoint(
+                                        currentCentroid,
+                                        screenSize,
+                                        bandSizePx,
+                                        remoteWidth,
+                                        remoteHeight,
+                                        zoom,
+                                        pan,
+                                    )
+                            } else {
+                                remotePoint(
+                                    currentCentroid,
+                                    screenSize,
+                                    bandSizePx,
+                                    remoteWidth,
+                                    remoteHeight,
+                                    zoom,
+                                    pan,
+                                )
+                            }
+                            pressActive = true
+                            pressTouches = currentTouches
+                            pressButton = button
+                            pressIndicator = PressIndicator(
+                                pressIndicatorColor(button),
+                                currentCentroid,
+                            )
+                            session.sendPointer(pressTarget.first, pressTarget.second, 0)
+                            session.sendPointer(pressTarget.first, pressTarget.second, button)
+                            trackPointer(pressTarget.first, pressTarget.second)
+                            recordPointer(pressTarget.first, pressTarget.second)
+                            multiTouchTapCandidate = false
+                            multiTouchMoved = true
+                            threeFingerSwipe = null
+                            holdTouches = 0
+                        }
+
+                        fun endPress() {
+                            if (!pressActive) return
+                            session.sendPointer(pressTarget.first, pressTarget.second, 0)
+                            trackPointer(pressTarget.first, pressTarget.second)
+                            pressActive = false
+                            pressIndicator = null
+                        }
+
                         fun sendClick(x: Int, y: Int, mask: Int) {
                             session.sendPointer(x, y, 0)
                             session.sendPointer(x, y, mask)
@@ -837,14 +940,34 @@ fun SessionScreen(
 
                         while (true) {
                             val event = withTimeoutOrNull(50L) { awaitPointerEvent() }
-                                ?: continue
+                            if (event == null) {
+                                // Fingers held still produce no events: this is
+                                // where the long-press timer actually fires.
+                                beginPress()
+                                continue
+                            }
+                            if (event.changes.any { it.pressed }) beginPress()
                             val pressed = event.changes.filter { it.pressed }
                             if (pressed.isEmpty()) break
+                            if (pressActive && pressed.size < pressTouches) break
                             if (mode == GestureMode.Transform && pressed.size < 2) break
                             if (mode == GestureMode.TwoFinger && pressed.size < 2) break
                             if (mode == GestureMode.Scroll && pressed.size < 2) break
 
                             if (pressed.size >= 2) {
+                                currentTouches = pressed.size
+                                val centroidNow = event.calculateCentroid(useCurrent = true)
+                                currentCentroid = centroidNow
+                                if (pressActive) {
+                                    movePress(centroidNow)
+                                    event.changes.forEach { it.consume() }
+                                    continue
+                                }
+                                if (holdTouches > 0 && (pressed.size != holdTouches ||
+                                        (centroidNow - holdAnchor).getDistance() > longPressSlop)
+                                ) {
+                                    holdTouches = 0
+                                }
                                 if (mode == GestureMode.Pending || mode == GestureMode.Drag ||
                                     mode == GestureMode.Move
                                 ) {
@@ -853,18 +976,22 @@ fun SessionScreen(
                                         trackPointer(last.first, last.second)
                                     }
                                     multiTouchTapCandidate = mode == GestureMode.Pending
-                                    mode = if (zoom > ZOOM_ACTIVE_EPSILON) {
+                                    mode = if (zoomEnabled && zoom > ZOOM_ACTIVE_EPSILON) {
                                         GestureMode.Transform
                                     } else {
                                         GestureMode.TwoFinger
                                     }
                                     multiTouchStartZoom = zoom
                                     multiTouchStartPan = pan
-                                    multiTouchStartCentroid =
-                                        event.calculateCentroid(useCurrent = true)
+                                    multiTouchStartCentroid = centroidNow
                                     multiTouchZoom = 1f
                                     scrollAccum = Offset.Zero
                                     threeFinger = pressed.size >= 3
+                                    threeFingerStart = centroidNow
+                                    threeFingerSwipe = null
+                                    holdTouches = pressed.size.coerceAtMost(3)
+                                    holdStartedAt = SystemClock.uptimeMillis()
+                                    holdAnchor = centroidNow
                                     multiTouchMoved = false
                                     // The pointer count changed on this event, so its pan and
                                     // zoom deltas are not meaningful. Start clean next event.
@@ -873,26 +1000,53 @@ fun SessionScreen(
                                 }
 
                                 if (threeFinger || pressed.size >= 3) {
-                                    threeFinger = true
+                                    if (!threeFinger) {
+                                        threeFinger = true
+                                        threeFingerStart = centroidNow
+                                        threeFingerSwipe = null
+                                    }
+                                    if (threeFingerSwipe == null) {
+                                        val delta = centroidNow - threeFingerStart
+                                        if (max(abs(delta.x), abs(delta.y)) > swipeThreshold) {
+                                            threeFingerSwipe = if (abs(delta.x) > abs(delta.y)) {
+                                                if (delta.x > 0f) {
+                                                    SwipeDirection.Right
+                                                } else {
+                                                    SwipeDirection.Left
+                                                }
+                                            } else if (delta.y > 0f) {
+                                                SwipeDirection.Down
+                                            } else {
+                                                SwipeDirection.Up
+                                            }
+                                            multiTouchMoved = true
+                                            multiTouchTapCandidate = false
+                                            holdTouches = 0
+                                        }
+                                    }
                                     event.changes.forEach { it.consume() }
                                     continue
                                 }
 
                                 when (mode) {
                                     GestureMode.TwoFinger -> {
-                                        val zoomChange = event.calculateZoom()
-                                        multiTouchZoom *= zoomChange
-                                        val centroid = event.calculateCentroid(useCurrent = true)
-                                        if (abs(multiTouchZoom - 1f) > PINCH_ZOOM_EPSILON) {
+                                        if (zoomEnabled) {
+                                            multiTouchZoom *= event.calculateZoom()
+                                        }
+                                        if (zoomEnabled &&
+                                            abs(multiTouchZoom - 1f) > PINCH_ZOOM_EPSILON
+                                        ) {
                                             // A pinch always wins over scrolling.
                                             multiTouchMoved = true
                                             multiTouchTapCandidate = false
+                                            holdTouches = 0
                                             mode = GestureMode.Transform
-                                            applyPinch(centroid)
-                                        } else if ((centroid - multiTouchStartCentroid)
+                                            applyPinch(centroidNow)
+                                        } else if ((centroidNow - multiTouchStartCentroid)
                                                 .getDistance() > touchSlop * 2f
                                         ) {
                                             multiTouchTapCandidate = false
+                                            holdTouches = 0
                                             mode = GestureMode.Scroll
                                             scrollAccum = Offset.Zero
                                         }
@@ -901,14 +1055,17 @@ fun SessionScreen(
                                     }
 
                                     GestureMode.Scroll -> {
-                                        val zoomChange = event.calculateZoom()
                                         val panChange = event.calculatePan()
-                                        multiTouchZoom *= zoomChange
-                                        if (abs(multiTouchZoom - 1f) > PINCH_ZOOM_EPSILON) {
+                                        if (zoomEnabled) {
+                                            multiTouchZoom *= event.calculateZoom()
+                                        }
+                                        if (zoomEnabled &&
+                                            abs(multiTouchZoom - 1f) > PINCH_ZOOM_EPSILON
+                                        ) {
                                             multiTouchMoved = true
                                             multiTouchTapCandidate = false
                                             mode = GestureMode.Transform
-                                            applyPinch(event.calculateCentroid(useCurrent = true))
+                                            applyPinch(centroidNow)
                                             event.changes.forEach { it.consume() }
                                             continue
                                         }
@@ -958,8 +1115,10 @@ fun SessionScreen(
                                     }
 
                                     GestureMode.Transform -> {
-                                        multiTouchZoom *= event.calculateZoom()
-                                        applyPinch(event.calculateCentroid(useCurrent = true))
+                                        if (zoomEnabled) {
+                                            multiTouchZoom *= event.calculateZoom()
+                                            applyPinch(centroidNow)
+                                        }
                                         event.changes.forEach { it.consume() }
                                         continue
                                     }
@@ -975,6 +1134,18 @@ fun SessionScreen(
                             }
 
                             val change = pressed.first()
+                            currentTouches = 1
+                            currentCentroid = change.position
+                            if (pressActive) {
+                                movePress(change.position)
+                                change.consume()
+                                continue
+                            }
+                            if (holdTouches == 1 &&
+                                (change.position - holdAnchor).getDistance() > longPressSlop
+                            ) {
+                                holdTouches = 0
+                            }
                             if (mode == GestureMode.Pending &&
                                 (change.position - down.position).getDistance() > touchSlop
                             ) {
@@ -1032,7 +1203,9 @@ fun SessionScreen(
                             }
                         }
 
-                        when (mode) {
+                        if (pressActive) {
+                            endPress()
+                        } else when (mode) {
                             GestureMode.Drag -> {
                                 session.sendPointer(last.first, last.second, 0)
                                 trackPointer(last.first, last.second)
@@ -1061,7 +1234,19 @@ fun SessionScreen(
                                 }
                             }
                             else -> {
-                                if (multiTouchTapCandidate && !multiTouchMoved &&
+                                val swipe = threeFingerSwipe
+                                if (swipe != null) {
+                                    val keysym = when (swipe) {
+                                        SwipeDirection.Up -> KEY_UP
+                                        SwipeDirection.Down -> KEY_DOWN
+                                        SwipeDirection.Left -> KEY_LEFT
+                                        SwipeDirection.Right -> KEY_RIGHT
+                                    }
+                                    session.sendKey(KEY_CONTROL, true)
+                                    session.sendKey(keysym, true)
+                                    session.sendKey(keysym, false)
+                                    session.sendKey(KEY_CONTROL, false)
+                                } else if (multiTouchTapCandidate && !multiTouchMoved &&
                                     SystemClock.uptimeMillis() - downTime <= TAP_TIMEOUT_MS
                                 ) {
                                     if (threeFinger) {
@@ -1165,6 +1350,23 @@ fun SessionScreen(
                     )
                 }
             }
+        }
+
+        pressIndicator?.let { indicator ->
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .offset {
+                        IntOffset(
+                            (indicator.position.x - 11.dp.roundToPx()).roundToInt(),
+                            (indicator.position.y - 11.dp.roundToPx()).roundToInt(),
+                        )
+                    }
+                    .size(22.dp)
+                    .shadow(8.dp, CircleShape)
+                    .background(indicator.color.copy(alpha = 0.9f), CircleShape)
+                    .border(2.dp, Color.White.copy(alpha = 0.85f), CircleShape),
+            )
         }
 
         lastAction?.let { action ->
@@ -2049,6 +2251,18 @@ private data class PendingTap(
     val position: Offset,
     val time: Long,
 )
+
+private data class PressIndicator(val color: Color, val position: Offset)
+
+private enum class SwipeDirection { Up, Down, Left, Right }
+
+/// Screens colours the held button the same way on every platform: blue for the
+/// left button, red for the right one and green for the middle.
+private fun pressIndicatorColor(button: Int): Color = when (button) {
+    1 -> Color(0.29f, 0.56f, 1f)
+    1 shl 2 -> Color(1f, 0.35f, 0.32f)
+    else -> Color(0.20f, 0.78f, 0.35f)
+}
 
 private class DeferredTapController {
     var pending: PendingTap? = null

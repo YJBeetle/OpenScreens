@@ -45,6 +45,8 @@
     <string name="accent_sky">天蓝</string>
     <string name="editor_show_password">显示密码</string>
     <string name="editor_hide_password">隐藏密码</string>
+    <string name="editor_zoom_toggle">允许捏合缩放</string>
+    <string name="editor_zoom_description">捏合可放大远程屏幕；关闭后双指手势只用于滚动。</string>
     <string name="editor_ssh_toggle">通过 SSH 隧道连接</string>
     <string name="editor_ssh_description">通过 SSH 跳板机转发 VNC 流量，VNC 地址从跳板机侧解析。</string>
     <string name="editor_ssh_host">SSH 跳板机地址</string>

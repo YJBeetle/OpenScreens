@@ -14,14 +14,18 @@
 - TCP 与 SSH（direct-tcpip）传输；跳板机支持密码或私钥认证。Android 有加密的密钥管理，macOS 直接选用 `~/.ssh` 下的私钥，iOS 可导入私钥到钥匙串（设置 → SSH Keys）
 - macOS 与 iOS/iPadOS 的 SwiftUI 应用，Metal 画布
 - Android 的 Compose Material 3 应用
-
-尚未实现：Apple Adaptive DCT、多显示器选择、文件传输、WireGuard/OpenVPN。
+- Apple 3.889 会话：加密指针/键盘、Apple 剪贴板消息、显示列表伪编码、显示器切换与拖放上传
+- 文件传输：Android 上传选择器与按远端路径下载（带进度）；Apple 端拖放上传
+- Android 直接触摸/触控板模式、以视图中心为锚点的捏合缩放、双指平移
+- 用户态 WireGuard 传输（`rfb-tunnel` + `TunnelDialer`）与 Android wg-quick 配置导入；OpenVPN 与 WireGuard 运行时验收待做
+- Apple Adaptive DCT 解码器已实现，但 type-0 解析在真实流上验证通过前不对外广告
 
 ## 目录
 
 ```
 core/crates/rfb-proto/     sans-I/O RFB 消息与 Apple DH 认证
 core/crates/rfb-codec/     矩形解码器
+core/crates/rfb-tunnel/    用户态 WireGuard 隧道
 core/crates/rfb-engine/    握手、会话循环、帧缓冲
 core/crates/rfb-io/        TCP 与 SSH 传输
 core/crates/rfb-ffi/       UniFFI 接口层

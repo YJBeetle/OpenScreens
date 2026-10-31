@@ -14,14 +14,18 @@ Implemented:
 - TCP and SSH (`direct-tcpip`) transports; SSH jump hosts with password or private-key auth. Android has an encrypted key manager, macOS selects keys directly from `~/.ssh`, and iOS imports private keys into the Keychain (Settings → SSH Keys)
 - Native SwiftUI apps for macOS and iOS/iPadOS with a Metal canvas
 - Compose Material 3 app for Android
-
-Not yet implemented: Apple Adaptive DCT, multi-display selection, file transfer, WireGuard/OpenVPN.
+- Apple Screen Sharing 3.889 sessions: AES-encrypted pointer/keyboard input, Apple clipboard messages, display-list pseudo-encodings, display switching, and drag-and-drop file upload
+- File transfer: Android upload picker and remote-path download with progress; drag-and-drop upload on the Apple apps
+- Android direct-touch and trackpad pointer modes, view-centre pinch zoom, and two-finger pan
+- Userspace WireGuard transport (`rfb-tunnel` + `TunnelDialer`) with Android wg-quick config import; OpenVPN and WireGuard runtime acceptance are pending
+- Apple Adaptive DCT decoding is implemented but not advertised until the type-0 parser is validated against live streams
 
 ## Layout
 
 ```
 core/crates/rfb-proto/     sans-I/O RFB messages and Apple DH auth
 core/crates/rfb-codec/     rectangle decoders
+core/crates/rfb-tunnel/    userspace WireGuard tunnel
 core/crates/rfb-engine/    handshake, session loop, framebuffer
 core/crates/rfb-io/        TCP and SSH transports
 core/crates/rfb-ffi/       UniFFI surface

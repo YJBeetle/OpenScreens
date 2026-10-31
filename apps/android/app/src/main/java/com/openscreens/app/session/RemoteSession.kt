@@ -65,7 +65,18 @@ interface RemoteSession {
     suspend fun startDragOut(handle: Int)
 
     suspend fun requestDownload(handle: Int, path: String)
+
+    suspend fun selectDisplay(displayId: Int?)
 }
+
+data class DisplayScreen(
+    val id: Int,
+    val x: Int,
+    val y: Int,
+    val width: Int,
+    val height: Int,
+    val flags: Int,
+)
 
 enum class TransferEntryKind { File, Directory, Symlink }
 
@@ -89,6 +100,12 @@ sealed interface SessionEvent {
     data object Connecting : SessionEvent
     data class Connected(val width: Int, val height: Int) : SessionEvent
     data class Resized(val width: Int, val height: Int) : SessionEvent
+
+    data class DesktopLayout(
+        val width: Int,
+        val height: Int,
+        val screens: List<DisplayScreen>,
+    ) : SessionEvent
 
     /**
      * A completed framebuffer update. [sequence] increases with every update so Compose

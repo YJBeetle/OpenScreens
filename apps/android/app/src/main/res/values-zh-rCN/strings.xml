@@ -76,6 +76,9 @@
     <string name="session_scroll_right">向右滚动</string>
     <string name="session_clipboard">剪贴板</string>
     <string name="session_pointer_direct">直接触摸</string>
+    <string name="session_displays">显示器</string>
+    <string name="session_all_displays">所有显示器</string>
+    <string name="session_display_entry">%1$d × %2$d</string>
     <string name="session_pointer_trackpad">触控板</string>
     <string name="session_clipboard_hint">要发送到远程剪贴板的文本</string>
     <string name="session_clipboard_action">发送文本</string>

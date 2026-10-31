@@ -29,6 +29,7 @@ import kotlinx.coroutines.withContext
 import uniffi.rfb_ffi.Rect
 import uniffi.rfb_ffi.SessionConfig
 import uniffi.rfb_ffi.SshAuthConfig
+import uniffi.rfb_ffi.DisplayScreen as NativeDisplayScreen
 import uniffi.rfb_ffi.SessionEvent as NativeEvent
 import uniffi.rfb_ffi.RemoteSession as NativeSession
 import uniffi.rfb_ffi.TransferEntry as NativeTransferEntry
@@ -138,6 +139,8 @@ class UniFfiRemoteSession(
                 QualityPreset.High -> 9u
             },
             frameIntervalMs = 16u,
+            wireguardConfig = null,
+            wireguardDnsFallback = true,
             sshHost = ssh?.let { it.host.ifBlank { connection.host } },
             sshPort = ssh?.let { it.port.toUShort() },
             sshUsername = ssh?.username?.ifBlank { null },
@@ -320,6 +323,10 @@ class UniFfiRemoteSession(
         session?.requestDownload(handle.toUInt(), path)
     }
 
+    override suspend fun selectDisplay(displayId: Int?) {
+        session?.selectDisplay(displayId?.toUInt())
+    }
+
     override suspend fun copyRegion(x: Int, y: Int, width: Int, height: Int): ByteArray {
         val current = session ?: return ByteArray(0)
         return withContext(Dispatchers.IO) {
@@ -425,6 +432,25 @@ class UniFfiRemoteSession(
                     is NativeEvent.Connected -> applySize(event.width.toInt(), event.height.toInt())
                     is NativeEvent.Frame -> renderFrame(connected, event)
                     is NativeEvent.Resized -> applySize(event.width.toInt(), event.height.toInt())
+                    is NativeEvent.DesktopLayout -> {
+                        applySize(event.width.toInt(), event.height.toInt())
+                        _events.emit(
+                            SessionEvent.DesktopLayout(
+                                width = event.width.toInt(),
+                                height = event.height.toInt(),
+                                screens = event.screens.map { screen ->
+                                    DisplayScreen(
+                                        id = screen.id.toInt(),
+                                        x = screen.x.toInt(),
+                                        y = screen.y.toInt(),
+                                        width = screen.width.toInt(),
+                                        height = screen.height.toInt(),
+                                        flags = screen.flags.toInt(),
+                                    )
+                                },
+                            ),
+                        )
+                    }
                     is NativeEvent.Clipboard -> Log.d(TAG, "remote clipboard: ${event.text.length} chars")
                     NativeEvent.Bell -> Log.d(TAG, "remote bell")
                     is NativeEvent.Cursor -> renderCursor(event)
@@ -441,6 +467,9 @@ class UniFfiRemoteSession(
                             ),
                         )
                     is NativeEvent.FileTransfer -> handleFileTransfer(event)
+                    is NativeEvent.DownloadProgress,
+                    is NativeEvent.DownloadComplete,
+                    -> Unit
                     is NativeEvent.Disconnected -> {
                         Log.i(TAG, "remote closed the session: ${event.reason}")
                         break

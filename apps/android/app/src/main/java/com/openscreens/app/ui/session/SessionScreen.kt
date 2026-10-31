@@ -130,6 +130,7 @@ import com.openscreens.app.data.Connection
 import com.openscreens.app.data.QualityPreset
 import com.openscreens.app.data.SshKey
 import com.openscreens.app.session.RemoteSession
+import com.openscreens.app.session.DisplayScreen
 import com.openscreens.app.session.SessionEvent
 import com.openscreens.app.session.uploadPickedFiles
 import com.openscreens.app.session.SessionProvider
@@ -189,6 +190,8 @@ fun SessionScreen(
     var cursorPosition by remember { mutableStateOf<IntOffset?>(null) }
     var viewport by remember { mutableStateOf<SessionEvent.Viewport?>(null) }
     var trackpadMode by rememberSaveable { mutableStateOf(false) }
+    var desktopScreens by remember { mutableStateOf<List<DisplayScreen>>(emptyList()) }
+    var displayMenuExpanded by remember { mutableStateOf(false) }
     var trackpadPointer by remember { mutableStateOf<IntOffset?>(null) }
     var pendingUpload by remember { mutableStateOf<PendingUpload?>(null) }
     var transferLabel by remember { mutableStateOf<String?>(null) }
@@ -319,6 +322,12 @@ fun SessionScreen(
                 is SessionEvent.Resized -> {
                     remoteWidth = event.width
                     remoteHeight = event.height
+                    viewport = null
+                }
+                is SessionEvent.DesktopLayout -> {
+                    remoteWidth = event.width
+                    remoteHeight = event.height
+                    desktopScreens = event.screens
                     viewport = null
                 }
                 is SessionEvent.Viewport -> viewport = event
@@ -999,6 +1008,20 @@ fun SessionScreen(
                 isFullscreen = isFullscreen,
                 trackpadMode = trackpadMode,
                 onTogglePointerMode = togglePointerMode,
+                displays = desktopScreens,
+                displayMenuExpanded = displayMenuExpanded,
+                onDisplayMenuChange = { displayMenuExpanded = it },
+                onSelectDisplay = { id ->
+                    displayMenuExpanded = false
+                    scope.launch {
+                        runCatching { session.selectDisplay(id) }
+                            .onFailure { error ->
+                                snackbarHostState.showSnackbar(
+                                    error.message ?: context.getString(R.string.session_displays),
+                                )
+                            }
+                    }
+                },
                 onKeyboard = { keyboardActive = true },
                 onClipboard = { showClipboardDialog = true },
                 onUpload = { sendFilePicker.launch(arrayOf("*/*")) },
@@ -1262,6 +1285,10 @@ private fun SessionTopBar(
 private fun SessionToolbar(
     trackpadMode: Boolean,
     onTogglePointerMode: () -> Unit,
+    displays: List<DisplayScreen>,
+    displayMenuExpanded: Boolean,
+    onDisplayMenuChange: (Boolean) -> Unit,
+    onSelectDisplay: (Int?) -> Unit,
     quality: QualityPreset,
     qualityMenuExpanded: Boolean,
     onQualityMenuChange: (Boolean) -> Unit,
@@ -1287,7 +1314,9 @@ private fun SessionToolbar(
         contentColor = Color.White,
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+            modifier = Modifier
+                .horizontalScroll(rememberScrollState())
+                .padding(horizontal = 6.dp, vertical = 2.dp),
             horizontalArrangement = Arrangement.spacedBy(2.dp),
         ) {
             ToolbarButton(
@@ -1301,6 +1330,38 @@ private fun SessionToolbar(
                 ),
                 onClick = onTogglePointerMode,
             )
+            if (displays.isNotEmpty()) {
+                Box {
+                    ToolbarButton(
+                        icon = Icons.Outlined.Monitor,
+                        label = stringResource(R.string.session_displays),
+                        onClick = { onDisplayMenuChange(true) },
+                    )
+                    DropdownMenu(
+                        expanded = displayMenuExpanded,
+                        onDismissRequest = { onDisplayMenuChange(false) },
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.session_all_displays)) },
+                            onClick = { onSelectDisplay(null) },
+                        )
+                        displays.forEach { screen ->
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        stringResource(
+                                            R.string.session_display_entry,
+                                            screen.width,
+                                            screen.height,
+                                        ),
+                                    )
+                                },
+                                onClick = { onSelectDisplay(screen.id) },
+                            )
+                        }
+                    }
+                }
+            }
             ToolbarButton(
                 icon = Icons.Outlined.Keyboard,
                 label = stringResource(R.string.session_keyboard),

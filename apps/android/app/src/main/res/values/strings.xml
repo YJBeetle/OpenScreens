@@ -76,6 +76,9 @@
     <string name="session_scroll_right">scroll right</string>
     <string name="session_clipboard">Clipboard</string>
     <string name="session_pointer_direct">Direct touch</string>
+    <string name="session_displays">Displays</string>
+    <string name="session_all_displays">All displays</string>
+    <string name="session_display_entry">%1$d × %2$d</string>
     <string name="session_pointer_trackpad">Trackpad</string>
     <string name="session_clipboard_hint">Text to send to the remote clipboard</string>
     <string name="session_clipboard_action">Send text</string>

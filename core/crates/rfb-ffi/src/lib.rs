@@ -405,8 +405,8 @@ pub struct OpenVpnProfileSummary {
 
 #[derive(Debug, thiserror::Error, uniffi::Error)]
 pub enum OpenVpnProfileError {
-    #[error("{message}")]
-    Invalid { message: String },
+    #[error("{reason}")]
+    Invalid { reason: String },
 }
 
 /// Parses an `.ovpn` profile without touching the network.
@@ -420,29 +420,29 @@ pub fn validate_openvpn_profile(
 ) -> Result<OpenVpnProfileSummary, OpenVpnProfileError> {
     let config =
         rfb_openvpn::OvpnConfig::parse(&text).map_err(|error| OpenVpnProfileError::Invalid {
-            message: error.to_string(),
+            reason: error.to_string(),
         })?;
     if config.ca.inline().is_none() || config.cert.inline().is_none() {
         return Err(OpenVpnProfileError::Invalid {
-            message: "the profile must embed its CA and client certificate".to_string(),
+            reason: "the profile must embed its CA and client certificate".to_string(),
         });
     }
     if config.key.inline().is_none() {
         return Err(OpenVpnProfileError::Invalid {
-            message: "the profile must embed its client key".to_string(),
+            reason: "the profile must embed its client key".to_string(),
         });
     }
     if let Some(wrap) = &config.tls_wrap
         && wrap.material.inline().is_none()
     {
         return Err(OpenVpnProfileError::Invalid {
-            message: "tls-auth/tls-crypt must be embedded in the profile".to_string(),
+            reason: "tls-auth/tls-crypt must be embedded in the profile".to_string(),
         });
     }
     config
         .load_material()
         .map_err(|error| OpenVpnProfileError::Invalid {
-            message: error.to_string(),
+            reason: error.to_string(),
         })?;
     Ok(OpenVpnProfileSummary {
         remote: config.remote().endpoint(),
@@ -730,4 +730,52 @@ pub fn generate_ssh_key() -> Result<GeneratedSshKey, SessionFailure> {
             fingerprint: generated.fingerprint,
         })
         .map_err(to_ssh_failure)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn inline_profile(ca: &str, cert: &str, key: &str) -> String {
+        format!(
+            "client\ndev tun\nproto tcp\nremote vpn.example 1194\n\
+             cipher AES-256-GCM\nauth SHA256\n\
+             <ca>\n{ca}</ca>\n<cert>\n{cert}</cert>\n<key>\n{key}</key>\n"
+        )
+    }
+
+    #[test]
+    fn validates_inline_openvpn_profile() {
+        let text = inline_profile(
+            include_str!("../../rfb-openvpn/tests/data/ca.crt"),
+            include_str!("../../rfb-openvpn/tests/data/client.crt"),
+            include_str!("../../rfb-openvpn/tests/data/client.key"),
+        );
+        let summary = validate_openvpn_profile(text).expect("the synthetic profile is valid");
+        assert_eq!(summary.remote, "vpn.example:1194");
+        assert_eq!(summary.proto, "tcp");
+        assert_eq!(summary.cipher, "AES-256-GCM");
+        assert_eq!(summary.tls_wrap, None);
+    }
+
+    #[test]
+    fn validates_live_profile_when_present() {
+        let Ok(path) = std::env::var("OPENVPN_TEST_PROFILE") else {
+            return;
+        };
+        let text = std::fs::read_to_string(path).expect("the profile must be readable");
+        let summary = validate_openvpn_profile(text).expect("the live profile must validate");
+        assert!(!summary.remote.is_empty());
+    }
+
+    #[test]
+    fn rejects_external_openvpn_material() {
+        let text = "client\nremote vpn.example 1194\nca ca.crt\ncert client.crt\nkey client.key\ntls-auth ta.key 1\n";
+        match validate_openvpn_profile(text.to_owned()) {
+            Ok(_) => panic!("file references must be rejected"),
+            Err(OpenVpnProfileError::Invalid { reason }) => {
+                assert!(reason.contains("embed"), "{reason}");
+            }
+        }
+    }
 }

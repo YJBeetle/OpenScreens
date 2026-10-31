@@ -15,7 +15,12 @@ struct Probe {
             port: port,
             username: env["OPENSCREENS_USERNAME"],
             password: env["OPENSCREENS_PASSWORD"],
-            shared: true
+            shared: true,
+            sshHost: nil,
+            sshPort: nil,
+            sshUsername: nil,
+            sshPassword: nil,
+            sshHostKeyFingerprint: nil
         )
         let session = try await RemoteSession.connect(config: config)
         print("connected name=\(session.serverName()) size=\(String(describing: session.size()))")

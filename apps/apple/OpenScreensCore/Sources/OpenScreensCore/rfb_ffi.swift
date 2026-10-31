@@ -935,15 +935,25 @@ public struct SessionConfig: Equatable, Hashable {
     public var username: String?
     public var password: String?
     public var shared: Bool
+    public var sshHost: String?
+    public var sshPort: UInt16?
+    public var sshUsername: String?
+    public var sshPassword: String?
+    public var sshHostKeyFingerprint: String?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(host: String, port: UInt16, username: String?, password: String?, shared: Bool) {
+    public init(host: String, port: UInt16, username: String?, password: String?, shared: Bool, sshHost: String?, sshPort: UInt16?, sshUsername: String?, sshPassword: String?, sshHostKeyFingerprint: String?) {
         self.host = host
         self.port = port
         self.username = username
         self.password = password
         self.shared = shared
+        self.sshHost = sshHost
+        self.sshPort = sshPort
+        self.sshUsername = sshUsername
+        self.sshPassword = sshPassword
+        self.sshHostKeyFingerprint = sshHostKeyFingerprint
     }
 
     
@@ -966,7 +976,12 @@ public struct FfiConverterTypeSessionConfig: FfiConverterRustBuffer {
                 port: FfiConverterUInt16.read(from: &buf), 
                 username: FfiConverterOptionString.read(from: &buf), 
                 password: FfiConverterOptionString.read(from: &buf), 
-                shared: FfiConverterBool.read(from: &buf)
+                shared: FfiConverterBool.read(from: &buf), 
+                sshHost: FfiConverterOptionString.read(from: &buf), 
+                sshPort: FfiConverterOptionUInt16.read(from: &buf), 
+                sshUsername: FfiConverterOptionString.read(from: &buf), 
+                sshPassword: FfiConverterOptionString.read(from: &buf), 
+                sshHostKeyFingerprint: FfiConverterOptionString.read(from: &buf)
         )
     }
 
@@ -976,6 +991,11 @@ public struct FfiConverterTypeSessionConfig: FfiConverterRustBuffer {
         FfiConverterOptionString.write(value.username, into: &buf)
         FfiConverterOptionString.write(value.password, into: &buf)
         FfiConverterBool.write(value.shared, into: &buf)
+        FfiConverterOptionString.write(value.sshHost, into: &buf)
+        FfiConverterOptionUInt16.write(value.sshPort, into: &buf)
+        FfiConverterOptionString.write(value.sshUsername, into: &buf)
+        FfiConverterOptionString.write(value.sshPassword, into: &buf)
+        FfiConverterOptionString.write(value.sshHostKeyFingerprint, into: &buf)
     }
 }
 
@@ -1234,6 +1254,30 @@ public func FfiConverterTypeSessionFailure_lift(_ buf: RustBuffer) throws -> Ses
 #endif
 public func FfiConverterTypeSessionFailure_lower(_ value: SessionFailure) -> RustBuffer {
     return FfiConverterTypeSessionFailure.lower(value)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionUInt16: FfiConverterRustBuffer {
+    typealias SwiftType = UInt16?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterUInt16.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterUInt16.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
 }
 
 #if swift(>=5.8)

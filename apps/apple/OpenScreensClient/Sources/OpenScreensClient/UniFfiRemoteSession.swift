@@ -68,7 +68,12 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
             port: UInt16(clamping: profile.port),
             username: username.isEmpty ? nil : username,
             password: (password?.isEmpty == false) ? password : nil,
-            shared: true
+            shared: true,
+            sshHost: nil,
+            sshPort: nil,
+            sshUsername: nil,
+            sshPassword: nil,
+            sshHostKeyFingerprint: nil
         )
 
         do {

@@ -4,6 +4,7 @@
 //! the number of bytes consumed. `DecodeError::Incomplete` means more bytes
 //! are needed; the framebuffer is left untouched in that case.
 
+pub mod apple_dct;
 mod compression;
 mod cursor;
 mod hextile;

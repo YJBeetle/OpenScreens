@@ -2,6 +2,7 @@ import CoreGraphics
 import Foundation
 import Observation
 import OpenScreensCanvas
+import SwiftUI
 
 /// Drives one remote session: transport lifecycle, frame uploads, pointer and
 /// keyboard input, clipboard actions and reconnection.
@@ -41,6 +42,9 @@ public final class SessionViewModel {
     @ObservationIgnored private var isStopping = false
     @ObservationIgnored private var reconnectAttempts = 0
     @ObservationIgnored private var lastHoverPixel: CGPoint?
+    @ObservationIgnored private var backgroundedAt: Date?
+
+    private static let resumeReconnectDelay: TimeInterval = 5
 
     public init(
         profile: ConnectionProfile,
@@ -86,9 +90,43 @@ public final class SessionViewModel {
 
     public func reconnect() {
         guard state.isTerminal else { return }
-        isStopping = true
+        restartTransport()
+    }
+
+    /// Scene phase hook. A suspended app can return with a socket that never
+    /// reports an error, which would leave the last frame on screen forever.
+    public func handleScenePhase(_ phase: ScenePhase) {
+        #if os(iOS)
+        switch phase {
+        case .background:
+            backgroundedAt = Date()
+        case .active:
+            guard let backgroundedAt else { return }
+            self.backgroundedAt = nil
+            let away = Date().timeIntervalSince(backgroundedAt)
+            let needsRestart: Bool
+            switch state {
+            case .disconnected, .reconnecting:
+                needsRestart = true
+            case .connected:
+                needsRestart = away >= Self.resumeReconnectDelay
+            case .idle, .connecting:
+                needsRestart = false
+            }
+            if needsRestart {
+                restartTransport()
+            }
+        default:
+            break
+        }
+        #endif
+    }
+
+    private func restartTransport() {
+        guard !isStopping else { return }
+        reconnectTask?.cancel()
+        reconnectTask = nil
         endTransport()
-        isStopping = false
         reconnectAttempts = 0
         failureMessage = nil
         beginSession(isReconnect: false)

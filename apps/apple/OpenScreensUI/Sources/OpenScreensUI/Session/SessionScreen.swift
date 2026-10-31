@@ -8,6 +8,7 @@ import AppKit
 /// Full-screen remote session chrome shared by macOS and iOS.
 public struct SessionScreen: View {
     @Environment(SettingsStore.self) private var settings
+    @Environment(\.scenePhase) private var scenePhase
 
     private let model: SessionViewModel
     private let showsCloseButton: Bool
@@ -69,6 +70,9 @@ public struct SessionScreen: View {
             #if os(macOS)
             if !connected { showSystemCursor() }
             #endif
+        }
+        .onChange(of: scenePhase) { _, phase in
+            model.handleScenePhase(phase)
         }
         .confirmationDialog(
             "Disconnect from “\(model.profile.name)”?",

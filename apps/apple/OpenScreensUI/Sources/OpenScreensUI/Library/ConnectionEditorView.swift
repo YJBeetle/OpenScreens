@@ -55,14 +55,22 @@ public struct ConnectionEditorView: View {
     private static let openVpnByteLimit = 256 * 1024
 
     private let mode: ConnectionEditorMode
+    private let defaultGroupID: UUID?
     private let onSaved: ((ConnectionProfile) -> Void)?
 
-    public init(mode: ConnectionEditorMode, onSaved: ((ConnectionProfile) -> Void)? = nil) {
+    public init(
+        mode: ConnectionEditorMode,
+        defaultGroupID: UUID? = nil,
+        onSaved: ((ConnectionProfile) -> Void)? = nil
+    ) {
         self.mode = mode
+        self.defaultGroupID = defaultGroupID
         self.onSaved = onSaved
         switch mode {
         case .create(let section):
-            _draft = State(initialValue: ConnectionProfile.draft(section: section))
+            var draft = ConnectionProfile.draft(section: section)
+            draft.groupID = defaultGroupID
+            _draft = State(initialValue: draft)
         case .edit(let profile):
             _draft = State(initialValue: profile)
         }
@@ -299,6 +307,15 @@ public struct ConnectionEditorView: View {
             .padding(.vertical, 2)
 
             Toggle("Favorite", isOn: $draft.isFavorite)
+
+            if draft.section == .custom, !store.groups.isEmpty {
+                Picker("Group", selection: $draft.groupID) {
+                    Text("None").tag(UUID?.none)
+                    ForEach(store.groups) { group in
+                        Text(group.name).tag(UUID?.some(group.id))
+                    }
+                }
+            }
         } header: {
             Text("Library")
         } footer: {

@@ -11,6 +11,7 @@ public final class ConnectionStore {
     private static let logger = Logger(subsystem: "app.openscreens", category: "ConnectionStore")
 
     public private(set) var connections: [ConnectionProfile]
+    public private(set) var groups: [LibraryGroup]
 
     @ObservationIgnored private let fileURL: URL
     @ObservationIgnored private let encoder: JSONEncoder
@@ -22,12 +23,15 @@ public final class ConnectionStore {
         self.decoder = Self.makeDecoder()
 
         if let stored = Self.load(from: self.fileURL, decoder: decoder) {
-            self.connections = stored
+            self.connections = stored.connections
+            self.groups = stored.groups ?? []
         } else if seedDemoData {
             self.connections = Self.sampleConnections()
+            self.groups = []
             persist()
         } else {
             self.connections = []
+            self.groups = []
         }
     }
 
@@ -42,14 +46,31 @@ public final class ConnectionStore {
         return connections.count { $0.section == section }
     }
 
-    public func profiles(in section: LibrarySection, matching query: String = "") -> [ConnectionProfile] {
+    public func count(in groupID: UUID) -> Int {
+        connections.count { $0.section == .custom && $0.groupID == groupID }
+    }
+
+    public func group(id: UUID) -> LibraryGroup? {
+        groups.first { $0.id == id }
+    }
+
+    public func profiles(
+        in section: LibrarySection,
+        groupID: UUID? = nil,
+        matching query: String = "",
+        sort: LibrarySortOrder = .name
+    ) -> [ConnectionProfile] {
         guard !section.isService else { return [] }
         let needle = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        return connections
-            .filter { profile in
-                profile.section == section && (needle.isEmpty || profile.searchIndex.contains(needle))
-            }
-            .sorted(by: Self.libraryOrder)
+        let filtered = connections.filter { profile in
+            guard profile.section == section else { return false }
+            if let groupID, profile.groupID != groupID { return false }
+            return needle.isEmpty || profile.searchIndex.contains(needle)
+        }
+        if sort == .manual {
+            return filtered
+        }
+        return filtered.sorted { Self.libraryOrder($0, $1, sort: sort) }
     }
 
     /// Global search across local connection groups.
@@ -57,7 +78,20 @@ public final class ConnectionStore {
         let needle = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         return connections
             .filter { !$0.section.isService && (needle.isEmpty || $0.searchIndex.contains(needle)) }
-            .sorted(by: Self.libraryOrder)
+            .sorted { Self.libraryOrder($0, $1, sort: .name) }
+    }
+
+    /// Moves a connection past its neighbour in the supplied manual order.
+    public func move(id: UUID, by offset: Int, within orderedIDs: [UUID]) {
+        guard let position = orderedIDs.firstIndex(of: id),
+              orderedIDs.indices.contains(position + offset)
+        else { return }
+        let neighbourID = orderedIDs[position + offset]
+        guard let source = connections.firstIndex(where: { $0.id == id }),
+              let target = connections.firstIndex(where: { $0.id == neighbourID })
+        else { return }
+        connections.swapAt(source, target)
+        persist()
     }
 
     // MARK: - Mutations
@@ -76,6 +110,37 @@ public final class ConnectionStore {
     public func delete(id: UUID) {
         connections.removeAll { $0.id == id }
         persist()
+    }
+
+    @discardableResult
+    public func addGroup(name: String) -> LibraryGroup {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let group = LibraryGroup(name: trimmed.isEmpty ? defaultGroupName : trimmed)
+        groups.append(group)
+        persist()
+        return group
+    }
+
+    public func renameGroup(id: UUID, to name: String) {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty,
+              let index = groups.firstIndex(where: { $0.id == id })
+        else { return }
+        groups[index].name = trimmed
+        persist()
+    }
+
+    /// Removes a group; its connections stay in the library without a group.
+    public func deleteGroup(id: UUID) {
+        groups.removeAll { $0.id == id }
+        for index in connections.indices where connections[index].groupID == id {
+            connections[index].groupID = nil
+        }
+        persist()
+    }
+
+    private var defaultGroupName: String {
+        NSLocalizedString("Untitled Group", comment: "Default name for a library group")
     }
 
     @discardableResult
@@ -192,10 +257,11 @@ public final class ConnectionStore {
     private struct StoreFile: Codable {
         var version: Int
         var connections: [ConnectionProfile]
+        var groups: [LibraryGroup]?
     }
 
     private func persist() {
-        let payload = StoreFile(version: 1, connections: connections)
+        let payload = StoreFile(version: 2, connections: connections, groups: groups)
         do {
             try FileManager.default.createDirectory(
                 at: fileURL.deletingLastPathComponent(),
@@ -208,9 +274,9 @@ public final class ConnectionStore {
         }
     }
 
-    private static func load(from url: URL, decoder: JSONDecoder) -> [ConnectionProfile]? {
+    private static func load(from url: URL, decoder: JSONDecoder) -> StoreFile? {
         guard let data = try? Data(contentsOf: url) else { return nil }
-        return try? decoder.decode(StoreFile.self, from: data).connections
+        return try? decoder.decode(StoreFile.self, from: data)
     }
 
     private static func defaultFileURL() -> URL {
@@ -234,10 +300,24 @@ public final class ConnectionStore {
         return decoder
     }
 
-    private static func libraryOrder(_ lhs: ConnectionProfile, _ rhs: ConnectionProfile) -> Bool {
+    private static func libraryOrder(
+        _ lhs: ConnectionProfile,
+        _ rhs: ConnectionProfile,
+        sort: LibrarySortOrder
+    ) -> Bool {
         if lhs.isFavorite != rhs.isFavorite {
             return lhs.isFavorite
         }
-        return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
+        switch sort {
+        case .name, .manual:
+            return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
+        case .lastConnected:
+            let left = lhs.lastConnectedAt ?? .distantPast
+            let right = rhs.lastConnectedAt ?? .distantPast
+            if left != right {
+                return left > right
+            }
+            return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
+        }
     }
 }

@@ -63,6 +63,23 @@ public enum LibrarySection: String, Codable, CaseIterable, Identifiable, Sendabl
     public static var defaultDestination: LibrarySection { .custom }
 }
 
+/// A user-created folder inside the custom library.
+public struct LibraryGroup: Codable, Hashable, Identifiable, Sendable {
+    public var id: UUID
+    public var name: String
+
+    public init(id: UUID = UUID(), name: String) {
+        self.id = id
+        self.name = name
+    }
+}
+
+/// Sidebar selection: one of the fixed sections or a custom group.
+public enum LibraryDestination: Hashable, Sendable {
+    case section(LibrarySection)
+    case group(UUID)
+}
+
 /// How the SSH jump host authenticates.
 public enum SSHAuthMethod: String, Codable, CaseIterable, Identifiable, Sendable {
     case password
@@ -125,6 +142,8 @@ public struct ConnectionProfile: Identifiable, Codable, Hashable, Sendable {
     public var username: String
     public var isFavorite: Bool
     public var isDiscovered: Bool
+    /// Custom-library folder, when the connection belongs to one.
+    public var groupID: UUID?
     public var controls: ControlPreferences
     public var ssh: SSHProfile?
     /// Full wg-quick configuration text. Mutually exclusive with `ssh` and OpenVPN.
@@ -146,6 +165,7 @@ public struct ConnectionProfile: Identifiable, Codable, Hashable, Sendable {
         username: String = "",
         isFavorite: Bool = false,
         isDiscovered: Bool = false,
+        groupID: UUID? = nil,
         controls: ControlPreferences = ControlPreferences(),
         ssh: SSHProfile? = nil,
         wireGuardConfig: String? = nil,
@@ -164,6 +184,7 @@ public struct ConnectionProfile: Identifiable, Codable, Hashable, Sendable {
         self.username = username
         self.isFavorite = isFavorite
         self.isDiscovered = isDiscovered
+        self.groupID = groupID
         self.controls = controls
         self.ssh = ssh
         self.wireGuardConfig = wireGuardConfig

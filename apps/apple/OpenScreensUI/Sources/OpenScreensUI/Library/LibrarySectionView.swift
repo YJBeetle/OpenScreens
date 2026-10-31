@@ -8,6 +8,7 @@ struct ConnectionGrid: View {
     let onEdit: (ConnectionProfile) -> Void
     let onDuplicate: (ConnectionProfile) -> Void
     let onDelete: (ConnectionProfile) -> Void
+    var onMove: ((ConnectionProfile, Int) -> Void)? = nil
 
     @Environment(SettingsStore.self) private var settings
     @Environment(ConnectionStore.self) private var store
@@ -52,6 +53,20 @@ struct ConnectionGrid: View {
                             onDuplicate(profile)
                         } label: {
                             Label("Duplicate", systemImage: "plus.square.on.square")
+                        }
+
+                        if settings.settings.librarySort == .manual, let onMove {
+                            Divider()
+                            Button {
+                                onMove(profile, -1)
+                            } label: {
+                                Label("Move Up", systemImage: "chevron.up")
+                            }
+                            Button {
+                                onMove(profile, 1)
+                            } label: {
+                                Label("Move Down", systemImage: "chevron.down")
+                            }
                         }
 
                         Divider()
@@ -110,6 +125,7 @@ struct ConnectionGrid: View {
 /// Complete content for one library section.
 public struct LibrarySectionView: View {
     private let section: LibrarySection
+    private let groupID: UUID?
     private let searchText: String
     private let onConnect: (ConnectionProfile) -> Void
     private let onEdit: (ConnectionProfile) -> Void
@@ -118,9 +134,11 @@ public struct LibrarySectionView: View {
     private let onNewConnection: () -> Void
 
     @Environment(ConnectionStore.self) private var store
+    @Environment(SettingsStore.self) private var settings
 
     public init(
         section: LibrarySection,
+        groupID: UUID? = nil,
         searchText: String = "",
         onConnect: @escaping (ConnectionProfile) -> Void,
         onEdit: @escaping (ConnectionProfile) -> Void,
@@ -129,6 +147,7 @@ public struct LibrarySectionView: View {
         onNewConnection: @escaping () -> Void
     ) {
         self.section = section
+        self.groupID = groupID
         self.searchText = searchText
         self.onConnect = onConnect
         self.onEdit = onEdit
@@ -141,7 +160,12 @@ public struct LibrarySectionView: View {
         if section.isService {
             serviceUnavailable
         } else {
-            let profiles = store.profiles(in: section, matching: searchText)
+            let profiles = store.profiles(
+                in: section,
+                groupID: groupID,
+                matching: searchText,
+                sort: settings.settings.librarySort
+            )
             if profiles.isEmpty {
                 emptyState
             } else {
@@ -150,7 +174,10 @@ public struct LibrarySectionView: View {
                     onConnect: onConnect,
                     onEdit: onEdit,
                     onDuplicate: onDuplicate,
-                    onDelete: onDelete
+                    onDelete: onDelete,
+                    onMove: { profile, offset in
+                        store.move(id: profile.id, by: offset, within: profiles.map(\.id))
+                    }
                 )
             }
         }
@@ -181,11 +208,23 @@ public struct LibrarySectionView: View {
         }
     }
 
+    private var displayedTitle: String {
+        if let groupID, let group = store.group(id: groupID) {
+            return group.name
+        }
+        return section.screenTitle
+    }
+
     private var emptyState: some View {
         Group {
             if searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 ContentUnavailableView {
-                    Label("No Connections", systemImage: section.systemImage)
+                    Label(
+                        groupID == nil
+                            ? NSLocalizedString("No Connections", comment: "Empty library")
+                            : displayedTitle,
+                        systemImage: groupID == nil ? section.systemImage : "folder"
+                    )
                 } description: {
                     Text(emptyExplanation)
                 } actions: {
@@ -198,7 +237,7 @@ public struct LibrarySectionView: View {
                 ContentUnavailableView {
                     Label("No Results", systemImage: "magnifyingglass")
                 } description: {
-                    Text("No connections in \(section.screenTitle) match “\(searchText)”.")
+                    Text("No connections in \(displayedTitle) match “\(searchText)”.")
                 }
             }
         }
@@ -207,17 +246,23 @@ public struct LibrarySectionView: View {
     private var emptyExplanation: String {
         switch section {
         case .nearby:
-            NSLocalizedString(
+            return NSLocalizedString(
                 "Computers discovered on this network appear here. You can also add one manually.",
                 comment: "Empty library explanation"
             )
         case .links:
-            NSLocalizedString(
+            return NSLocalizedString(
                 "Connections shared with you as links appear here.",
                 comment: "Empty library explanation"
             )
         default:
-            NSLocalizedString(
+            if groupID != nil {
+                return NSLocalizedString(
+                    "Add a computer to this group.",
+                    comment: "Empty library explanation"
+                )
+            }
+            return NSLocalizedString(
                 "Add a computer to start a remote session.",
                 comment: "Empty library explanation"
             )

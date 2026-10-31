@@ -352,3 +352,21 @@
 "No remote frame to capture." = "暂无可截取的远端画面。";
 "Screenshot saved to Photos." = "截图已存储到相册。";
 "Screenshot copied to clipboard." = "截图已复制到剪贴板。";
+
+/* MARK: - Library groups and sorting */
+"Group" = "分组";
+"New Group" = "新建分组";
+"Untitled Group" = "未命名分组";
+"Rename Group" = "重命名分组";
+"Rename…" = "重命名…";
+"Group Name" = "分组名称";
+"Delete Group?" = "删除分组？";
+"Connections in this group stay in the library." = "分组内的连接会保留在连接库中。";
+"Add a computer to this group." = "向此分组添加一台电脑。";
+"All" = "全部";
+"Move Up" = "上移";
+"Move Down" = "下移";
+"Sort Connections" = "排序方式";
+"Last Connected" = "最近连接";
+"Manual" = "手动";
+"Long-press a connection and choose Move Up or Move Down to arrange it." = "长按连接并选择“上移”或“下移”来调整顺序。";

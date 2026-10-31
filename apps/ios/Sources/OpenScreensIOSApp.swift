@@ -39,4 +39,5 @@ enum IOSAppInfo {
 struct IOSEditorRoute: Identifiable {
     let id = UUID()
     let mode: ConnectionEditorMode
+    var groupID: UUID?
 }

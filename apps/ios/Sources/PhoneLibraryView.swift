@@ -2,6 +2,23 @@ import OpenScreensUI
 import SwiftUI
 
 struct PhoneLibraryView: View {
+    private enum GroupDialog: Identifiable {
+        case create
+        case rename(LibraryGroup)
+
+        var id: String {
+            switch self {
+            case .create: "create"
+            case .rename(let group): group.id.uuidString
+            }
+        }
+
+        var isRename: Bool {
+            if case .rename = self { return true }
+            return false
+        }
+    }
+
     @Environment(ConnectionStore.self) private var store
     @Environment(SettingsStore.self) private var settings
 
@@ -9,6 +26,10 @@ struct PhoneLibraryView: View {
     @State private var searchText = ""
     @State private var activeSheet: IOSLibrarySheet?
     @State private var activeProfile: ConnectionProfile?
+    @State private var selectedGroupID: UUID?
+    @State private var groupDialog: GroupDialog?
+    @State private var groupName = ""
+    @State private var pendingGroupDeletion: LibraryGroup?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -26,7 +47,7 @@ struct PhoneLibraryView: View {
         .sheet(item: $activeSheet) { sheet in
             switch sheet {
             case .editor(let route):
-                ConnectionEditorView(mode: route.mode)
+                ConnectionEditorView(mode: route.mode, defaultGroupID: route.groupID)
                     .environment(store)
                     .environment(settings)
                     .presentationDetents([.large])
@@ -41,13 +62,83 @@ struct PhoneLibraryView: View {
             IOSSessionPresenter(profile: profile)
                 .environment(settings)
         }
+        .alert(
+            groupDialog?.isRename == true
+                ? NSLocalizedString("Rename Group", comment: "Group dialog title")
+                : NSLocalizedString("New Group", comment: "Group dialog title"),
+            isPresented: groupDialogBinding
+        ) {
+            TextField("Group Name", text: $groupName)
+            Button("Save") {
+                commitGroupDialog()
+            }
+            Button("Cancel", role: .cancel) {
+                groupDialog = nil
+            }
+        }
+        .confirmationDialog(
+            "Delete Group?",
+            isPresented: groupDeletionBinding,
+            titleVisibility: .visible,
+            presenting: pendingGroupDeletion
+        ) { group in
+            Button("Delete", role: .destructive) {
+                if selectedGroupID == group.id {
+                    selectedGroupID = nil
+                }
+                store.deleteGroup(id: group.id)
+                pendingGroupDeletion = nil
+            }
+            Button("Cancel", role: .cancel) {
+                pendingGroupDeletion = nil
+            }
+        } message: { _ in
+            Text("Connections in this group stay in the library.")
+        }
+    }
+
+    private var groupDialogBinding: Binding<Bool> {
+        Binding(
+            get: { groupDialog != nil },
+            set: { presented in
+                if !presented { groupDialog = nil }
+            }
+        )
+    }
+
+    private var groupDeletionBinding: Binding<Bool> {
+        Binding(
+            get: { pendingGroupDeletion != nil },
+            set: { presented in
+                if !presented { pendingGroupDeletion = nil }
+            }
+        )
+    }
+
+    private func commitGroupDialog() {
+        switch groupDialog {
+        case .create:
+            store.addGroup(name: groupName)
+        case .rename(let group):
+            store.renameGroup(id: group.id, to: groupName)
+        case nil:
+            break
+        }
+        groupDialog = nil
+    }
+
+    private var effectiveGroupID: UUID? {
+        guard let selectedGroupID, store.group(id: selectedGroupID) != nil else {
+            return nil
+        }
+        return selectedGroupID
     }
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .center, spacing: 12) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(tab.screenTitle)
+                    Text(headerTitle)
                         .font(.largeTitle.weight(.bold))
                         .lineLimit(1)
                         .minimumScaleFactor(0.62)
@@ -62,12 +153,18 @@ struct PhoneLibraryView: View {
 
                 FloatingBar {
                     FloatingIconButton(systemImage: "plus", title: "New Connection") {
-                        activeSheet = .editor(IOSEditorRoute(mode: .create(.custom)))
+                        activeSheet = .editor(
+                            IOSEditorRoute(mode: .create(.custom), groupID: effectiveGroupID)
+                        )
                     }
                     FloatingIconButton(systemImage: "gearshape", title: "Settings") {
                         activeSheet = .settings
                     }
                 }
+            }
+
+            if tab == .library {
+                groupChips
             }
 
             if tab == .search {
@@ -79,6 +176,73 @@ struct PhoneLibraryView: View {
         .padding(.bottom, 6)
     }
 
+    private var groupChips: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                chip(
+                    NSLocalizedString("All", comment: "All library groups"),
+                    selected: effectiveGroupID == nil
+                ) {
+                    selectedGroupID = nil
+                }
+
+                ForEach(store.groups) { group in
+                    chip(group.name, selected: effectiveGroupID == group.id) {
+                        selectedGroupID = group.id
+                    }
+                    .contextMenu {
+                        Button {
+                            groupName = group.name
+                            groupDialog = .rename(group)
+                        } label: {
+                            Label("Rename…", systemImage: "pencil")
+                        }
+                        Button(role: .destructive) {
+                            pendingGroupDeletion = group
+                        } label: {
+                            Label("Delete…", systemImage: "trash")
+                        }
+                    }
+                }
+
+                Button {
+                    groupName = ""
+                    groupDialog = .create
+                } label: {
+                    Image(systemName: "folder.badge.plus")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(Theme.Colors.accent)
+                        .padding(.horizontal, 11)
+                        .padding(.vertical, 7)
+                        .background(.quaternary.opacity(0.5), in: Capsule())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("New Group")
+            }
+        }
+        .scrollClipDisabled()
+    }
+
+    private func chip(_ title: String, selected: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(.footnote.weight(selected ? .semibold : .regular))
+                .foregroundStyle(selected ? Color.white : Color.primary)
+                .lineLimit(1)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 7)
+                .background {
+                    if selected {
+                        Capsule().fill(Theme.Colors.accent)
+                    } else {
+                        Capsule().fill(.quaternary.opacity(0.5))
+                    }
+                }
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+
     @ViewBuilder
     private var content: some View {
         switch tab {
@@ -87,7 +251,23 @@ struct PhoneLibraryView: View {
         case .links:
             sectionContent(.links)
         case .library:
-            sectionContent(.custom)
+            if let groupID = effectiveGroupID {
+                LibrarySectionView(
+                    section: .custom,
+                    groupID: groupID,
+                    onConnect: openSession,
+                    onEdit: edit,
+                    onDuplicate: duplicate,
+                    onDelete: delete,
+                    onNewConnection: {
+                        activeSheet = .editor(
+                            IOSEditorRoute(mode: .create(.custom), groupID: groupID)
+                        )
+                    }
+                )
+            } else {
+                sectionContent(.custom)
+            }
         case .search:
             LibrarySearchResultsView(
                 query: searchText,
@@ -140,6 +320,13 @@ struct PhoneLibraryView: View {
         .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
+    private var headerTitle: String {
+        if tab == .library, let id = effectiveGroupID, let group = store.group(id: id) {
+            return group.name
+        }
+        return tab.screenTitle
+    }
+
     private var subtitle: String {
         switch tab {
         case .nearby:
@@ -154,7 +341,7 @@ struct PhoneLibraryView: View {
         case .links:
             return NSLocalizedString("Connections shared with you", comment: "Library subtitle")
         case .library:
-            let count = store.count(in: .custom)
+            let count = effectiveGroupID.map { store.count(in: $0) } ?? store.count(in: .custom)
             guard count != 1 else {
                 return NSLocalizedString("1 saved computer", comment: "Library subtitle")
             }

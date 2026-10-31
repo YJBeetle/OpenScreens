@@ -94,4 +94,88 @@ final class ConnectionStoreTests: XCTestCase {
         XCTAssertTrue(samples.contains { $0.section == .nearby })
         XCTAssertTrue(samples.allSatisfy { $0.isValid })
     }
+
+    func testGroupsPersistAndFilterConnections() {
+        let url = temporaryFileURL()
+        defer { removeStore(at: url) }
+        let store = ConnectionStore(fileURL: url, seedDemoData: false)
+
+        let group = store.addGroup(name: "  Work  ")
+        XCTAssertEqual(group.name, "Work")
+
+        let grouped = ConnectionProfile(name: "Office", host: "office.local", groupID: group.id)
+        let loose = ConnectionProfile(name: "Home", host: "home.local")
+        store.add(grouped)
+        store.add(loose)
+
+        XCTAssertEqual(store.count(in: group.id), 1)
+        XCTAssertEqual(store.profiles(in: .custom, groupID: group.id).map(\.name), ["Office"])
+        XCTAssertEqual(store.profiles(in: .custom).count, 2)
+
+        let reloaded = ConnectionStore(fileURL: url, seedDemoData: false)
+        XCTAssertEqual(reloaded.groups.map(\.name), ["Work"])
+        XCTAssertEqual(reloaded.connection(id: grouped.id)?.groupID, group.id)
+
+        reloaded.deleteGroup(id: group.id)
+        XCTAssertTrue(reloaded.groups.isEmpty)
+        XCTAssertNil(reloaded.connection(id: grouped.id)?.groupID)
+        XCTAssertEqual(reloaded.count(in: .custom), 2)
+    }
+
+    func testManualOrderFollowsStoreSequence() {
+        let url = temporaryFileURL()
+        defer { removeStore(at: url) }
+        let store = ConnectionStore(fileURL: url, seedDemoData: false)
+
+        let alpha = ConnectionProfile(name: "Alpha", host: "a.local")
+        let bravo = ConnectionProfile(name: "Bravo", host: "b.local")
+        let charlie = ConnectionProfile(name: "Charlie", host: "c.local")
+        [alpha, bravo, charlie].forEach { store.add($0) }
+
+        XCTAssertEqual(
+            store.profiles(in: .custom, sort: .manual).map(\.name),
+            ["Alpha", "Bravo", "Charlie"]
+        )
+
+        let ids = store.profiles(in: .custom, sort: .manual).map(\.id)
+        store.move(id: alpha.id, by: 1, within: ids)
+        XCTAssertEqual(
+            store.profiles(in: .custom, sort: .manual).map(\.name),
+            ["Bravo", "Alpha", "Charlie"]
+        )
+
+        store.move(id: alpha.id, by: -1, within: store.profiles(in: .custom, sort: .manual).map(\.id))
+        XCTAssertEqual(
+            store.profiles(in: .custom, sort: .manual).map(\.name),
+            ["Alpha", "Bravo", "Charlie"]
+        )
+    }
+
+    func testSortOrdersCompareNamesAndLastConnected() {
+        let url = temporaryFileURL()
+        defer { removeStore(at: url) }
+        let store = ConnectionStore(fileURL: url, seedDemoData: false)
+
+        let old = ConnectionProfile(
+            name: "Old",
+            host: "old.local",
+            lastConnectedAt: Date(timeIntervalSince1970: 100)
+        )
+        let recent = ConnectionProfile(
+            name: "Recent",
+            host: "recent.local",
+            lastConnectedAt: Date(timeIntervalSince1970: 200)
+        )
+        let never = ConnectionProfile(name: "Never", host: "never.local")
+        [old, recent, never].forEach { store.add($0) }
+
+        XCTAssertEqual(
+            store.profiles(in: .custom, sort: .name).map(\.name),
+            ["Never", "Old", "Recent"]
+        )
+        XCTAssertEqual(
+            store.profiles(in: .custom, sort: .lastConnected).map(\.name),
+            ["Recent", "Old", "Never"]
+        )
+    }
 }

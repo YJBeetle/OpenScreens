@@ -84,9 +84,26 @@ public enum UpdateChannel: String, Codable, CaseIterable, Identifiable, Sendable
     }
 }
 
+public enum LibrarySortOrder: String, Codable, CaseIterable, Identifiable, Sendable {
+    case name
+    case lastConnected
+    case manual
+
+    public var id: String { rawValue }
+
+    public var title: String {
+        switch self {
+        case .name: NSLocalizedString("Name", comment: "Library sort order")
+        case .lastConnected: NSLocalizedString("Last Connected", comment: "Library sort order")
+        case .manual: NSLocalizedString("Manual", comment: "Library sort order")
+        }
+    }
+}
+
 public struct AppSettings: Codable, Hashable, Sendable {
     public var appearance: AppAppearance
     public var tileDensity: TileDensity
+    public var librarySort: LibrarySortOrder
     public var defaultCursorMode: CursorMode
     public var sharedClipboard: Bool
     public var autoReconnect: Bool
@@ -98,6 +115,7 @@ public struct AppSettings: Codable, Hashable, Sendable {
     public init(
         appearance: AppAppearance = .system,
         tileDensity: TileDensity = .comfortable,
+        librarySort: LibrarySortOrder = .name,
         defaultCursorMode: CursorMode = .touch,
         sharedClipboard: Bool = true,
         autoReconnect: Bool = true,
@@ -108,6 +126,7 @@ public struct AppSettings: Codable, Hashable, Sendable {
     ) {
         self.appearance = appearance
         self.tileDensity = tileDensity
+        self.librarySort = librarySort
         self.defaultCursorMode = defaultCursorMode
         self.sharedClipboard = sharedClipboard
         self.autoReconnect = autoReconnect
@@ -118,7 +137,7 @@ public struct AppSettings: Codable, Hashable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case appearance, tileDensity, defaultCursorMode, sharedClipboard
+        case appearance, tileDensity, librarySort, defaultCursorMode, sharedClipboard
         case autoReconnect, confirmDisconnect, updateChannel, showToolbarOnLaunch, toolbarItems
     }
 
@@ -126,6 +145,7 @@ public struct AppSettings: Codable, Hashable, Sendable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         appearance = try container.decode(AppAppearance.self, forKey: .appearance)
         tileDensity = try container.decode(TileDensity.self, forKey: .tileDensity)
+        librarySort = try container.decodeIfPresent(LibrarySortOrder.self, forKey: .librarySort) ?? .name
         defaultCursorMode = try container.decode(CursorMode.self, forKey: .defaultCursorMode)
         sharedClipboard = try container.decode(Bool.self, forKey: .sharedClipboard)
         autoReconnect = try container.decode(Bool.self, forKey: .autoReconnect)

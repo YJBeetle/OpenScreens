@@ -5,7 +5,7 @@ struct IPadLibraryView: View {
     @Environment(ConnectionStore.self) private var store
     @Environment(SettingsStore.self) private var settings
 
-    @State private var selection: LibrarySection? = .nearby
+    @State private var selection: LibraryDestination? = .section(.nearby)
     @State private var searchText = ""
     @State private var activeSheet: IOSLibrarySheet?
     @State private var activeProfile: ConnectionProfile?
@@ -25,7 +25,9 @@ struct IPadLibraryView: View {
                 .toolbar {
                     ToolbarItem(placement: .primaryAction) {
                         Button {
-                            activeSheet = .editor(IOSEditorRoute(mode: .create(.custom)))
+                            activeSheet = .editor(
+                                IOSEditorRoute(mode: .create(.custom), groupID: selectedGroupID)
+                            )
                         } label: {
                             Label("New Connection", systemImage: "plus")
                         }
@@ -44,7 +46,7 @@ struct IPadLibraryView: View {
         .sheet(item: $activeSheet) { sheet in
             switch sheet {
             case .editor(let route):
-                ConnectionEditorView(mode: route.mode)
+                ConnectionEditorView(mode: route.mode, defaultGroupID: route.groupID)
                     .environment(store)
                     .environment(settings)
                     .presentationDetents([.large])
@@ -71,17 +73,34 @@ struct IPadLibraryView: View {
                 onDuplicate: duplicate,
                 onDelete: delete
             )
-        } else if let section = selection {
-            LibrarySectionView(
-                section: section,
-                onConnect: openSession,
-                onEdit: edit,
-                onDuplicate: duplicate,
-                onDelete: delete,
-                onNewConnection: {
-                    activeSheet = .editor(IOSEditorRoute(mode: .create(.custom)))
-                }
-            )
+        } else if let destination = selection {
+            switch destination {
+            case .section(let section):
+                LibrarySectionView(
+                    section: section,
+                    onConnect: openSession,
+                    onEdit: edit,
+                    onDuplicate: duplicate,
+                    onDelete: delete,
+                    onNewConnection: {
+                        activeSheet = .editor(IOSEditorRoute(mode: .create(.custom)))
+                    }
+                )
+            case .group(let groupID):
+                LibrarySectionView(
+                    section: .custom,
+                    groupID: groupID,
+                    onConnect: openSession,
+                    onEdit: edit,
+                    onDuplicate: duplicate,
+                    onDelete: delete,
+                    onNewConnection: {
+                        activeSheet = .editor(
+                            IOSEditorRoute(mode: .create(.custom), groupID: groupID)
+                        )
+                    }
+                )
+            }
         } else {
             ContentUnavailableView(
                 "Choose a Library",
@@ -91,9 +110,20 @@ struct IPadLibraryView: View {
         }
     }
 
+    private var selectedGroupID: UUID? {
+        if case .group(let groupID) = selection {
+            return groupID
+        }
+        return nil
+    }
+
     private var navigationTitle: String {
         if isSearching { return NSLocalizedString("Search", comment: "Navigation title") }
-        return selection?.screenTitle ?? "OpenScreens"
+        switch selection {
+        case .section(let section): return section.screenTitle
+        case .group(let groupID): return store.group(id: groupID)?.name ?? "OpenScreens"
+        case nil: return "OpenScreens"
+        }
     }
 
     private func openSession(_ profile: ConnectionProfile) {

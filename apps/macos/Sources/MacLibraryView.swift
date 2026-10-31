@@ -6,7 +6,7 @@ struct MacLibraryView: View {
     @Environment(SettingsStore.self) private var settings
     @Environment(\.openWindow) private var openWindow
 
-    @State private var selection: LibrarySection? = .nearby
+    @State private var selection: LibraryDestination? = .section(.nearby)
     @State private var searchText = ""
     @State private var editorRoute: EditorRoute?
 
@@ -42,7 +42,7 @@ struct MacLibraryView: View {
         }
         .navigationSplitViewStyle(.balanced)
         .sheet(item: $editorRoute) { route in
-            ConnectionEditorView(mode: route.mode)
+            ConnectionEditorView(mode: route.mode, defaultGroupID: route.groupID)
                 .environment(store)
                 .environment(settings)
                 .frame(width: 720, height: 620)
@@ -60,15 +60,30 @@ struct MacLibraryView: View {
                 onDuplicate: duplicate,
                 onDelete: delete
             )
-        } else if let section = selection {
-            LibrarySectionView(
-                section: section,
-                onConnect: connect,
-                onEdit: edit,
-                onDuplicate: duplicate,
-                onDelete: delete,
-                onNewConnection: { editorRoute = EditorRoute(mode: .create(.custom)) }
-            )
+        } else if let destination = selection {
+            switch destination {
+            case .section(let section):
+                LibrarySectionView(
+                    section: section,
+                    onConnect: connect,
+                    onEdit: edit,
+                    onDuplicate: duplicate,
+                    onDelete: delete,
+                    onNewConnection: { editorRoute = EditorRoute(mode: .create(.custom)) }
+                )
+            case .group(let groupID):
+                LibrarySectionView(
+                    section: .custom,
+                    groupID: groupID,
+                    onConnect: connect,
+                    onEdit: edit,
+                    onDuplicate: duplicate,
+                    onDelete: delete,
+                    onNewConnection: {
+                        editorRoute = EditorRoute(mode: .create(.custom), groupID: groupID)
+                    }
+                )
+            }
         } else {
             ContentUnavailableView(
                 "Choose a Library",
@@ -80,7 +95,11 @@ struct MacLibraryView: View {
 
     private var navigationTitle: String {
         if isSearching { return NSLocalizedString("Search", comment: "Navigation title") }
-        return selection?.screenTitle ?? "OpenScreens"
+        switch selection {
+        case .section(let section): return section.screenTitle
+        case .group(let groupID): return store.group(id: groupID)?.name ?? "OpenScreens"
+        case nil: return "OpenScreens"
+        }
     }
 
     private func connect(_ profile: ConnectionProfile) {
@@ -114,4 +133,5 @@ struct MacLibraryView: View {
 private struct EditorRoute: Identifiable {
     let id = UUID()
     let mode: ConnectionEditorMode
+    var groupID: UUID?
 }

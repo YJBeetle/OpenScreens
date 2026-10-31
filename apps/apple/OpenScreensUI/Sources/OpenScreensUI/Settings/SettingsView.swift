@@ -75,8 +75,18 @@ public struct SettingsView: View {
                         Text(density.title).tag(density)
                     }
                 }
+
+                Picker("Sort Connections", selection: $settings.settings.librarySort) {
+                    ForEach(LibrarySortOrder.allCases) { order in
+                        Text(order.title).tag(order)
+                    }
+                }
             } header: {
                 Text("Appearance")
+            } footer: {
+                if settings.settings.librarySort == .manual {
+                    Text("Long-press a connection and choose Move Up or Move Down to arrange it.")
+                }
             }
 
             Section {

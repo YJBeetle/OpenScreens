@@ -53,6 +53,7 @@ targets:
       base:
         PRODUCT_NAME: OpenScreens
         PRODUCT_BUNDLE_IDENTIFIER: app.openscreens.macos
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         MACOSX_DEPLOYMENT_TARGET: "15.0"
         GENERATE_INFOPLIST_FILE: NO
         INFOPLIST_FILE: Info.plist

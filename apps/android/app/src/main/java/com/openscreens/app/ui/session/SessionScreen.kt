@@ -10,7 +10,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.calculateCentroid
 import androidx.compose.foundation.gestures.calculatePan
 import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -54,7 +53,9 @@ import androidx.compose.material.icons.outlined.UploadFile
 import androidx.compose.material.icons.outlined.Keyboard
 import androidx.compose.material.icons.outlined.KeyboardHide
 import androidx.compose.material.icons.outlined.Monitor
+import androidx.compose.material.icons.outlined.Mouse
 import androidx.compose.material.icons.outlined.PowerSettingsNew
+import androidx.compose.material.icons.outlined.TouchApp
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
@@ -187,6 +188,8 @@ fun SessionScreen(
     var cursor by remember { mutableStateOf<SessionEvent.Cursor?>(null) }
     var cursorPosition by remember { mutableStateOf<IntOffset?>(null) }
     var viewport by remember { mutableStateOf<SessionEvent.Viewport?>(null) }
+    var trackpadMode by rememberSaveable { mutableStateOf(false) }
+    var trackpadPointer by remember { mutableStateOf<IntOffset?>(null) }
     var pendingUpload by remember { mutableStateOf<PendingUpload?>(null) }
     var transferLabel by remember { mutableStateOf<String?>(null) }
 
@@ -217,6 +220,32 @@ fun SessionScreen(
     val trackPointer: (Int, Int) -> Unit = { x, y ->
         cursorPosition = IntOffset(x, y)
         pointerMemory.remember(x, y)
+    }
+
+    val togglePointerMode: () -> Unit = {
+        val next = !trackpadMode
+        trackpadMode = next
+        if (next) {
+            val region = viewport
+            val pointer = trackpadPointer ?: if (region != null) {
+                IntOffset(region.x + region.width / 2, region.y + region.height / 2)
+            } else {
+                IntOffset(remoteWidth / 2, remoteHeight / 2)
+            }
+            trackpadPointer = pointer
+            trackPointer(pointer.x, pointer.y)
+            session.sendPointer(pointer.x, pointer.y, 0)
+        }
+        lastAction = context.getString(
+            R.string.session_action_prefix,
+            context.getString(
+                if (next) {
+                    R.string.session_pointer_trackpad
+                } else {
+                    R.string.session_pointer_direct
+                },
+            ),
+        )
     }
 
     val imeVisible = WindowInsets.isImeVisible
@@ -509,7 +538,7 @@ fun SessionScreen(
                 .clip(RoundedCornerShape(16.dp))
                 .background(FramebufferBackground)
                 .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(16.dp))
-                .pointerInput(session, remoteWidth, remoteHeight) {
+                .pointerInput(session, remoteWidth, remoteHeight, trackpadMode) {
                     val touchSlop = viewConfiguration.touchSlop
                     val doubleTapTimeout = viewConfiguration.doubleTapTimeoutMillis.toLong()
                     val doubleTapSlop = touchSlop * 2.5f
@@ -550,12 +579,10 @@ fun SessionScreen(
                         }
                     }
 
-                    fun toggleZoomAt(position: Offset) {
+                    fun toggleZoom() {
                         val targetZoom = if (zoom > ZOOM_ACTIVE_EPSILON) 1f else DOUBLE_TAP_ZOOM
-                        val center = Offset(size.width / 2f, size.height / 2f)
-                        val imagePoint = (position - pan - center) / zoom + center
-                        val targetPan =
-                            position - center - (imagePoint - center) * targetZoom
+                        // Keep the image point at the view centre fixed while zooming.
+                        val targetPan = pan * (targetZoom / zoom)
                         zoom = targetZoom
                         pan = clampPan(targetPan, targetZoom, size)
                     }
@@ -584,6 +611,7 @@ fun SessionScreen(
                         var mode = GestureMode.Pending
                         var start = remotePoint(down.position, size, remoteWidth, remoteHeight, zoom, pan)
                         var last = start
+                        var lastTouch = down.position
                         var lastZoom = zoom
                         var lastPan = pan
                         var longPressSent = false
@@ -604,10 +632,15 @@ fun SessionScreen(
                                     SystemClock.uptimeMillis() - downTime >= LONG_PRESS_MS
                                 ) {
                                     longPressSent = true
-                                    session.sendPointer(start.first, start.second, 2)
-                                    session.sendPointer(start.first, start.second, 0)
-                                    trackPointer(start.first, start.second)
-                                    recordPointer(start.first, start.second)
+                                    val (longX, longY) = if (trackpadMode) {
+                                        trackpadPointer?.let { it.x to it.y } ?: start
+                                    } else {
+                                        start
+                                    }
+                                    session.sendPointer(longX, longY, 2)
+                                    session.sendPointer(longX, longY, 0)
+                                    trackPointer(longX, longY)
+                                    recordPointer(longX, longY)
                                 }
                                 continue
                             }
@@ -619,7 +652,9 @@ fun SessionScreen(
                             if (mode == GestureMode.Scroll && pressed.size < 2) break
 
                             if (pressed.size >= 2) {
-                                if (mode == GestureMode.Pending || mode == GestureMode.Drag) {
+                                if (mode == GestureMode.Pending || mode == GestureMode.Drag ||
+                                    mode == GestureMode.Move
+                                ) {
                                     if (mode == GestureMode.Drag) {
                                         session.sendPointer(last.first, last.second, 0)
                                         trackPointer(last.first, last.second)
@@ -652,16 +687,10 @@ fun SessionScreen(
                                             // A pinch always wins over scrolling.
                                             val newZoom = (multiTouchStartZoom * multiTouchZoom)
                                                 .coerceIn(1f, MAX_ZOOM)
-                                            val centroid =
-                                                event.calculateCentroid(useCurrent = true)
-                                            val center =
-                                                Offset(size.width / 2f, size.height / 2f)
-                                            val anchored = if (centroid == Offset.Unspecified) {
-                                                multiTouchStartPan
-                                            } else {
-                                                centroid - (centroid - center - multiTouchStartPan) *
-                                                    (newZoom / multiTouchStartZoom)
-                                            }
+                                            // Zoom about the visible centre; two-finger
+                                            // drags translate the view afterwards.
+                                            val anchored =
+                                                multiTouchStartPan * (newZoom / multiTouchStartZoom)
                                             val newPan = clampPan(
                                                 anchored + multiTouchPan,
                                                 newZoom,
@@ -688,16 +717,10 @@ fun SessionScreen(
                                         if (abs(multiTouchZoom - 1f) > PINCH_ZOOM_EPSILON) {
                                             val newZoom = (multiTouchStartZoom * multiTouchZoom)
                                                 .coerceIn(1f, MAX_ZOOM)
-                                            val centroid =
-                                                event.calculateCentroid(useCurrent = true)
-                                            val center =
-                                                Offset(size.width / 2f, size.height / 2f)
-                                            val anchored = if (centroid == Offset.Unspecified) {
-                                                multiTouchStartPan
-                                            } else {
-                                                centroid - (centroid - center - multiTouchStartPan) *
-                                                    (newZoom / multiTouchStartZoom)
-                                            }
+                                            // Zoom about the visible centre; two-finger
+                                            // drags translate the view afterwards.
+                                            val anchored =
+                                                multiTouchStartPan * (newZoom / multiTouchStartZoom)
                                             val newPan = clampPan(
                                                 anchored + multiTouchPan,
                                                 newZoom,
@@ -762,16 +785,7 @@ fun SessionScreen(
                                         if (zoomChange != 1f || panChange != Offset.Zero) {
                                             val newZoom =
                                                 (lastZoom * zoomChange).coerceIn(1f, MAX_ZOOM)
-                                            val centroid =
-                                                event.calculateCentroid(useCurrent = true)
-                                            val center =
-                                                Offset(size.width / 2f, size.height / 2f)
-                                            val anchored = if (centroid == Offset.Unspecified) {
-                                                lastPan
-                                            } else {
-                                                centroid - (centroid - center - lastPan) *
-                                                    (newZoom / lastZoom)
-                                            }
+                                            val anchored = lastPan * (newZoom / lastZoom)
                                             val newPan =
                                                 clampPan(anchored + panChange, newZoom, size)
                                             zoom = newZoom
@@ -797,15 +811,55 @@ fun SessionScreen(
                             if (mode == GestureMode.Pending && !longPressSent &&
                                 (change.position - down.position).getDistance() > touchSlop
                             ) {
-                                mode = GestureMode.Drag
-                                session.sendPointer(start.first, start.second, 1)
-                                trackPointer(start.first, start.second)
-                                recordPointer(start.first, start.second)
+                                if (trackpadMode) {
+                                    mode = GestureMode.Move
+                                    val pointer = trackpadPointer ?: IntOffset(
+                                        remoteWidth / 2,
+                                        remoteHeight / 2,
+                                    )
+                                    trackpadPointer = pointer
+                                    trackPointer(pointer.x, pointer.y)
+                                } else {
+                                    mode = GestureMode.Drag
+                                    session.sendPointer(start.first, start.second, 1)
+                                    trackPointer(start.first, start.second)
+                                    recordPointer(start.first, start.second)
+                                }
                             }
                             if (mode == GestureMode.Drag) {
                                 last = remotePoint(change.position, size, remoteWidth, remoteHeight, zoom, pan)
                                 session.sendPointer(last.first, last.second, 1)
                                 trackPointer(last.first, last.second)
+                                change.consume()
+                            } else if (mode == GestureMode.Move) {
+                                val delta = change.position - lastTouch
+                                lastTouch = change.position
+                                val region = viewport
+                                val base = trackpadPointer
+                                    ?: IntOffset(remoteWidth / 2, remoteHeight / 2)
+                                val scaleX = if (region != null && size.width > 0) {
+                                    region.width.toFloat() / size.width
+                                } else if (size.width > 0) {
+                                    remoteWidth.toFloat() / size.width
+                                } else {
+                                    1f
+                                }
+                                val scaleY = if (region != null && size.height > 0) {
+                                    region.height.toFloat() / size.height
+                                } else if (size.height > 0) {
+                                    remoteHeight.toFloat() / size.height
+                                } else {
+                                    1f
+                                }
+                                val minX = region?.x ?: 0
+                                val minY = region?.y ?: 0
+                                val maxX = (region?.let { it.x + it.width } ?: remoteWidth) - 1
+                                val maxY = (region?.let { it.y + it.height } ?: remoteHeight) - 1
+                                val nextX = (base.x + delta.x * scaleX).roundToInt().coerceIn(minX, maxX)
+                                val nextY = (base.y + delta.y * scaleY).roundToInt().coerceIn(minY, maxY)
+                                trackpadPointer = IntOffset(nextX, nextY)
+                                trackPointer(nextX, nextY)
+                                session.sendPointer(nextX, nextY, 0)
                                 change.consume()
                             }
                         }
@@ -817,12 +871,17 @@ fun SessionScreen(
                             }
                             GestureMode.Pending -> if (!longPressSent) {
                                 if (isDoubleTap) {
-                                    toggleZoomAt(down.position)
+                                    toggleZoom()
                                 } else {
+                                    val tapTarget = if (trackpadMode) {
+                                        trackpadPointer?.let { it.x to it.y } ?: start
+                                    } else {
+                                        start
+                                    }
                                     // Hold the click briefly so a double tap can zoom instead.
                                     scheduleTap(
-                                        start.first,
-                                        start.second,
+                                        tapTarget.first,
+                                        tapTarget.second,
                                         down.position,
                                         SystemClock.uptimeMillis(),
                                     )
@@ -938,6 +997,8 @@ fun SessionScreen(
                 onQualityMenuChange = { qualityMenuExpanded = it },
                 onQualitySelected = selectQuality,
                 isFullscreen = isFullscreen,
+                trackpadMode = trackpadMode,
+                onTogglePointerMode = togglePointerMode,
                 onKeyboard = { keyboardActive = true },
                 onClipboard = { showClipboardDialog = true },
                 onUpload = { sendFilePicker.launch(arrayOf("*/*")) },
@@ -1199,6 +1260,8 @@ private fun SessionTopBar(
 
 @Composable
 private fun SessionToolbar(
+    trackpadMode: Boolean,
+    onTogglePointerMode: () -> Unit,
     quality: QualityPreset,
     qualityMenuExpanded: Boolean,
     onQualityMenuChange: (Boolean) -> Unit,
@@ -1227,6 +1290,17 @@ private fun SessionToolbar(
             modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
             horizontalArrangement = Arrangement.spacedBy(2.dp),
         ) {
+            ToolbarButton(
+                icon = if (trackpadMode) Icons.Outlined.Mouse else Icons.Outlined.TouchApp,
+                label = stringResource(
+                    if (trackpadMode) {
+                        R.string.session_pointer_trackpad
+                    } else {
+                        R.string.session_pointer_direct
+                    },
+                ),
+                onClick = onTogglePointerMode,
+            )
             ToolbarButton(
                 icon = Icons.Outlined.Keyboard,
                 label = stringResource(R.string.session_keyboard),
@@ -1649,7 +1723,7 @@ private class PointerMemory {
     }
 }
 
-private enum class GestureMode { Pending, Drag, TwoFinger, Scroll, Transform }
+private enum class GestureMode { Pending, Drag, Move, TwoFinger, Scroll, Transform }
 
 /**
  * Keeps a bar in the pointer hit path so taps on its padding cannot fall through to the

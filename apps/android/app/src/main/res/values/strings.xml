@@ -75,6 +75,8 @@
     <string name="session_scroll_left">scroll left</string>
     <string name="session_scroll_right">scroll right</string>
     <string name="session_clipboard">Clipboard</string>
+    <string name="session_pointer_direct">Direct touch</string>
+    <string name="session_pointer_trackpad">Trackpad</string>
     <string name="session_clipboard_hint">Text to send to the remote clipboard</string>
     <string name="session_clipboard_action">Send text</string>
     <string name="session_quality">Quality</string>

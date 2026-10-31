@@ -569,6 +569,12 @@ class UniFfiRemoteSession(
                 rect.x.toInt() + rect.width.toInt() >= viewportX + viewportWidth &&
                 rect.y.toInt() + rect.height.toInt() >= viewportY + viewportHeight
         }
+        // A freshly installed viewport starts black; keep showing the previous
+        // complete frame until the server has painted the whole new region,
+        // otherwise the UI briefly maps a partially filled crop.
+        if (!viewportEmitted && !coversViewport) {
+            return
+        }
         if (!coversViewport && viewportEmitted) {
             front?.let { copyInto(target, it) }
         }

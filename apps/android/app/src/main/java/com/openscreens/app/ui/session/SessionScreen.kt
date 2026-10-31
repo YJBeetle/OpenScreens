@@ -270,6 +270,12 @@ fun SessionScreen(
                     frame = event
                 }
                 is SessionEvent.Cursor -> cursor = event
+                is SessionEvent.UploadRequest,
+                is SessionEvent.DragInfo,
+                is SessionEvent.TransferProgress,
+                is SessionEvent.TransferComplete,
+                is SessionEvent.FileTransfer,
+                -> Unit
                 SessionEvent.Disconnected -> {
                     status = SessionStatus.Disconnected
                     if (!isExiting) {

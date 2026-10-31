@@ -31,6 +31,12 @@ import uniffi.rfb_ffi.SessionConfig
 import uniffi.rfb_ffi.SshAuthConfig
 import uniffi.rfb_ffi.SessionEvent as NativeEvent
 import uniffi.rfb_ffi.RemoteSession as NativeSession
+import uniffi.rfb_ffi.TransferEntry as NativeTransferEntry
+import uniffi.rfb_ffi.TransferEntryKind as NativeKind
+import uniffi.rfb_ffi.TransferProgress as NativeProgress
+import uniffi.rfb_ffi.parsePasteboardFileUrls
+import uniffi.rfb_ffi.parseTransferAck
+import uniffi.rfb_ffi.parseTransferProgress
 
 /**
  * [RemoteSession] backed by the Rust core through the generated UniFFI bindings.
@@ -243,6 +249,77 @@ class UniFfiRemoteSession(
         }
     }
 
+    override fun nextTransferHandle(): Int =
+        session?.nextTransferHandle()?.toInt() ?: 0
+
+    override suspend fun announceUpload(handle: Int, fileUrls: List<String>) {
+        session?.announceUpload(handle.toUInt(), fileUrls)
+    }
+
+    override suspend fun uploadDestination(handle: Int, folder: String) {
+        session?.uploadDestination(handle.toUInt(), folder)
+    }
+
+    override suspend fun uploadSummary(
+        handle: Int,
+        totalBytes: Long,
+        files: Int,
+        directories: Int,
+    ) {
+        session?.uploadSummary(
+            handle.toUInt(),
+            totalBytes.toULong(),
+            files.toUInt(),
+            directories.toUInt(),
+        )
+    }
+
+    override suspend fun uploadEntry(handle: Int, entry: TransferEntry) {
+        val current = session ?: return
+        val kind = when (entry.kind) {
+            TransferEntryKind.File -> NativeKind.FILE
+            TransferEntryKind.Directory -> NativeKind.DIRECTORY
+            TransferEntryKind.Symlink -> NativeKind.SYMLINK
+        }
+        current.uploadEntry(
+            handle.toUInt(),
+            NativeTransferEntry(
+                kind = kind,
+                name = entry.name,
+                dataSize = entry.dataSize.toULong(),
+                resourceSize = entry.resourceSize.toULong(),
+                mode = entry.mode.toUShort(),
+                nesting = entry.nesting.toUShort(),
+                created = entry.created.toUInt(),
+                accessed = entry.accessed.toUInt(),
+                changed = entry.changed.toUInt(),
+                modified = entry.modified.toUInt(),
+                finderInfo = entry.finderInfo,
+                linkTarget = entry.linkTarget,
+            ),
+        )
+    }
+
+    override suspend fun uploadData(handle: Int, chunk: ByteArray) {
+        session?.uploadData(handle.toUInt(), chunk)
+    }
+
+    override suspend fun uploadComplete(handle: Int) {
+        session?.uploadComplete(handle.toUInt())
+    }
+
+    override suspend fun cancelTransfer(handle: Int) {
+        session?.cancelTransfer(handle.toUInt())
+    }
+
+    override suspend fun startDragOut(handle: Int) {
+        session?.startDragOut(handle.toUInt())
+    }
+
+    override suspend fun requestDownload(handle: Int, path: String) {
+        session?.requestDownload(handle.toUInt(), path)
+    }
+
     override suspend fun copyRegion(x: Int, y: Int, width: Int, height: Int): ByteArray {
         val current = session ?: return ByteArray(0)
         return withContext(Dispatchers.IO) {
@@ -352,6 +429,18 @@ class UniFfiRemoteSession(
                     NativeEvent.Bell -> Log.d(TAG, "remote bell")
                     is NativeEvent.Cursor -> renderCursor(event)
                     is NativeEvent.PointerPosition -> Unit
+                    is NativeEvent.UploadRequest ->
+                        _events.emit(
+                            SessionEvent.UploadRequest(event.handle.toInt(), event.path),
+                        )
+                    is NativeEvent.DragInfo ->
+                        _events.emit(
+                            SessionEvent.DragInfo(
+                                event.handle.toInt(),
+                                parsePasteboardFileUrls(event.pasteboard),
+                            ),
+                        )
+                    is NativeEvent.FileTransfer -> handleFileTransfer(event)
                     is NativeEvent.Disconnected -> {
                         Log.i(TAG, "remote closed the session: ${event.reason}")
                         break
@@ -366,6 +455,25 @@ class UniFfiRemoteSession(
             return
         }
         if (!closed.get()) _events.emit(SessionEvent.Disconnected)
+    }
+
+    private suspend fun handleFileTransfer(event: NativeEvent.FileTransfer) {
+        val handle = event.handle.toInt()
+        when (event.subtype.toInt()) {
+            0xC8 -> when (val progress = parseTransferProgress(event.payload)) {
+                is NativeProgress.Ratio ->
+                    _events.emit(SessionEvent.TransferProgress(handle, progress.value, null))
+                is NativeProgress.Name ->
+                    _events.emit(SessionEvent.TransferProgress(handle, null, progress.name))
+                null -> Unit
+            }
+            0x12C -> parseTransferAck(event.payload)?.let { message ->
+                _events.emit(SessionEvent.TransferComplete(handle, message))
+            }
+            else -> _events.emit(
+                SessionEvent.FileTransfer(handle, event.subtype.toInt(), event.payload),
+            )
+        }
     }
 
     private suspend fun renderCursor(event: NativeEvent.Cursor) {

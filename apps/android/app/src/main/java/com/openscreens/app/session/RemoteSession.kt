@@ -45,7 +45,45 @@ interface RemoteSession {
      * [screenPixelWidth] pixels.
      */
     suspend fun setViewport(x: Int, y: Int, width: Int, height: Int, screenPixelWidth: Int)
+
+    fun nextTransferHandle(): Int
+
+    suspend fun announceUpload(handle: Int, fileUrls: List<String>)
+
+    suspend fun uploadDestination(handle: Int, folder: String)
+
+    suspend fun uploadSummary(handle: Int, totalBytes: Long, files: Int, directories: Int)
+
+    suspend fun uploadEntry(handle: Int, entry: TransferEntry)
+
+    suspend fun uploadData(handle: Int, chunk: ByteArray)
+
+    suspend fun uploadComplete(handle: Int)
+
+    suspend fun cancelTransfer(handle: Int)
+
+    suspend fun startDragOut(handle: Int)
+
+    suspend fun requestDownload(handle: Int, path: String)
 }
+
+enum class TransferEntryKind { File, Directory, Symlink }
+
+/** Metadata for one file, directory or symlink in an Apple file transfer. */
+data class TransferEntry(
+    val kind: TransferEntryKind,
+    val name: String,
+    val dataSize: Long,
+    val resourceSize: Long,
+    val mode: Int,
+    val nesting: Int,
+    val created: Long,
+    val accessed: Long,
+    val changed: Long,
+    val modified: Long,
+    val finderInfo: ByteArray,
+    val linkTarget: String?,
+)
 
 sealed interface SessionEvent {
     data object Connecting : SessionEvent
@@ -70,6 +108,27 @@ sealed interface SessionEvent {
         val width: Int,
         val height: Int,
         val scale: Int,
+    ) : SessionEvent
+
+    /** The server asks the client to upload into [path] (Apple drag-in). */
+    data class UploadRequest(val handle: Int, val path: String) : SessionEvent
+
+    /** The server offered its pasteboard for a drag-out. */
+    data class DragInfo(val handle: Int, val fileUrls: List<String>) : SessionEvent
+
+    data class TransferProgress(
+        val handle: Int,
+        val ratio: Double?,
+        val name: String?,
+    ) : SessionEvent
+
+    data class TransferComplete(val handle: Int, val message: String) : SessionEvent
+
+    /** A raw Apple transfer container, kept for the download flow. */
+    class FileTransfer(
+        val handle: Int,
+        val subtype: Int,
+        val payload: ByteArray,
     ) : SessionEvent
 
     data object Disconnected : SessionEvent

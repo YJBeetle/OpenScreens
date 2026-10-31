@@ -191,6 +191,22 @@ pub struct DisplayScreen {
     pub flags: u32,
 }
 
+/// Pixel origin of a display in the server's desktop space. Apple's `0x451`
+/// records keep the origin even when a single display is being viewed, and the
+/// server expects pointer events in that same space.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct DisplayOrigin {
+    id: u32,
+    x: i32,
+    y: i32,
+}
+
+#[derive(Debug, Default)]
+struct AppleDisplayState {
+    origins: Vec<DisplayOrigin>,
+    selected: Option<u32>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Event {
     Connected {
@@ -323,6 +339,7 @@ pub struct Session {
     events: AsyncMutex<mpsc::Receiver<Event>>,
     framebuffer: Arc<Mutex<Framebuffer>>,
     viewport: Arc<Mutex<Option<Rect>>>,
+    displays: Arc<Mutex<AppleDisplayState>>,
     input_key: Option<[u8; 16]>,
     apple_session: bool,
     /// The server advertised `serverCanReceivePasteboard` (feature bit 32), so
@@ -448,6 +465,7 @@ impl Session {
         let name = handshake.server_init.name.clone();
         let framebuffer = Arc::new(Mutex::new(Framebuffer::new(width, height)));
         let viewport = Arc::new(Mutex::new(None));
+        let displays = Arc::new(Mutex::new(AppleDisplayState::default()));
         let downloads = Arc::new(Mutex::new(HashMap::new()));
         let last_clipboard = Arc::new(Mutex::new(None));
 
@@ -490,6 +508,7 @@ impl Session {
             name.clone(),
             std::time::Duration::from_millis(u64::from(config.frame_interval_ms)),
             viewport.clone(),
+            displays.clone(),
             config.local_cursor && apple_session,
             config.quality,
             apple_session,
@@ -504,6 +523,7 @@ impl Session {
             events: AsyncMutex::new(event_rx),
             framebuffer,
             viewport,
+            displays,
             input_key,
             apple_session,
             apple_pasteboard,
@@ -559,9 +579,19 @@ impl Session {
 
     pub async fn send_pointer(&self, mask: u8, x: u16, y: u16) -> Result<(), SessionError> {
         if self.apple_session && self.input_key.is_some() {
+            let (x, y) = self.desktop_pointer_position(x, y);
             return self.send_apple_pointer(mask, x, y).await;
         }
         self.send(pointer_event(mask, x, y).to_vec()).await
+    }
+
+    /// Translates a framebuffer-local position into the desktop space Apple's
+    /// encrypted pointer events use while one display is selected.
+    fn desktop_pointer_position(&self, x: u16, y: u16) -> (u16, u16) {
+        match self.displays.lock() {
+            Ok(displays) => apple_desktop_pointer(x, y, displays.selected, &displays.origins),
+            Err(_) => (x, y),
+        }
     }
 
     /// Sends wheel clicks at a framebuffer position. Positive Y scrolls down,
@@ -682,7 +712,11 @@ impl Session {
             ));
         }
         self.send(apple_file_transfer::select_display_message(display_id).to_vec())
-            .await
+            .await?;
+        if let Ok(mut displays) = self.displays.lock() {
+            displays.selected = display_id;
+        }
+        Ok(())
     }
 
     pub async fn request_refresh(&self) -> Result<(), SessionError> {
@@ -717,16 +751,16 @@ impl Session {
             let (width, height) = self.size().ok_or(SessionError::Closed)?;
             let x = width / 2;
             let y = height / 2;
-            self.send_apple_pointer(0, x, y).await?;
+            self.send_pointer(0, x, y).await?;
             tokio::time::sleep(std::time::Duration::from_millis(300)).await;
             for offset in [0u16, 20, 40, 60] {
                 let drop_x = x.saturating_add(offset).min(width.saturating_sub(1));
-                self.send_apple_pointer(1, drop_x, y).await?;
+                self.send_pointer(1, drop_x, y).await?;
                 tokio::time::sleep(std::time::Duration::from_millis(120)).await;
             }
             tokio::time::sleep(std::time::Duration::from_millis(300)).await;
             let drop_x = x.saturating_add(60).min(width.saturating_sub(1));
-            self.send_apple_pointer(0, drop_x, y).await?;
+            self.send_pointer(0, drop_x, y).await?;
         }
         Ok(())
     }
@@ -879,6 +913,7 @@ struct ReaderState {
     buffer: BytesMut,
     decoder: Decoder,
     framebuffer: Arc<Mutex<Framebuffer>>,
+    displays: Arc<Mutex<AppleDisplayState>>,
     pixel_format: PixelFormat,
     dct: Option<rfb_codec::apple_dct::AdaptiveDctDecoder>,
     dct_active: bool,
@@ -900,6 +935,7 @@ async fn reader_task<R>(
     name: String,
     frame_interval: std::time::Duration,
     viewport: Arc<Mutex<Option<Rect>>>,
+    displays: Arc<Mutex<AppleDisplayState>>,
     local_cursor: bool,
     quality: u8,
     apple_session: bool,
@@ -926,6 +962,7 @@ async fn reader_task<R>(
         buffer: BytesMut::with_capacity(READ_CHUNK),
         decoder: Decoder::new(),
         framebuffer,
+        displays,
         pixel_format: PixelFormat::bgra8888(),
         dct: None,
         dct_active: adaptive_dct,
@@ -1460,6 +1497,22 @@ where
                         .map_err(|_| SessionError::Protocol("framebuffer lock poisoned"))?;
                     framebuffer.resize(info.width, info.height);
                 }
+                if let Ok(mut displays) = state.displays.lock() {
+                    displays.origins = info
+                        .displays
+                        .iter()
+                        .map(|display| DisplayOrigin {
+                            id: display.id,
+                            x: i32::from(display.pixel_rect.left),
+                            y: i32::from(display.pixel_rect.top),
+                        })
+                        .collect();
+                    if let Some(selected) = displays.selected
+                        && !info.displays.iter().any(|display| display.id == selected)
+                    {
+                        displays.selected = None;
+                    }
+                }
                 state.dct = None;
                 layout = Some((
                     info.width,
@@ -1840,6 +1893,32 @@ fn clamp_rect(rect: Rect, width: u16, height: u16) -> Option<Rect> {
     })
 }
 
+/// Maps a framebuffer-local pointer position into the desktop space Apple's
+/// encrypted pointer events use while one display is selected. VNCKit sends the
+/// display's absolute pixel rect (`0x451` origin plus the in-display offset),
+/// so the origin has to be added back after the framebuffer shrank to that
+/// display.
+fn apple_desktop_pointer(
+    x: u16,
+    y: u16,
+    selected: Option<u32>,
+    origins: &[DisplayOrigin],
+) -> (u16, u16) {
+    let Some(selected) = selected else {
+        return (x, y);
+    };
+    let Some(origin) = origins.iter().find(|origin| origin.id == selected) else {
+        return (x, y);
+    };
+    // Apple's message stores each coordinate in 16 bits; displays left of or
+    // above the primary one carry negative desktop coordinates, which VNCKit
+    // also sends as wrapped 16-bit values.
+    (
+        (i32::from(x) + origin.x) as i16 as u16,
+        (i32::from(y) + origin.y) as i16 as u16,
+    )
+}
+
 fn copy_region_from(framebuffer: &Framebuffer, rect: Rect) -> Option<Vec<u8>> {
     let width = usize::from(framebuffer.width());
     let height = usize::from(framebuffer.height());
@@ -1964,6 +2043,58 @@ mod tests {
         assert_eq!(ids.len(), 12);
         assert!(ids.contains(&Encoding::AppleDesktopInfo.to_id()));
         assert!(ids.contains(&Encoding::AppleDesktopInfo2.to_id()));
+    }
+
+    #[test]
+    fn maps_pointer_into_selected_display_space() {
+        let origins = [
+            DisplayOrigin { id: 1, x: 0, y: 0 },
+            DisplayOrigin {
+                id: 2,
+                x: 6016,
+                y: 0,
+            },
+            DisplayOrigin {
+                id: 3,
+                x: 0,
+                y: 3384,
+            },
+        ];
+
+        // All displays selected: the framebuffer already covers the desktop.
+        assert_eq!(apple_desktop_pointer(100, 200, None, &origins), (100, 200));
+        assert_eq!(
+            apple_desktop_pointer(100, 200, Some(1), &origins),
+            (100, 200)
+        );
+        // A display right of or below the primary one needs its origin added.
+        assert_eq!(
+            apple_desktop_pointer(100, 200, Some(2), &origins),
+            (6116, 200)
+        );
+        assert_eq!(
+            apple_desktop_pointer(100, 200, Some(3), &origins),
+            (100, 3584)
+        );
+        assert_eq!(apple_desktop_pointer(0, 0, Some(2), &origins), (6016, 0));
+        // An id the current layout no longer lists leaves the point alone.
+        assert_eq!(
+            apple_desktop_pointer(100, 200, Some(9), &origins),
+            (100, 200)
+        );
+    }
+
+    #[test]
+    fn wraps_negative_display_origin() {
+        let origins = [DisplayOrigin {
+            id: 4,
+            x: -1920,
+            y: -1080,
+        }];
+        assert_eq!(
+            apple_desktop_pointer(5, 7, Some(4), &origins),
+            (-1915i16 as u16, -1073i16 as u16)
+        );
     }
 
     fn screen_bytes(screens: &[(u32, u16, u16, u16, u16, u32)]) -> Vec<u8> {

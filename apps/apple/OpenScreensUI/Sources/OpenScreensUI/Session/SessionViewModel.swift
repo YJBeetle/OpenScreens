@@ -62,6 +62,8 @@ public final class SessionViewModel {
     @ObservationIgnored private var lastHoverPixel: CGPoint?
     @ObservationIgnored private var backgroundedAt: Date?
     @ObservationIgnored private var scrollRemainder = CGSize.zero
+    @ObservationIgnored private var viewportTask: Task<Void, Never>?
+    @ObservationIgnored private var lastViewportRect: CGRect?
 
     private static let resumeReconnectDelay: TimeInterval = 5
     private static let maxZoom: CGFloat = 6
@@ -158,6 +160,7 @@ public final class SessionViewModel {
         guard !isStopping else { return }
         let session = service.makeSession()
         self.session = session
+        lastViewportRect = nil
         state = isReconnect ? .reconnecting(attempt: reconnectAttempts) : .connecting
         remoteCursorShape = nil
         remoteCursorImage = nil
@@ -189,6 +192,9 @@ public final class SessionViewModel {
         connectTask = nil
         eventTask?.cancel()
         eventTask = nil
+        viewportTask?.cancel()
+        viewportTask = nil
+        lastViewportRect = nil
         clearUploadState()
         clearDownloadState()
         if let active {
@@ -510,10 +516,47 @@ public final class SessionViewModel {
         pan = .zero
     }
 
+    /// Debounces a viewport subscription for the visible part of the image, so
+    /// a pinch or pan settles before the server is re-asked.
+    public func scheduleViewportUpdate(in size: CGSize, screenPixelWidth: CGFloat) {
+        guard state.isConnected, serverSize != nil else { return }
+        viewportTask?.cancel()
+        viewportTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(150))
+            guard !Task.isCancelled else { return }
+            await self?.updateViewport(in: size, screenPixelWidth: screenPixelWidth)
+        }
+    }
+
+    private func updateViewport(in size: CGSize, screenPixelWidth: CGFloat) async {
+        guard let session, let serverSize,
+              let displayed = displayedImageRect(in: size),
+              displayed.width > 0, displayed.height > 0
+        else { return }
+
+        let visible = displayed.intersection(CGRect(origin: .zero, size: size))
+        guard !visible.isNull, visible.width >= 1, visible.height >= 1 else { return }
+
+        let scaleX = serverSize.width / displayed.width
+        let scaleY = serverSize.height / displayed.height
+        let rect = CGRect(
+            x: ((visible.minX - displayed.minX) * scaleX).rounded(.down),
+            y: ((visible.minY - displayed.minY) * scaleY).rounded(.down),
+            width: (visible.width * scaleX).rounded(.up),
+            height: (visible.height * scaleY).rounded(.up)
+        )
+        guard rect != lastViewportRect else { return }
+        lastViewportRect = rect
+        await session.setViewport(rect, screenPixelWidth: Int(max(1, screenPixelWidth.rounded())))
+    }
+
     private func clampedPan(_ value: CGSize, in size: CGSize) -> CGSize {
         guard let base = remoteImageRect(in: size) else { return .zero }
-        let maxX = max(0, (base.width * zoom - size.width) / 2)
-        let maxY = max(0, (base.height * zoom - size.height) / 2)
+        // When the image covers the viewport, keep its edges outside; when it
+        // is smaller, let it move inside so a pinch can stay anchored between
+        // the fingers instead of snapping back to the centre.
+        let maxX = abs(base.width * zoom - size.width) / 2
+        let maxY = abs(base.height * zoom - size.height) / 2
         return CGSize(
             width: min(max(value.width, -maxX), maxX),
             height: min(max(value.height, -maxY), maxY)

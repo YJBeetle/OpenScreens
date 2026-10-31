@@ -30,6 +30,13 @@ public final class RemoteCanvasRenderer {
     /// Letterboxing behaviour, applied by the hosting view on the next draw.
     public var contentMode: RemoteContentMode = .fit
 
+    /// Rect the framebuffer occupies in the hosting view, in points. When set,
+    /// the renderer samples that visible portion at drawable resolution instead
+    /// of magnifying a fitted layer, so zoomed content stays sharp.
+    public var imageRect: CGRect?
+    /// Size of the hosting view the rect is expressed in, in points.
+    public var containerSize: CGSize = .zero
+
     /// Creates the Metal device, queue and pipeline. The renderer remains usable
     /// (uploads are accepted, draws are skipped) if Metal is unavailable.
     public init() {
@@ -144,7 +151,7 @@ public final class RemoteCanvasRenderer {
         encoder.setRenderPipelineState(pipeline)
         encoder.setFragmentTexture(texture, index: 0)
 
-        var uniforms = CanvasUniforms(scale: viewportScale(for: target))
+        var uniforms = canvasUniforms(for: target)
         encoder.setVertexBytes(&uniforms, length: MemoryLayout<CanvasUniforms>.stride, index: 0)
         encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
         encoder.endEncoding()
@@ -159,7 +166,29 @@ public final class RemoteCanvasRenderer {
     // MARK: - Private
 
     private struct CanvasUniforms {
-        var scale: SIMD2<Float>
+        var origin: SIMD2<Float>
+        var size: SIMD2<Float>
+    }
+
+    private func canvasUniforms(for target: CGSize) -> CanvasUniforms {
+        if let imageRect, containerSize.width > 0, containerSize.height > 0,
+           imageRect.width > 0, imageRect.height > 0 {
+            return CanvasUniforms(
+                origin: SIMD2(
+                    Float(imageRect.minX / containerSize.width),
+                    Float(imageRect.minY / containerSize.height)
+                ),
+                size: SIMD2(
+                    Float(imageRect.width / containerSize.width),
+                    Float(imageRect.height / containerSize.height)
+                )
+            )
+        }
+        let scale = viewportScale(for: target)
+        return CanvasUniforms(
+            origin: SIMD2((1 - scale.x) / 2, (1 - scale.y) / 2),
+            size: scale
+        )
     }
 
     private func makeTextureIfNeeded(width: Int, height: Int) -> (any MTLTexture)? {
@@ -226,7 +255,8 @@ public final class RemoteCanvasRenderer {
     };
 
     struct CanvasUniforms {
-        float2 scale;
+        float2 origin;
+        float2 size;
     };
 
     vertex CanvasVertexOut canvasVertex(uint vertexID [[vertex_id]],
@@ -245,9 +275,9 @@ public final class RemoteCanvasRenderer {
 
         CanvasVertexOut out;
         out.position = float4(positions[vertexID], 0.0, 1.0);
-        // Map the viewport onto the letterboxed image rect. Coordinates outside
-        // 0..1 fall in the letterbox and are discarded by the fragment stage.
-        out.texCoord = (screenUVs[vertexID] - 0.5) / uniforms.scale + 0.5;
+        // Map the viewport onto the image rect. Coordinates outside 0..1 fall
+        // in the letterbox and are discarded by the fragment stage.
+        out.texCoord = (screenUVs[vertexID] - uniforms.origin) / uniforms.size;
         return out;
     }
 

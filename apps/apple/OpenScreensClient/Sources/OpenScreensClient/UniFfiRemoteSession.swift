@@ -353,6 +353,45 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
         }
     }
 
+    /// Subscribes only to the visible framebuffer region and samples it at
+    /// roughly one stored pixel per screen pixel, so a zoomed crop stays sharp
+    /// without transferring the whole desktop.
+    public func setViewport(_ rect: CGRect?, screenPixelWidth: Int) async {
+        guard let session, !finished, width > 0, height > 0 else { return }
+        let full = CGRect(x: 0, y: 0, width: Int(width), height: Int(height))
+        let visible = (rect ?? full).integral.intersection(full)
+        guard visible.width >= 1, visible.height >= 1 else { return }
+
+        let density = max(1, min(8, Int(visible.width) / max(1, screenPixelWidth)))
+        if displayScale != UInt16(density) {
+            displayScale = UInt16(density)
+            scaledWidth = (Int(width) + density - 1) / density
+            scaledHeight = (Int(height) + density - 1) / density
+            logger.info(
+                "viewport sampling 1/\(density) (\(self.scaledWidth)x\(self.scaledHeight))"
+            )
+        }
+
+        let margin = max(64, Int(visible.width) / 12)
+        let target = CGRect(
+            x: visible.minX - CGFloat(margin),
+            y: visible.minY - CGFloat(margin),
+            width: visible.width + CGFloat(margin * 2),
+            height: visible.height + CGFloat(margin * 2)
+        ).integral.intersection(full)
+
+        do {
+            try await session.setViewport(
+                x: UInt16(target.minX),
+                y: UInt16(target.minY),
+                width: UInt16(target.width),
+                height: UInt16(target.height)
+            )
+        } catch {
+            logger.warning("set viewport failed: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
     // MARK: - File upload
 
     /// Announces dropped files to the server. The upload itself starts when

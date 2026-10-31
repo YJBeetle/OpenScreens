@@ -10,6 +10,7 @@ import AppKit
 public struct SessionScreen: View {
     @Environment(SettingsStore.self) private var settings
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.displayScale) private var displayScale
 
     private let model: SessionViewModel
     private let onClose: () -> Void
@@ -150,15 +151,18 @@ public struct SessionScreen: View {
     private var remoteCanvas: some View {
         #if os(iOS)
         GeometryReader { proxy in
-            if let rect = model.remoteImageRect(in: proxy.size) {
-                RemoteCanvasView(
-                    renderer: model.renderer,
-                    contentMode: model.scaling == .stretch ? .stretch : .fit
+            RemoteCanvasView(
+                renderer: model.renderer,
+                contentMode: model.scaling == .stretch ? .stretch : .fit,
+                imageRect: model.displayedImageRect(in: proxy.size),
+                containerSize: proxy.size
+            )
+            .frame(width: proxy.size.width, height: proxy.size.height)
+            .onChange(of: proxy.size) { _, size in
+                model.scheduleViewportUpdate(
+                    in: size,
+                    screenPixelWidth: size.width * displayScale
                 )
-                .frame(width: rect.width, height: rect.height)
-                .scaleEffect(model.zoom)
-                .offset(model.pan)
-                .position(x: rect.midX, y: rect.midY)
             }
         }
         #else
@@ -248,7 +252,13 @@ public struct SessionScreen: View {
                     }
                 },
                 onScroll: { model.scroll(by: $0) },
-                onDragZoomed: { model.panZoom(by: $0, in: proxy.size) },
+                onDragZoomed: {
+                    model.panZoom(by: $0, in: proxy.size)
+                    model.scheduleViewportUpdate(
+                        in: proxy.size,
+                        screenPixelWidth: proxy.size.width * displayScale
+                    )
+                },
                 isZoomed: { model.zoom > 1.001 },
                 onPinchBegan: { focal in
                     guard model.zoomEnabled else { return }
@@ -263,6 +273,10 @@ public struct SessionScreen: View {
                         startFocal: start.focal,
                         currentFocal: focal,
                         in: proxy.size
+                    )
+                    model.scheduleViewportUpdate(
+                        in: proxy.size,
+                        screenPixelWidth: proxy.size.width * displayScale
                     )
                 },
                 onPinchEnded: { pinchStart = nil },

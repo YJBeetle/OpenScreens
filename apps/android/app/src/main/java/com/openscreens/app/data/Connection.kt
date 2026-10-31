@@ -23,4 +23,10 @@ data class Connection(
 data class SshCredentials(
     val username: String,
     val password: String = "",
-)
+    val port: Int = DEFAULT_SSH_PORT,
+    val hostKeyFingerprint: String = "",
+) {
+    companion object {
+        const val DEFAULT_SSH_PORT = 22
+    }
+}

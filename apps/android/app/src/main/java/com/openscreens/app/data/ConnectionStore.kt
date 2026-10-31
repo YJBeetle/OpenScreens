@@ -91,7 +91,9 @@ class ConnectionStore(
                     "ssh",
                     JSONObject()
                         .put("username", ssh.username)
-                        .put("password", ssh.password),
+                        .put("password", ssh.password)
+                        .put("port", ssh.port)
+                        .put("hostKeyFingerprint", ssh.hostKeyFingerprint),
                 )
             }
             connection.lastConnectedAt?.let { item.put("lastConnectedAt", it) }
@@ -112,6 +114,8 @@ class ConnectionStore(
                     SshCredentials(
                         username = it.optString("username"),
                         password = it.optString("password"),
+                        port = it.optInt("port", SshCredentials.DEFAULT_SSH_PORT),
+                        hostKeyFingerprint = it.optString("hostKeyFingerprint"),
                     )
                 }
                 add(

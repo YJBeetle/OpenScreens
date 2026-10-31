@@ -35,6 +35,9 @@
     <string name="editor_ssh_username">SSH username</string>
     <string name="editor_ssh_password">SSH password</string>
     <string name="editor_ssh_password_optional">Leave empty to use a key agent.</string>
+    <string name="editor_ssh_port">SSH port</string>
+    <string name="editor_ssh_fingerprint">Host key SHA-256 (optional)</string>
+    <string name="editor_ssh_fingerprint_help">Pins the SSH server key. Leave empty to accept the first key.</string>
     <string name="editor_error_required">This field is required.</string>
     <string name="editor_error_host">Use a hostname or IP address without spaces.</string>
     <string name="editor_error_port">Enter a port from 1 to 65535.</string>

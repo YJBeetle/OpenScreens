@@ -80,6 +80,12 @@ fun ConnectionEditorScreen(
     var sshPassword by rememberSaveable(editorKey) {
         mutableStateOf(connection?.ssh?.password.orEmpty())
     }
+    var sshPort by rememberSaveable(editorKey) {
+        mutableStateOf((connection?.ssh?.port ?: SshCredentials.DEFAULT_SSH_PORT).toString())
+    }
+    var sshFingerprint by rememberSaveable(editorKey) {
+        mutableStateOf(connection?.ssh?.hostKeyFingerprint.orEmpty())
+    }
     var validate by rememberSaveable { mutableStateOf(false) }
 
     val nameError = if (name.isBlank()) R.string.editor_error_required else null
@@ -99,12 +105,25 @@ fun ConnectionEditorScreen(
     } else {
         null
     }
+    val sshPortNumber = sshPort.toIntOrNull()
+    val sshPortError = if (sshEnabled && (sshPortNumber == null || sshPortNumber !in 1..65535)) {
+        R.string.editor_error_port
+    } else {
+        null
+    }
 
     val onSaveClick: () -> Unit = {
         validate = true
-        if (nameError == null && hostError == null && portError == null && sshUsernameError == null) {
+        if (nameError == null && hostError == null && portError == null &&
+            sshUsernameError == null && sshPortError == null
+        ) {
             val ssh = if (sshEnabled) {
-                SshCredentials(username = sshUsername.trim(), password = sshPassword)
+                SshCredentials(
+                    username = sshUsername.trim(),
+                    password = sshPassword,
+                    port = sshPortNumber ?: SshCredentials.DEFAULT_SSH_PORT,
+                    hostKeyFingerprint = sshFingerprint.trim(),
+                )
             } else {
                 null
             }
@@ -297,6 +316,37 @@ fun ConnectionEditorScreen(
                             onValueChange = { sshPassword = it },
                             label = stringResource(R.string.editor_ssh_password),
                             supportingText = stringResource(R.string.editor_ssh_password_optional),
+                        )
+                        OutlinedTextField(
+                            value = sshPort,
+                            onValueChange = { sshPort = it.filter(Char::isDigit) },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = { Text(stringResource(R.string.editor_ssh_port)) },
+                            singleLine = true,
+                            isError = validate && sshPortError != null,
+                            supportingText = if (validate && sshPortError != null) {
+                                { Text(stringResource(sshPortError)) }
+                            } else {
+                                null
+                            },
+                            keyboardOptions = KeyboardOptions(
+                                keyboardType = KeyboardType.Number,
+                                imeAction = ImeAction.Next,
+                            ),
+                        )
+                        OutlinedTextField(
+                            value = sshFingerprint,
+                            onValueChange = { sshFingerprint = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = { Text(stringResource(R.string.editor_ssh_fingerprint)) },
+                            singleLine = true,
+                            supportingText = {
+                                Text(stringResource(R.string.editor_ssh_fingerprint_help))
+                            },
+                            keyboardOptions = KeyboardOptions(
+                                autoCorrectEnabled = false,
+                                imeAction = ImeAction.Done,
+                            ),
                         )
                     }
                 }

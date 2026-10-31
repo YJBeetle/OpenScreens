@@ -1775,6 +1775,16 @@ data class SessionConfig (
     var `password`: kotlin.String?
     , 
     var `shared`: kotlin.Boolean
+    , 
+    var `sshHost`: kotlin.String?
+    , 
+    var `sshPort`: kotlin.UShort?
+    , 
+    var `sshUsername`: kotlin.String?
+    , 
+    var `sshPassword`: kotlin.String?
+    , 
+    var `sshHostKeyFingerprint`: kotlin.String?
     
 ){
     
@@ -1796,6 +1806,11 @@ public object FfiConverterTypeSessionConfig: FfiConverterRustBuffer<SessionConfi
             FfiConverterOptionalString.read(buf),
             FfiConverterOptionalString.read(buf),
             FfiConverterBoolean.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalUShort.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalString.read(buf),
         )
     }
 
@@ -1804,7 +1819,12 @@ public object FfiConverterTypeSessionConfig: FfiConverterRustBuffer<SessionConfi
             FfiConverterUShort.allocationSize(value.`port`) +
             FfiConverterOptionalString.allocationSize(value.`username`) +
             FfiConverterOptionalString.allocationSize(value.`password`) +
-            FfiConverterBoolean.allocationSize(value.`shared`)
+            FfiConverterBoolean.allocationSize(value.`shared`) +
+            FfiConverterOptionalString.allocationSize(value.`sshHost`) +
+            FfiConverterOptionalUShort.allocationSize(value.`sshPort`) +
+            FfiConverterOptionalString.allocationSize(value.`sshUsername`) +
+            FfiConverterOptionalString.allocationSize(value.`sshPassword`) +
+            FfiConverterOptionalString.allocationSize(value.`sshHostKeyFingerprint`)
     )
 
     override fun write(value: SessionConfig, buf: ByteBuffer) {
@@ -1813,6 +1833,11 @@ public object FfiConverterTypeSessionConfig: FfiConverterRustBuffer<SessionConfi
             FfiConverterOptionalString.write(value.`username`, buf)
             FfiConverterOptionalString.write(value.`password`, buf)
             FfiConverterBoolean.write(value.`shared`, buf)
+            FfiConverterOptionalString.write(value.`sshHost`, buf)
+            FfiConverterOptionalUShort.write(value.`sshPort`, buf)
+            FfiConverterOptionalString.write(value.`sshUsername`, buf)
+            FfiConverterOptionalString.write(value.`sshPassword`, buf)
+            FfiConverterOptionalString.write(value.`sshHostKeyFingerprint`, buf)
     }
 }
 
@@ -2099,6 +2124,38 @@ public object FfiConverterTypeSessionFailure : FfiConverterRustBuffer<SessionFai
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
     }
 
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterOptionalUShort: FfiConverterRustBuffer<kotlin.UShort?> {
+    override fun read(buf: ByteBuffer): kotlin.UShort? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterUShort.read(buf)
+    }
+
+    override fun allocationSize(value: kotlin.UShort?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterUShort.allocationSize(value)
+        }
+    }
+
+    override fun write(value: kotlin.UShort?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterUShort.write(value, buf)
+        }
+    }
 }
 
 

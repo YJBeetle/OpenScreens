@@ -72,12 +72,18 @@ class UniFfiRemoteSession(
         closed.set(false)
         _events.emit(SessionEvent.Connecting)
 
+        val ssh = connection.ssh
         val config = SessionConfig(
             host = connection.host,
             port = connection.port.toUShort(),
             username = connection.username.ifBlank { null },
             password = connection.vncPassword.ifBlank { null },
             shared = true,
+            sshHost = ssh?.let { connection.host },
+            sshPort = ssh?.let { it.port.toUShort() },
+            sshUsername = ssh?.username?.ifBlank { null },
+            sshPassword = ssh?.password?.ifBlank { null },
+            sshHostKeyFingerprint = ssh?.hostKeyFingerprint?.ifBlank { null },
         )
 
         val connected = try {

@@ -201,12 +201,17 @@ public protocol RemoteSessionProtocol: Sendable {
     func sendClipboard(_ text: String) async
     func requestClipboard() async
     func setObserveMode(_ observing: Bool) async
+    /// Switches the host to one display, or shows every display when `id` is
+    /// `nil`.
+    func selectDisplay(_ id: Int?) async
     /// Sends local files to the remote desktop through Apple's drag-and-drop
     /// file transfer protocol. Progress and completion arrive as events.
     func uploadFiles(_ urls: [URL]) async
 }
 
 public extension RemoteSessionProtocol {
+    /// Transports without display selection ignore the request.
+    func selectDisplay(_ id: Int?) async {}
     /// Transports without file transfer support ignore the request.
     func uploadFiles(_ urls: [URL]) async {}
 }

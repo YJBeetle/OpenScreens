@@ -199,8 +199,11 @@ public final class SessionViewModel {
             if let display = list.first {
                 serverSize = CGSize(width: display.width, height: display.height)
             }
-            if selectedDisplayID == nil || !list.contains(where: { $0.id == selectedDisplayID }) {
-                selectedDisplayID = list.first?.id
+            // `nil` means every display is shown; only drop a selection the
+            // host stopped reporting.
+            if let selectedDisplayID,
+               !list.contains(where: { $0.id == selectedDisplayID }) {
+                self.selectedDisplayID = nil
             }
 
         case .frame(let frame):
@@ -523,8 +526,10 @@ public final class SessionViewModel {
         scaling = mode
     }
 
-    public func selectDisplay(id: Int) {
+    public func selectDisplay(_ id: Int?) {
+        guard state.isConnected, let session else { return }
         selectedDisplayID = id
+        Task { await session.selectDisplay(id) }
     }
 
     public func toggleChrome() {

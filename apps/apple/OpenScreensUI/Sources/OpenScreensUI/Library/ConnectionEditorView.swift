@@ -39,8 +39,13 @@ public struct ConnectionEditorView: View {
     #if os(macOS)
     @State private var sshKeyFiles: [SSHKeyFile] = []
     #endif
+    @State private var importingWireGuard = false
+    @State private var wireGuardFileName: String?
+    @State private var wireGuardImportError: String?
     @State private var selectedSection: EditorSection = .connection
     @State private var appliedSettingsDefaults = false
+
+    private static let wireGuardByteLimit = 64 * 1024
 
     private let mode: ConnectionEditorMode
     private let onSaved: ((ConnectionProfile) -> Void)?
@@ -398,6 +403,118 @@ public struct ConnectionEditorView: View {
                 sshKeyImportError = error.localizedDescription
             }
         }
+
+        Section {
+            if draft.hasWireGuardConfig {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(wireGuardFileName ?? "WireGuard configuration")
+                        .font(.subheadline)
+                        .lineLimit(1)
+                    Text(wireGuardSummary)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+
+                Button("Remove Configuration", role: .destructive) {
+                    draft.wireGuardConfig = nil
+                    wireGuardFileName = nil
+                    wireGuardImportError = nil
+                }
+            } else {
+                Button {
+                    importingWireGuard = true
+                } label: {
+                    Label("Import WireGuard Configuration…", systemImage: "doc.badge.plus")
+                }
+            }
+
+            if let error = wireGuardImportError {
+                Text(error)
+                    .font(.footnote)
+                    .foregroundStyle(Theme.Colors.danger)
+            }
+
+            if tunnelConflict {
+                Label(
+                    "SSH and WireGuard cannot be used together. Turn one off to save.",
+                    systemImage: "exclamationmark.triangle.fill"
+                )
+                .font(.footnote)
+                .foregroundStyle(Theme.Colors.danger)
+            }
+        } header: {
+            Text("WireGuard")
+        } footer: {
+            Text("Import a wg-quick .conf file (64 KiB maximum). The configuration is stored with this connection and used instead of SSH.")
+        }
+        .fileImporter(
+            isPresented: $importingWireGuard,
+            allowedContentTypes: [.data]
+        ) { result in
+            switch result {
+            case .success(let url):
+                importWireGuardConfig(from: url)
+            case .failure(let error):
+                wireGuardImportError = error.localizedDescription
+            }
+        }
+    }
+
+    private var wireGuardSummary: String {
+        guard let text = draft.wireGuardConfig else { return "" }
+        let size = ByteCountFormatter.string(
+            fromByteCount: Int64(text.utf8.count),
+            countStyle: .file
+        )
+        let endpoint = text
+            .split(whereSeparator: \.isNewline)
+            .map(String.init)
+            .first { $0.trimmingCharacters(in: .whitespaces).lowercased().hasPrefix("endpoint") }
+        guard let endpoint else { return size }
+        return "\(endpoint.trimmingCharacters(in: .whitespaces)) · \(size)"
+    }
+
+    private func importWireGuardConfig(from url: URL) {
+        let accessing = url.startAccessingSecurityScopedResource()
+        defer {
+            if accessing { url.stopAccessingSecurityScopedResource() }
+        }
+
+        do {
+            guard url.pathExtension.lowercased() == "conf" else {
+                throw WireGuardImportError("Choose a WireGuard .conf file.")
+            }
+
+            let handle = try FileHandle(forReadingFrom: url)
+            defer { try? handle.close() }
+
+            var data = Data()
+            while data.count <= Self.wireGuardByteLimit,
+                  let chunk = try handle.read(upToCount: 16 * 1024),
+                  !chunk.isEmpty {
+                data.append(chunk)
+            }
+            guard data.count <= Self.wireGuardByteLimit else {
+                throw WireGuardImportError(
+                    "WireGuard configurations must be 64 KiB or smaller."
+                )
+            }
+            guard let text = String(data: data, encoding: .utf8) else {
+                throw WireGuardImportError(
+                    "The WireGuard configuration is not UTF-8 text."
+                )
+            }
+            guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                throw WireGuardImportError("The WireGuard configuration is empty.")
+            }
+
+            draft.wireGuardConfig = text
+            wireGuardFileName = url.lastPathComponent
+            wireGuardImportError = nil
+        } catch {
+            wireGuardImportError = error.localizedDescription
+        }
     }
 
     private func importSSHKey(from url: URL) {
@@ -469,6 +586,10 @@ public struct ConnectionEditorView: View {
 
     private var sshPortNumber: Int? { Int(sshPort) }
 
+    private var tunnelConflict: Bool {
+        sshEnabled && draft.hasWireGuardConfig
+    }
+
     private var sshValidationError: String? {
         guard sshEnabled else { return nil }
         if sshUsername.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -491,7 +612,7 @@ public struct ConnectionEditorView: View {
     }
 
     private var canSave: Bool {
-        draft.isValid && sshValidationError == nil
+        draft.isValid && sshValidationError == nil && !tunnelConflict
     }
 
     // MARK: - Actions
@@ -505,7 +626,7 @@ public struct ConnectionEditorView: View {
     }
 
     private func save() {
-        guard canSave else { return }
+        guard canSave, !tunnelConflict else { return }
         if sshEnabled {
             draft.ssh = SSHProfile(
                 enabled: true,
@@ -633,4 +754,14 @@ private struct PlainInputStyle: ViewModifier {
         content.autocorrectionDisabled()
         #endif
     }
+}
+
+private struct WireGuardImportError: LocalizedError {
+    let message: String
+
+    init(_ message: String) {
+        self.message = message
+    }
+
+    var errorDescription: String? { message }
 }

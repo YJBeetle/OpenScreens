@@ -131,6 +131,8 @@ public struct ConnectionProfile: Identifiable, Codable, Hashable, Sendable {
     public var isDiscovered: Bool
     public var controls: ControlPreferences
     public var ssh: SSHProfile?
+    /// Full wg-quick configuration text. Mutually exclusive with `ssh`.
+    public var wireGuardConfig: String?
     public var createdAt: Date
     public var lastConnectedAt: Date?
 
@@ -148,6 +150,7 @@ public struct ConnectionProfile: Identifiable, Codable, Hashable, Sendable {
         isDiscovered: Bool = false,
         controls: ControlPreferences = ControlPreferences(),
         ssh: SSHProfile? = nil,
+        wireGuardConfig: String? = nil,
         createdAt: Date = .now,
         lastConnectedAt: Date? = nil
     ) {
@@ -164,6 +167,7 @@ public struct ConnectionProfile: Identifiable, Codable, Hashable, Sendable {
         self.isDiscovered = isDiscovered
         self.controls = controls
         self.ssh = ssh
+        self.wireGuardConfig = wireGuardConfig
         self.createdAt = createdAt
         self.lastConnectedAt = lastConnectedAt
     }
@@ -187,6 +191,17 @@ public struct ConnectionProfile: Identifiable, Codable, Hashable, Sendable {
         return !username.isEmpty
             && (1...65535).contains(ssh.port)
             && (ssh.authMethod == .password || !keyPath.isEmpty)
+    }
+
+    public var hasWireGuardConfig: Bool {
+        guard let wireGuardConfig else { return false }
+        return !wireGuardConfig.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    /// SSH and WireGuard both build the transport tunnel; the core rejects a
+    /// session that carries both.
+    public var hasTunnelConflict: Bool {
+        hasWireGuardConfig && (ssh?.enabled ?? false)
     }
 
     public var endpoint: String {
@@ -219,6 +234,10 @@ public struct ConnectionProfile: Identifiable, Codable, Hashable, Sendable {
             ssh.hostKeyFingerprint = ssh.hostKeyFingerprint.trimmingCharacters(in: .whitespacesAndNewlines)
             ssh.port = min(max(ssh.port, 1), 65535)
             copy.ssh = ssh
+        }
+        if let config = copy.wireGuardConfig {
+            let trimmed = config.trimmingCharacters(in: .whitespacesAndNewlines)
+            copy.wireGuardConfig = trimmed.isEmpty ? nil : trimmed
         }
         return copy
     }

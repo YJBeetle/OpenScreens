@@ -143,6 +143,9 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
             let fingerprint = ssh.hostKeyFingerprint.trimmingCharacters(in: .whitespacesAndNewlines)
             sshFingerprint = fingerprint.isEmpty ? nil : fingerprint
         }
+        if profile.hasTunnelConflict {
+            throw SessionSetupError("SSH and WireGuard cannot be used together. Choose one.")
+        }
 
         // macOS draws the pointer client-side; on touch platforms the remote
         // server keeps compositing it into the framebuffer.
@@ -161,7 +164,7 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
             localCursor: localCursor,
             quality: 9,
             frameIntervalMs: 16,
-            wireguardConfig: nil,
+            wireguardConfig: profile.wireGuardConfig,
             wireguardDnsFallback: true,
             sshHost: sshHost,
             sshPort: sshPort,
@@ -253,6 +256,17 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
 
     public func setObserveMode(_ observing: Bool) async {
         self.observing = observing
+    }
+
+    public func selectDisplay(_ id: Int?) async {
+        guard let session, !finished else { return }
+        let displayID = id.flatMap { UInt32(exactly: $0) }
+        do {
+            try await session.selectDisplay(displayId: displayID)
+        } catch {
+            logger.error("select display failed: \(error.localizedDescription, privacy: .public)")
+            continuation.yield(.failure("Could not switch display: \(error.localizedDescription)"))
+        }
     }
 
     // MARK: - File upload

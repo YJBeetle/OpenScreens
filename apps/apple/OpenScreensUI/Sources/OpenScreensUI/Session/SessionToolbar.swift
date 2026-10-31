@@ -10,6 +10,10 @@ struct SessionToolbar: View {
         FloatingBar {
             cursorMenu
 
+            if model.displays.count > 1 {
+                displayPickerMenu
+            }
+
             #if os(iOS)
             FloatingIconButton(
                 systemImage: "keyboard",
@@ -63,6 +67,33 @@ struct SessionToolbar: View {
         .accessibilityValue(model.cursorMode.title)
     }
 
+    /// Chooses between the host's displays. Only offered when the host reports
+    /// more than one screen.
+    private var displayPickerMenu: some View {
+        Menu {
+            Picker("Display", selection: displayBinding) {
+                Text("All Displays").tag(Int?.none)
+                ForEach(model.displays) { display in
+                    Text("\(display.name) — \(display.resolutionLabel)")
+                        .tag(Optional(display.id))
+                }
+            }
+        } label: {
+            menuIcon("rectangle.on.rectangle", title: "Select display")
+        }
+        .menuIndicator(.hidden)
+        .buttonStyle(.plain)
+        .accessibilityLabel("Select display")
+        .accessibilityValue(selectedDisplayLabel)
+    }
+
+    private var selectedDisplayLabel: String {
+        guard let id = model.selectedDisplayID,
+              let display = model.displays.first(where: { $0.id == id })
+        else { return "All Displays" }
+        return display.name
+    }
+
     private var clipboardMenu: some View {
         Menu {
             Button {
@@ -91,25 +122,6 @@ struct SessionToolbar: View {
 
     private var displayMenu: some View {
         Menu {
-            if !model.displays.isEmpty {
-                Section("Displays") {
-                    ForEach(model.displays) { display in
-                        Button {
-                            model.selectDisplay(id: display.id)
-                        } label: {
-                            if display.id == model.selectedDisplayID {
-                                Label(
-                                    "\(display.name) — \(display.resolutionLabel)",
-                                    systemImage: "checkmark"
-                                )
-                            } else {
-                                Text("\(display.name) — \(display.resolutionLabel)")
-                            }
-                        }
-                    }
-                }
-            }
-
             Section("Scaling") {
                 Picker("Scaling", selection: scalingBinding) {
                     ForEach(RemoteContentMode.allCases) { mode in
@@ -130,6 +142,13 @@ struct SessionToolbar: View {
         Binding(
             get: { model.cursorMode },
             set: { model.setCursorMode($0) }
+        )
+    }
+
+    private var displayBinding: Binding<Int?> {
+        Binding(
+            get: { model.selectedDisplayID },
+            set: { model.selectDisplay($0) }
         )
     }
 

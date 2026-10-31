@@ -684,15 +684,31 @@ internal object IntegrityCheckingUniffiLib {
     internal fun ensureInitialized() = Unit
     external fun uniffi_rfb_ffi_checksum_func_generate_ssh_key(
     ): Int
+    external fun uniffi_rfb_ffi_checksum_func_parse_pasteboard_file_urls(
+    ): Int
+    external fun uniffi_rfb_ffi_checksum_func_parse_transfer_ack(
+    ): Int
+    external fun uniffi_rfb_ffi_checksum_func_parse_transfer_progress(
+    ): Int
     external fun uniffi_rfb_ffi_checksum_func_ssh_key_fingerprint(
     ): Int
     external fun uniffi_rfb_ffi_checksum_func_ssh_public_key(
+    ): Int
+    external fun uniffi_rfb_ffi_checksum_func_transfer_timestamp_1904(
+    ): Int
+    external fun uniffi_rfb_ffi_checksum_method_remotesession_announce_upload(
+    ): Int
+    external fun uniffi_rfb_ffi_checksum_method_remotesession_cancel_transfer(
     ): Int
     external fun uniffi_rfb_ffi_checksum_method_remotesession_copy_region(
     ): Int
     external fun uniffi_rfb_ffi_checksum_method_remotesession_copy_region_scaled(
     ): Int
     external fun uniffi_rfb_ffi_checksum_method_remotesession_next_event(
+    ): Int
+    external fun uniffi_rfb_ffi_checksum_method_remotesession_next_transfer_handle(
+    ): Int
+    external fun uniffi_rfb_ffi_checksum_method_remotesession_request_download(
     ): Int
     external fun uniffi_rfb_ffi_checksum_method_remotesession_request_refresh(
     ): Int
@@ -707,6 +723,18 @@ internal object IntegrityCheckingUniffiLib {
     external fun uniffi_rfb_ffi_checksum_method_remotesession_set_viewport(
     ): Int
     external fun uniffi_rfb_ffi_checksum_method_remotesession_size(
+    ): Int
+    external fun uniffi_rfb_ffi_checksum_method_remotesession_start_drag_out(
+    ): Int
+    external fun uniffi_rfb_ffi_checksum_method_remotesession_upload_complete(
+    ): Int
+    external fun uniffi_rfb_ffi_checksum_method_remotesession_upload_data(
+    ): Int
+    external fun uniffi_rfb_ffi_checksum_method_remotesession_upload_destination(
+    ): Int
+    external fun uniffi_rfb_ffi_checksum_method_remotesession_upload_entry(
+    ): Int
+    external fun uniffi_rfb_ffi_checksum_method_remotesession_upload_summary(
     ): Int
     external fun uniffi_rfb_ffi_checksum_constructor_remotesession_connect(
     ): Int
@@ -736,11 +764,19 @@ internal object UniffiLib {
     ): Unit
     external fun uniffi_rfb_ffi_fn_constructor_remotesession_connect(`config`: RustBuffer.ByValue,
     ): Long
+    external fun uniffi_rfb_ffi_fn_method_remotesession_announce_upload(`ptr`: Long,`handle`: Int,`fileUrls`: RustBuffer.ByValue,
+    ): Long
+    external fun uniffi_rfb_ffi_fn_method_remotesession_cancel_transfer(`ptr`: Long,`handle`: Int,
+    ): Long
     external fun uniffi_rfb_ffi_fn_method_remotesession_copy_region(`ptr`: Long,`rect`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_rfb_ffi_fn_method_remotesession_copy_region_scaled(`ptr`: Long,`rect`: RustBuffer.ByValue,`scale`: Short,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_rfb_ffi_fn_method_remotesession_next_event(`ptr`: Long,
+    ): Long
+    external fun uniffi_rfb_ffi_fn_method_remotesession_next_transfer_handle(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Int
+    external fun uniffi_rfb_ffi_fn_method_remotesession_request_download(`ptr`: Long,`handle`: Int,`path`: RustBuffer.ByValue,
     ): Long
     external fun uniffi_rfb_ffi_fn_method_remotesession_request_refresh(`ptr`: Long,
     ): Long
@@ -756,12 +792,32 @@ internal object UniffiLib {
     ): Long
     external fun uniffi_rfb_ffi_fn_method_remotesession_size(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
+    external fun uniffi_rfb_ffi_fn_method_remotesession_start_drag_out(`ptr`: Long,`handle`: Int,
+    ): Long
+    external fun uniffi_rfb_ffi_fn_method_remotesession_upload_complete(`ptr`: Long,`handle`: Int,
+    ): Long
+    external fun uniffi_rfb_ffi_fn_method_remotesession_upload_data(`ptr`: Long,`handle`: Int,`chunk`: RustBuffer.ByValue,
+    ): Long
+    external fun uniffi_rfb_ffi_fn_method_remotesession_upload_destination(`ptr`: Long,`handle`: Int,`folder`: RustBuffer.ByValue,
+    ): Long
+    external fun uniffi_rfb_ffi_fn_method_remotesession_upload_entry(`ptr`: Long,`handle`: Int,`entry`: RustBuffer.ByValue,
+    ): Long
+    external fun uniffi_rfb_ffi_fn_method_remotesession_upload_summary(`ptr`: Long,`handle`: Int,`totalBytes`: Long,`files`: Int,`directories`: Int,
+    ): Long
     external fun uniffi_rfb_ffi_fn_func_generate_ssh_key(uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_rfb_ffi_fn_func_parse_pasteboard_file_urls(`pasteboard`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_rfb_ffi_fn_func_parse_transfer_ack(`payload`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_rfb_ffi_fn_func_parse_transfer_progress(`payload`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_rfb_ffi_fn_func_ssh_key_fingerprint(`pem`: RustBuffer.ByValue,`passphrase`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_rfb_ffi_fn_func_ssh_public_key(`pem`: RustBuffer.ByValue,`passphrase`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
+    external fun uniffi_rfb_ffi_fn_func_transfer_timestamp_1904(`unixSeconds`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Int
     external fun ffi_rfb_ffi_rustbuffer_alloc(`size`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun ffi_rfb_ffi_rustbuffer_from_bytes(`bytes`: ForeignBytes.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -884,10 +940,28 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if ((lib.uniffi_rfb_ffi_checksum_func_generate_ssh_key() and 0xFFFF) != 30038) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if ((lib.uniffi_rfb_ffi_checksum_func_parse_pasteboard_file_urls() and 0xFFFF) != 55357) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_rfb_ffi_checksum_func_parse_transfer_ack() and 0xFFFF) != 22892) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_rfb_ffi_checksum_func_parse_transfer_progress() and 0xFFFF) != 18679) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if ((lib.uniffi_rfb_ffi_checksum_func_ssh_key_fingerprint() and 0xFFFF) != 18616) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_rfb_ffi_checksum_func_ssh_public_key() and 0xFFFF) != 43167) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_rfb_ffi_checksum_func_transfer_timestamp_1904() and 0xFFFF) != 40683) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_rfb_ffi_checksum_method_remotesession_announce_upload() and 0xFFFF) != 54961) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_rfb_ffi_checksum_method_remotesession_cancel_transfer() and 0xFFFF) != 22553) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_rfb_ffi_checksum_method_remotesession_copy_region() and 0xFFFF) != 60773) {
@@ -897,6 +971,12 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_rfb_ffi_checksum_method_remotesession_next_event() and 0xFFFF) != 40415) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_rfb_ffi_checksum_method_remotesession_next_transfer_handle() and 0xFFFF) != 13031) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_rfb_ffi_checksum_method_remotesession_request_download() and 0xFFFF) != 60308) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_rfb_ffi_checksum_method_remotesession_request_refresh() and 0xFFFF) != 18496) {
@@ -918,6 +998,24 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_rfb_ffi_checksum_method_remotesession_size() and 0xFFFF) != 45230) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_rfb_ffi_checksum_method_remotesession_start_drag_out() and 0xFFFF) != 1458) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_rfb_ffi_checksum_method_remotesession_upload_complete() and 0xFFFF) != 6976) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_rfb_ffi_checksum_method_remotesession_upload_data() and 0xFFFF) != 34089) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_rfb_ffi_checksum_method_remotesession_upload_destination() and 0xFFFF) != 49467) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_rfb_ffi_checksum_method_remotesession_upload_entry() and 0xFFFF) != 10514) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_rfb_ffi_checksum_method_remotesession_upload_summary() and 0xFFFF) != 45751) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_rfb_ffi_checksum_constructor_remotesession_connect() and 0xFFFF) != 42150) {
@@ -1223,6 +1321,29 @@ public object FfiConverterULong: FfiConverter<ULong, Long> {
 /**
  * @suppress
  */
+public object FfiConverterDouble: FfiConverter<Double, Double> {
+    override fun lift(value: Double): Double {
+        return value
+    }
+
+    override fun read(buf: ByteBuffer): Double {
+        return buf.getDouble()
+    }
+
+    override fun lower(value: Double): Double {
+        return value
+    }
+
+    override fun allocationSize(value: Double) = 8UL
+
+    override fun write(value: Double, buf: ByteBuffer) {
+        buf.putDouble(value)
+    }
+}
+
+/**
+ * @suppress
+ */
 public object FfiConverterBoolean: FfiConverter<Boolean, Byte> {
     override fun lift(value: Byte): Boolean {
         return value.toInt() != 0
@@ -1418,6 +1539,14 @@ public object FfiConverterByteArray: FfiConverterRustBuffer<ByteArray> {
 public interface RemoteSessionInterface {
     
     /**
+     * Announces a drag-in with local file URLs and returns once the message is
+     * queued. The server replies with a `SessionEvent::UploadRequest`.
+     */
+    suspend fun `announceUpload`(`handle`: kotlin.UInt, `fileUrls`: List<kotlin.String>)
+    
+    suspend fun `cancelTransfer`(`handle`: kotlin.UInt)
+    
+    /**
      * Returns tightly packed BGRA8888 pixels for one framebuffer region.
      */
     fun `copyRegion`(`rect`: Rect): kotlin.ByteArray?
@@ -1428,6 +1557,10 @@ public interface RemoteSessionInterface {
     fun `copyRegionScaled`(`rect`: Rect, `scale`: kotlin.UShort): kotlin.ByteArray?
     
     suspend fun `nextEvent`(): SessionEvent?
+    
+    fun `nextTransferHandle`(): kotlin.UInt
+    
+    suspend fun `requestDownload`(`handle`: kotlin.UInt, `path`: kotlin.String)
     
     suspend fun `requestRefresh`()
     
@@ -1446,6 +1579,18 @@ public interface RemoteSessionInterface {
     suspend fun `setViewport`(`x`: kotlin.UShort, `y`: kotlin.UShort, `width`: kotlin.UShort, `height`: kotlin.UShort)
     
     fun `size`(): SessionSize?
+    
+    suspend fun `startDragOut`(`handle`: kotlin.UInt)
+    
+    suspend fun `uploadComplete`(`handle`: kotlin.UInt)
+    
+    suspend fun `uploadData`(`handle`: kotlin.UInt, `chunk`: kotlin.ByteArray)
+    
+    suspend fun `uploadDestination`(`handle`: kotlin.UInt, `folder`: kotlin.String)
+    
+    suspend fun `uploadEntry`(`handle`: kotlin.UInt, `entry`: TransferEntry)
+    
+    suspend fun `uploadSummary`(`handle`: kotlin.UInt, `totalBytes`: kotlin.ULong, `files`: kotlin.UInt, `directories`: kotlin.UInt)
     
     companion object
 }
@@ -1553,6 +1698,57 @@ open class RemoteSession: Disposable, AutoCloseable, RemoteSessionInterface
 
     
     /**
+     * Announces a drag-in with local file URLs and returns once the message is
+     * queued. The server replies with a `SessionEvent::UploadRequest`.
+     */
+    @Throws(SessionFailure::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `announceUpload`(`handle`: kotlin.UInt, `fileUrls`: List<kotlin.String>) {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_rfb_ffi_fn_method_remotesession_announce_upload(
+                uniffiHandle,
+                
+        FfiConverterUInt.lower(`handle`),
+        FfiConverterSequenceString.lower(`fileUrls`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_rfb_ffi_rust_future_poll_void(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_rfb_ffi_rust_future_complete_void(future, continuation) },
+        { future -> UniffiLib.ffi_rfb_ffi_rust_future_free_void(future) },
+        // lift function
+        { },
+        
+        // Error FFI converter
+        SessionFailure.ErrorHandler,
+    )
+    }
+
+    
+    @Throws(SessionFailure::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `cancelTransfer`(`handle`: kotlin.UInt) {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_rfb_ffi_fn_method_remotesession_cancel_transfer(
+                uniffiHandle,
+                
+        FfiConverterUInt.lower(`handle`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_rfb_ffi_rust_future_poll_void(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_rfb_ffi_rust_future_complete_void(future, continuation) },
+        { future -> UniffiLib.ffi_rfb_ffi_rust_future_free_void(future) },
+        // lift function
+        { },
+        
+        // Error FFI converter
+        SessionFailure.ErrorHandler,
+    )
+    }
+
+    
+    /**
      * Returns tightly packed BGRA8888 pixels for one framebuffer region.
      */override fun `copyRegion`(`rect`: Rect): kotlin.ByteArray? {
             return FfiConverterOptionalByteArray.lift(
@@ -1603,6 +1799,43 @@ open class RemoteSession: Disposable, AutoCloseable, RemoteSessionInterface
         { FfiConverterOptionalTypeSessionEvent.lift(it) },
         // Error FFI converter
         UniffiNullRustCallStatusErrorHandler,
+    )
+    }
+
+    override fun `nextTransferHandle`(): kotlin.UInt {
+            return FfiConverterUInt.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_rfb_ffi_fn_method_remotesession_next_transfer_handle(
+        it,
+        _status)
+}
+    }
+    )
+    }
+    
+
+    
+    @Throws(SessionFailure::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `requestDownload`(`handle`: kotlin.UInt, `path`: kotlin.String) {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_rfb_ffi_fn_method_remotesession_request_download(
+                uniffiHandle,
+                
+        FfiConverterUInt.lower(`handle`),
+        FfiConverterString.lower(`path`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_rfb_ffi_rust_future_poll_void(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_rfb_ffi_rust_future_complete_void(future, continuation) },
+        { future -> UniffiLib.ffi_rfb_ffi_rust_future_free_void(future) },
+        // lift function
+        { },
+        
+        // Error FFI converter
+        SessionFailure.ErrorHandler,
     )
     }
 
@@ -1755,6 +1988,150 @@ open class RemoteSession: Disposable, AutoCloseable, RemoteSessionInterface
     )
     }
     
+
+    
+    @Throws(SessionFailure::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `startDragOut`(`handle`: kotlin.UInt) {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_rfb_ffi_fn_method_remotesession_start_drag_out(
+                uniffiHandle,
+                
+        FfiConverterUInt.lower(`handle`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_rfb_ffi_rust_future_poll_void(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_rfb_ffi_rust_future_complete_void(future, continuation) },
+        { future -> UniffiLib.ffi_rfb_ffi_rust_future_free_void(future) },
+        // lift function
+        { },
+        
+        // Error FFI converter
+        SessionFailure.ErrorHandler,
+    )
+    }
+
+    
+    @Throws(SessionFailure::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `uploadComplete`(`handle`: kotlin.UInt) {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_rfb_ffi_fn_method_remotesession_upload_complete(
+                uniffiHandle,
+                
+        FfiConverterUInt.lower(`handle`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_rfb_ffi_rust_future_poll_void(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_rfb_ffi_rust_future_complete_void(future, continuation) },
+        { future -> UniffiLib.ffi_rfb_ffi_rust_future_free_void(future) },
+        // lift function
+        { },
+        
+        // Error FFI converter
+        SessionFailure.ErrorHandler,
+    )
+    }
+
+    
+    @Throws(SessionFailure::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `uploadData`(`handle`: kotlin.UInt, `chunk`: kotlin.ByteArray) {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_rfb_ffi_fn_method_remotesession_upload_data(
+                uniffiHandle,
+                
+        FfiConverterUInt.lower(`handle`),
+        FfiConverterByteArray.lower(`chunk`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_rfb_ffi_rust_future_poll_void(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_rfb_ffi_rust_future_complete_void(future, continuation) },
+        { future -> UniffiLib.ffi_rfb_ffi_rust_future_free_void(future) },
+        // lift function
+        { },
+        
+        // Error FFI converter
+        SessionFailure.ErrorHandler,
+    )
+    }
+
+    
+    @Throws(SessionFailure::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `uploadDestination`(`handle`: kotlin.UInt, `folder`: kotlin.String) {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_rfb_ffi_fn_method_remotesession_upload_destination(
+                uniffiHandle,
+                
+        FfiConverterUInt.lower(`handle`),
+        FfiConverterString.lower(`folder`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_rfb_ffi_rust_future_poll_void(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_rfb_ffi_rust_future_complete_void(future, continuation) },
+        { future -> UniffiLib.ffi_rfb_ffi_rust_future_free_void(future) },
+        // lift function
+        { },
+        
+        // Error FFI converter
+        SessionFailure.ErrorHandler,
+    )
+    }
+
+    
+    @Throws(SessionFailure::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `uploadEntry`(`handle`: kotlin.UInt, `entry`: TransferEntry) {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_rfb_ffi_fn_method_remotesession_upload_entry(
+                uniffiHandle,
+                
+        FfiConverterUInt.lower(`handle`),
+        FfiConverterTypeTransferEntry.lower(`entry`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_rfb_ffi_rust_future_poll_void(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_rfb_ffi_rust_future_complete_void(future, continuation) },
+        { future -> UniffiLib.ffi_rfb_ffi_rust_future_free_void(future) },
+        // lift function
+        { },
+        
+        // Error FFI converter
+        SessionFailure.ErrorHandler,
+    )
+    }
+
+    
+    @Throws(SessionFailure::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `uploadSummary`(`handle`: kotlin.UInt, `totalBytes`: kotlin.ULong, `files`: kotlin.UInt, `directories`: kotlin.UInt) {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_rfb_ffi_fn_method_remotesession_upload_summary(
+                uniffiHandle,
+                
+        FfiConverterUInt.lower(`handle`),
+        FfiConverterULong.lower(`totalBytes`),
+        FfiConverterUInt.lower(`files`),
+        FfiConverterUInt.lower(`directories`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_rfb_ffi_rust_future_poll_void(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_rfb_ffi_rust_future_complete_void(future, continuation) },
+        { future -> UniffiLib.ffi_rfb_ffi_rust_future_free_void(future) },
+        // lift function
+        { },
+        
+        // Error FFI converter
+        SessionFailure.ErrorHandler,
+    )
+    }
 
     
 
@@ -2036,6 +2413,94 @@ public object FfiConverterTypeSessionSize: FfiConverterRustBuffer<SessionSize> {
 
 
 
+data class TransferEntry (
+    var `kind`: TransferEntryKind
+    , 
+    var `name`: kotlin.String
+    , 
+    var `dataSize`: kotlin.ULong
+    , 
+    var `resourceSize`: kotlin.ULong
+    , 
+    var `mode`: kotlin.UShort
+    , 
+    var `nesting`: kotlin.UShort
+    , 
+    var `created`: kotlin.UInt
+    , 
+    var `accessed`: kotlin.UInt
+    , 
+    var `changed`: kotlin.UInt
+    , 
+    var `modified`: kotlin.UInt
+    , 
+    var `finderInfo`: kotlin.ByteArray
+    , 
+    var `linkTarget`: kotlin.String?
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeTransferEntry: FfiConverterRustBuffer<TransferEntry> {
+    override fun read(buf: ByteBuffer): TransferEntry {
+        return TransferEntry(
+            FfiConverterTypeTransferEntryKind.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterUShort.read(buf),
+            FfiConverterUShort.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterByteArray.read(buf),
+            FfiConverterOptionalString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: TransferEntry) = (
+            FfiConverterTypeTransferEntryKind.allocationSize(value.`kind`) +
+            FfiConverterString.allocationSize(value.`name`) +
+            FfiConverterULong.allocationSize(value.`dataSize`) +
+            FfiConverterULong.allocationSize(value.`resourceSize`) +
+            FfiConverterUShort.allocationSize(value.`mode`) +
+            FfiConverterUShort.allocationSize(value.`nesting`) +
+            FfiConverterUInt.allocationSize(value.`created`) +
+            FfiConverterUInt.allocationSize(value.`accessed`) +
+            FfiConverterUInt.allocationSize(value.`changed`) +
+            FfiConverterUInt.allocationSize(value.`modified`) +
+            FfiConverterByteArray.allocationSize(value.`finderInfo`) +
+            FfiConverterOptionalString.allocationSize(value.`linkTarget`)
+    )
+
+    override fun write(value: TransferEntry, buf: ByteBuffer) {
+            FfiConverterTypeTransferEntryKind.write(value.`kind`, buf)
+            FfiConverterString.write(value.`name`, buf)
+            FfiConverterULong.write(value.`dataSize`, buf)
+            FfiConverterULong.write(value.`resourceSize`, buf)
+            FfiConverterUShort.write(value.`mode`, buf)
+            FfiConverterUShort.write(value.`nesting`, buf)
+            FfiConverterUInt.write(value.`created`, buf)
+            FfiConverterUInt.write(value.`accessed`, buf)
+            FfiConverterUInt.write(value.`changed`, buf)
+            FfiConverterUInt.write(value.`modified`, buf)
+            FfiConverterByteArray.write(value.`finderInfo`, buf)
+            FfiConverterOptionalString.write(value.`linkTarget`, buf)
+    }
+}
+
+
+
 sealed class SessionEvent {
     
     data class Connected(
@@ -2104,6 +2569,37 @@ sealed class SessionEvent {
         companion object
     }
     
+    data class UploadRequest(
+        val `handle`: kotlin.UInt, 
+        val `path`: kotlin.String) : SessionEvent()
+        
+    {
+        
+
+        companion object
+    }
+    
+    data class DragInfo(
+        val `handle`: kotlin.UInt, 
+        val `pasteboard`: kotlin.ByteArray) : SessionEvent()
+        
+    {
+        
+
+        companion object
+    }
+    
+    data class FileTransfer(
+        val `subtype`: kotlin.UShort, 
+        val `handle`: kotlin.UInt, 
+        val `payload`: kotlin.ByteArray) : SessionEvent()
+        
+    {
+        
+
+        companion object
+    }
+    
     data class Disconnected(
         val `reason`: kotlin.String) : SessionEvent()
         
@@ -2157,7 +2653,20 @@ public object FfiConverterTypeSessionEvent : FfiConverterRustBuffer<SessionEvent
                 FfiConverterUShort.read(buf),
                 FfiConverterUShort.read(buf),
                 )
-            8 -> SessionEvent.Disconnected(
+            8 -> SessionEvent.UploadRequest(
+                FfiConverterUInt.read(buf),
+                FfiConverterString.read(buf),
+                )
+            9 -> SessionEvent.DragInfo(
+                FfiConverterUInt.read(buf),
+                FfiConverterByteArray.read(buf),
+                )
+            10 -> SessionEvent.FileTransfer(
+                FfiConverterUShort.read(buf),
+                FfiConverterUInt.read(buf),
+                FfiConverterByteArray.read(buf),
+                )
+            11 -> SessionEvent.Disconnected(
                 FfiConverterString.read(buf),
                 )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
@@ -2222,6 +2731,31 @@ public object FfiConverterTypeSessionEvent : FfiConverterRustBuffer<SessionEvent
                 + FfiConverterUShort.allocationSize(value.`y`)
             )
         }
+        is SessionEvent.UploadRequest -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterUInt.allocationSize(value.`handle`)
+                + FfiConverterString.allocationSize(value.`path`)
+            )
+        }
+        is SessionEvent.DragInfo -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterUInt.allocationSize(value.`handle`)
+                + FfiConverterByteArray.allocationSize(value.`pasteboard`)
+            )
+        }
+        is SessionEvent.FileTransfer -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterUShort.allocationSize(value.`subtype`)
+                + FfiConverterUInt.allocationSize(value.`handle`)
+                + FfiConverterByteArray.allocationSize(value.`payload`)
+            )
+        }
         is SessionEvent.Disconnected -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
@@ -2276,8 +2810,27 @@ public object FfiConverterTypeSessionEvent : FfiConverterRustBuffer<SessionEvent
                 FfiConverterUShort.write(value.`y`, buf)
                 Unit
             }
-            is SessionEvent.Disconnected -> {
+            is SessionEvent.UploadRequest -> {
                 buf.putInt(8)
+                FfiConverterUInt.write(value.`handle`, buf)
+                FfiConverterString.write(value.`path`, buf)
+                Unit
+            }
+            is SessionEvent.DragInfo -> {
+                buf.putInt(9)
+                FfiConverterUInt.write(value.`handle`, buf)
+                FfiConverterByteArray.write(value.`pasteboard`, buf)
+                Unit
+            }
+            is SessionEvent.FileTransfer -> {
+                buf.putInt(10)
+                FfiConverterUShort.write(value.`subtype`, buf)
+                FfiConverterUInt.write(value.`handle`, buf)
+                FfiConverterByteArray.write(value.`payload`, buf)
+                Unit
+            }
+            is SessionEvent.Disconnected -> {
+                buf.putInt(11)
                 FfiConverterString.write(value.`reason`, buf)
                 Unit
             }
@@ -2428,6 +2981,124 @@ public object FfiConverterTypeSshAuthConfig : FfiConverterRustBuffer<SshAuthConf
                 buf.putInt(2)
                 FfiConverterString.write(value.`pem`, buf)
                 FfiConverterOptionalString.write(value.`passphrase`, buf)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
+
+
+
+
+enum class TransferEntryKind {
+    
+    FILE,
+    DIRECTORY,
+    SYMLINK;
+
+    
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeTransferEntryKind: FfiConverterRustBuffer<TransferEntryKind> {
+    override fun read(buf: ByteBuffer) = try {
+        TransferEntryKind.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: TransferEntryKind) = 4UL
+
+    override fun write(value: TransferEntryKind, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+sealed class TransferProgress {
+    
+    data class Ratio(
+        val `value`: kotlin.Double) : TransferProgress()
+        
+    {
+        
+
+        companion object
+    }
+    
+    data class Name(
+        val `name`: kotlin.String) : TransferProgress()
+        
+    {
+        
+
+        companion object
+    }
+    
+
+    
+
+    
+    
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeTransferProgress : FfiConverterRustBuffer<TransferProgress>{
+    override fun read(buf: ByteBuffer): TransferProgress {
+        return when(buf.getInt()) {
+            1 -> TransferProgress.Ratio(
+                FfiConverterDouble.read(buf),
+                )
+            2 -> TransferProgress.Name(
+                FfiConverterString.read(buf),
+                )
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: TransferProgress): ULong = when(value) {
+        is TransferProgress.Ratio -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterDouble.allocationSize(value.`value`)
+            )
+        }
+        is TransferProgress.Name -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterString.allocationSize(value.`name`)
+            )
+        }
+    }
+
+    override fun write(value: TransferProgress, buf: ByteBuffer) {
+        when(value) {
+            is TransferProgress.Ratio -> {
+                buf.putInt(1)
+                FfiConverterDouble.write(value.`value`, buf)
+                Unit
+            }
+            is TransferProgress.Name -> {
+                buf.putInt(2)
+                FfiConverterString.write(value.`name`, buf)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -2634,6 +3305,66 @@ public object FfiConverterOptionalTypeSshAuthConfig: FfiConverterRustBuffer<SshA
 /**
  * @suppress
  */
+public object FfiConverterOptionalTypeTransferProgress: FfiConverterRustBuffer<TransferProgress?> {
+    override fun read(buf: ByteBuffer): TransferProgress? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeTransferProgress.read(buf)
+    }
+
+    override fun allocationSize(value: TransferProgress?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeTransferProgress.allocationSize(value)
+        }
+    }
+
+    override fun write(value: TransferProgress?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeTransferProgress.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceString: FfiConverterRustBuffer<List<kotlin.String>> {
+    override fun read(buf: ByteBuffer): List<kotlin.String> {
+        val len = buf.getInt()
+        return List<kotlin.String>(len) {
+            FfiConverterString.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<kotlin.String>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterString.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<kotlin.String>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterString.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
 public object FfiConverterSequenceTypeRect: FfiConverterRustBuffer<List<Rect>> {
     override fun read(buf: ByteBuffer): List<Rect> {
         val len = buf.getInt()
@@ -2676,6 +3407,39 @@ public object FfiConverterSequenceTypeRect: FfiConverterRustBuffer<List<Rect>> {
     )
     }
     
+ fun `parsePasteboardFileUrls`(`pasteboard`: kotlin.ByteArray): List<kotlin.String> {
+            return FfiConverterSequenceString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_rfb_ffi_fn_func_parse_pasteboard_file_urls(
+    
+        
+        FfiConverterByteArray.lower(`pasteboard`),_status)
+}
+    )
+    }
+    
+ fun `parseTransferAck`(`payload`: kotlin.ByteArray): kotlin.String? {
+            return FfiConverterOptionalString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_rfb_ffi_fn_func_parse_transfer_ack(
+    
+        
+        FfiConverterByteArray.lower(`payload`),_status)
+}
+    )
+    }
+    
+ fun `parseTransferProgress`(`payload`: kotlin.ByteArray): TransferProgress? {
+            return FfiConverterOptionalTypeTransferProgress.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_rfb_ffi_fn_func_parse_transfer_progress(
+    
+        
+        FfiConverterByteArray.lower(`payload`),_status)
+}
+    )
+    }
+    
 
         /**
          * Returns the SHA-256 fingerprint of a private key in OpenSSH or PEM format.
@@ -2704,6 +3468,17 @@ public object FfiConverterSequenceTypeRect: FfiConverterRustBuffer<List<Rect>> {
         
         FfiConverterString.lower(`pem`),
         FfiConverterOptionalString.lower(`passphrase`),_status)
+}
+    )
+    }
+    
+ fun `transferTimestamp1904`(`unixSeconds`: kotlin.ULong): kotlin.UInt {
+            return FfiConverterUInt.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_rfb_ffi_fn_func_transfer_timestamp_1904(
+    
+        
+        FfiConverterULong.lower(`unixSeconds`),_status)
 }
     )
     }

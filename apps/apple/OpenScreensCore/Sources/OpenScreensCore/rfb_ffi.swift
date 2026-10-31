@@ -529,6 +529,22 @@ fileprivate struct FfiConverterUInt64: FfiConverterPrimitive {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterDouble: FfiConverterPrimitive {
+    typealias FfiType = Double
+    typealias SwiftType = Double
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Double {
+        return try lift(readDouble(&buf))
+    }
+
+    public static func write(_ value: Double, into buf: inout [UInt8]) {
+        writeDouble(&buf, lower(value))
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterBool : FfiConverter {
     typealias FfiType = Int8
     typealias SwiftType = Bool
@@ -620,6 +636,14 @@ fileprivate struct FfiConverterData: FfiConverterRustBuffer {
 public protocol RemoteSessionProtocol: AnyObject, Sendable {
     
     /**
+     * Announces a drag-in with local file URLs and returns once the message is
+     * queued. The server replies with a `SessionEvent::UploadRequest`.
+     */
+    func announceUpload(handle: UInt32, fileUrls: [String]) async throws 
+    
+    func cancelTransfer(handle: UInt32) async throws 
+    
+    /**
      * Returns tightly packed BGRA8888 pixels for one framebuffer region.
      */
     func copyRegion(rect: Rect)  -> Data?
@@ -630,6 +654,10 @@ public protocol RemoteSessionProtocol: AnyObject, Sendable {
     func copyRegionScaled(rect: Rect, scale: UInt16)  -> Data?
     
     func nextEvent() async  -> SessionEvent?
+    
+    func nextTransferHandle()  -> UInt32
+    
+    func requestDownload(handle: UInt32, path: String) async throws 
     
     func requestRefresh() async throws 
     
@@ -648,6 +676,18 @@ public protocol RemoteSessionProtocol: AnyObject, Sendable {
     func setViewport(x: UInt16, y: UInt16, width: UInt16, height: UInt16) async throws 
     
     func size()  -> SessionSize?
+    
+    func startDragOut(handle: UInt32) async throws 
+    
+    func uploadComplete(handle: UInt32) async throws 
+    
+    func uploadData(handle: UInt32, chunk: Data) async throws 
+    
+    func uploadDestination(handle: UInt32, folder: String) async throws 
+    
+    func uploadEntry(handle: UInt32, entry: TransferEntry) async throws 
+    
+    func uploadSummary(handle: UInt32, totalBytes: UInt64, files: UInt32, directories: UInt32) async throws 
     
 }
 open class RemoteSession: RemoteSessionProtocol, @unchecked Sendable {
@@ -719,6 +759,42 @@ public static func connect(config: SessionConfig)async throws  -> RemoteSession 
 
     
     /**
+     * Announces a drag-in with local file URLs and returns once the message is
+     * queued. The server replies with a `SessionEvent::UploadRequest`.
+     */
+open func announceUpload(handle: UInt32, fileUrls: [String])async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_rfb_ffi_fn_method_remotesession_announce_upload(
+                        self.uniffiCloneHandle(),FfiConverterUInt32.lower(handle),FfiConverterSequenceString.lower(fileUrls)
+                )
+            },
+            pollFunc: ffi_rfb_ffi_rust_future_poll_void,
+            completeFunc: ffi_rfb_ffi_rust_future_complete_void,
+            freeFunc: ffi_rfb_ffi_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeSessionFailure_lift
+        )
+}
+    
+open func cancelTransfer(handle: UInt32)async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_rfb_ffi_fn_method_remotesession_cancel_transfer(
+                        self.uniffiCloneHandle(),FfiConverterUInt32.lower(handle)
+                )
+            },
+            pollFunc: ffi_rfb_ffi_rust_future_poll_void,
+            completeFunc: ffi_rfb_ffi_rust_future_complete_void,
+            freeFunc: ffi_rfb_ffi_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeSessionFailure_lift
+        )
+}
+    
+    /**
      * Returns tightly packed BGRA8888 pixels for one framebuffer region.
      */
 open func copyRegion(rect: Rect) -> Data?  {
@@ -759,6 +835,31 @@ open func nextEvent()async  -> SessionEvent?  {
             liftFunc: FfiConverterOptionTypeSessionEvent.lift,
             errorHandler: nil
             
+        )
+}
+    
+open func nextTransferHandle() -> UInt32  {
+    return try!  FfiConverterUInt32.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_rfb_ffi_fn_method_remotesession_next_transfer_handle(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+open func requestDownload(handle: UInt32, path: String)async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_rfb_ffi_fn_method_remotesession_request_download(
+                        self.uniffiCloneHandle(),FfiConverterUInt32.lower(handle),FfiConverterString.lower(path)
+                )
+            },
+            pollFunc: ffi_rfb_ffi_rust_future_poll_void,
+            completeFunc: ffi_rfb_ffi_rust_future_complete_void,
+            freeFunc: ffi_rfb_ffi_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeSessionFailure_lift
         )
 }
     
@@ -862,6 +963,102 @@ open func size() -> SessionSize?  {
             self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
+}
+    
+open func startDragOut(handle: UInt32)async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_rfb_ffi_fn_method_remotesession_start_drag_out(
+                        self.uniffiCloneHandle(),FfiConverterUInt32.lower(handle)
+                )
+            },
+            pollFunc: ffi_rfb_ffi_rust_future_poll_void,
+            completeFunc: ffi_rfb_ffi_rust_future_complete_void,
+            freeFunc: ffi_rfb_ffi_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeSessionFailure_lift
+        )
+}
+    
+open func uploadComplete(handle: UInt32)async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_rfb_ffi_fn_method_remotesession_upload_complete(
+                        self.uniffiCloneHandle(),FfiConverterUInt32.lower(handle)
+                )
+            },
+            pollFunc: ffi_rfb_ffi_rust_future_poll_void,
+            completeFunc: ffi_rfb_ffi_rust_future_complete_void,
+            freeFunc: ffi_rfb_ffi_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeSessionFailure_lift
+        )
+}
+    
+open func uploadData(handle: UInt32, chunk: Data)async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_rfb_ffi_fn_method_remotesession_upload_data(
+                        self.uniffiCloneHandle(),FfiConverterUInt32.lower(handle),FfiConverterData.lower(chunk)
+                )
+            },
+            pollFunc: ffi_rfb_ffi_rust_future_poll_void,
+            completeFunc: ffi_rfb_ffi_rust_future_complete_void,
+            freeFunc: ffi_rfb_ffi_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeSessionFailure_lift
+        )
+}
+    
+open func uploadDestination(handle: UInt32, folder: String)async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_rfb_ffi_fn_method_remotesession_upload_destination(
+                        self.uniffiCloneHandle(),FfiConverterUInt32.lower(handle),FfiConverterString.lower(folder)
+                )
+            },
+            pollFunc: ffi_rfb_ffi_rust_future_poll_void,
+            completeFunc: ffi_rfb_ffi_rust_future_complete_void,
+            freeFunc: ffi_rfb_ffi_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeSessionFailure_lift
+        )
+}
+    
+open func uploadEntry(handle: UInt32, entry: TransferEntry)async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_rfb_ffi_fn_method_remotesession_upload_entry(
+                        self.uniffiCloneHandle(),FfiConverterUInt32.lower(handle),FfiConverterTypeTransferEntry_lower(entry)
+                )
+            },
+            pollFunc: ffi_rfb_ffi_rust_future_poll_void,
+            completeFunc: ffi_rfb_ffi_rust_future_complete_void,
+            freeFunc: ffi_rfb_ffi_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeSessionFailure_lift
+        )
+}
+    
+open func uploadSummary(handle: UInt32, totalBytes: UInt64, files: UInt32, directories: UInt32)async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_rfb_ffi_fn_method_remotesession_upload_summary(
+                        self.uniffiCloneHandle(),FfiConverterUInt32.lower(handle),FfiConverterUInt64.lower(totalBytes),FfiConverterUInt32.lower(files),FfiConverterUInt32.lower(directories)
+                )
+            },
+            pollFunc: ffi_rfb_ffi_rust_future_poll_void,
+            completeFunc: ffi_rfb_ffi_rust_future_complete_void,
+            freeFunc: ffi_rfb_ffi_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeSessionFailure_lift
+        )
 }
     
 
@@ -1187,6 +1384,100 @@ public func FfiConverterTypeSessionSize_lower(_ value: SessionSize) -> RustBuffe
 }
 
 
+public struct TransferEntry: Equatable, Hashable {
+    public var kind: TransferEntryKind
+    public var name: String
+    public var dataSize: UInt64
+    public var resourceSize: UInt64
+    public var mode: UInt16
+    public var nesting: UInt16
+    public var created: UInt32
+    public var accessed: UInt32
+    public var changed: UInt32
+    public var modified: UInt32
+    public var finderInfo: Data
+    public var linkTarget: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(kind: TransferEntryKind, name: String, dataSize: UInt64, resourceSize: UInt64, mode: UInt16, nesting: UInt16, created: UInt32, accessed: UInt32, changed: UInt32, modified: UInt32, finderInfo: Data, linkTarget: String?) {
+        self.kind = kind
+        self.name = name
+        self.dataSize = dataSize
+        self.resourceSize = resourceSize
+        self.mode = mode
+        self.nesting = nesting
+        self.created = created
+        self.accessed = accessed
+        self.changed = changed
+        self.modified = modified
+        self.finderInfo = finderInfo
+        self.linkTarget = linkTarget
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension TransferEntry: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeTransferEntry: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TransferEntry {
+        return
+            try TransferEntry(
+                kind: FfiConverterTypeTransferEntryKind.read(from: &buf), 
+                name: FfiConverterString.read(from: &buf), 
+                dataSize: FfiConverterUInt64.read(from: &buf), 
+                resourceSize: FfiConverterUInt64.read(from: &buf), 
+                mode: FfiConverterUInt16.read(from: &buf), 
+                nesting: FfiConverterUInt16.read(from: &buf), 
+                created: FfiConverterUInt32.read(from: &buf), 
+                accessed: FfiConverterUInt32.read(from: &buf), 
+                changed: FfiConverterUInt32.read(from: &buf), 
+                modified: FfiConverterUInt32.read(from: &buf), 
+                finderInfo: FfiConverterData.read(from: &buf), 
+                linkTarget: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: TransferEntry, into buf: inout [UInt8]) {
+        FfiConverterTypeTransferEntryKind.write(value.kind, into: &buf)
+        FfiConverterString.write(value.name, into: &buf)
+        FfiConverterUInt64.write(value.dataSize, into: &buf)
+        FfiConverterUInt64.write(value.resourceSize, into: &buf)
+        FfiConverterUInt16.write(value.mode, into: &buf)
+        FfiConverterUInt16.write(value.nesting, into: &buf)
+        FfiConverterUInt32.write(value.created, into: &buf)
+        FfiConverterUInt32.write(value.accessed, into: &buf)
+        FfiConverterUInt32.write(value.changed, into: &buf)
+        FfiConverterUInt32.write(value.modified, into: &buf)
+        FfiConverterData.write(value.finderInfo, into: &buf)
+        FfiConverterOptionString.write(value.linkTarget, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTransferEntry_lift(_ buf: RustBuffer) throws -> TransferEntry {
+    return try FfiConverterTypeTransferEntry.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTransferEntry_lower(_ value: TransferEntry) -> RustBuffer {
+    return FfiConverterTypeTransferEntry.lower(value)
+}
+
+
 
 public enum SessionEvent: Equatable, Hashable {
     
@@ -1202,6 +1493,12 @@ public enum SessionEvent: Equatable, Hashable {
     case cursor(hotspotX: UInt16, hotspotY: UInt16, width: UInt16, height: UInt16, pixels: Data
     )
     case pointerPosition(x: UInt16, y: UInt16
+    )
+    case uploadRequest(handle: UInt32, path: String
+    )
+    case dragInfo(handle: UInt32, pasteboard: Data
+    )
+    case fileTransfer(subtype: UInt16, handle: UInt32, payload: Data
     )
     case disconnected(reason: String
     )
@@ -1246,7 +1543,16 @@ public struct FfiConverterTypeSessionEvent: FfiConverterRustBuffer {
         case 7: return .pointerPosition(x: try FfiConverterUInt16.read(from: &buf), y: try FfiConverterUInt16.read(from: &buf)
         )
         
-        case 8: return .disconnected(reason: try FfiConverterString.read(from: &buf)
+        case 8: return .uploadRequest(handle: try FfiConverterUInt32.read(from: &buf), path: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 9: return .dragInfo(handle: try FfiConverterUInt32.read(from: &buf), pasteboard: try FfiConverterData.read(from: &buf)
+        )
+        
+        case 10: return .fileTransfer(subtype: try FfiConverterUInt16.read(from: &buf), handle: try FfiConverterUInt32.read(from: &buf), payload: try FfiConverterData.read(from: &buf)
+        )
+        
+        case 11: return .disconnected(reason: try FfiConverterString.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -1300,8 +1606,27 @@ public struct FfiConverterTypeSessionEvent: FfiConverterRustBuffer {
             FfiConverterUInt16.write(y, into: &buf)
             
         
-        case let .disconnected(reason):
+        case let .uploadRequest(handle,path):
             writeInt(&buf, Int32(8))
+            FfiConverterUInt32.write(handle, into: &buf)
+            FfiConverterString.write(path, into: &buf)
+            
+        
+        case let .dragInfo(handle,pasteboard):
+            writeInt(&buf, Int32(9))
+            FfiConverterUInt32.write(handle, into: &buf)
+            FfiConverterData.write(pasteboard, into: &buf)
+            
+        
+        case let .fileTransfer(subtype,handle,payload):
+            writeInt(&buf, Int32(10))
+            FfiConverterUInt16.write(subtype, into: &buf)
+            FfiConverterUInt32.write(handle, into: &buf)
+            FfiConverterData.write(payload, into: &buf)
+            
+        
+        case let .disconnected(reason):
+            writeInt(&buf, Int32(11))
             FfiConverterString.write(reason, into: &buf)
             
         }
@@ -1472,6 +1797,151 @@ public func FfiConverterTypeSshAuthConfig_lower(_ value: SshAuthConfig) -> RustB
 }
 
 
+
+
+public enum TransferEntryKind: Equatable, Hashable {
+    
+    case file
+    case directory
+    case symlink
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension TransferEntryKind: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeTransferEntryKind: FfiConverterRustBuffer {
+    typealias SwiftType = TransferEntryKind
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TransferEntryKind {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .file
+        
+        case 2: return .directory
+        
+        case 3: return .symlink
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: TransferEntryKind, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .file:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .directory:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .symlink:
+            writeInt(&buf, Int32(3))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTransferEntryKind_lift(_ buf: RustBuffer) throws -> TransferEntryKind {
+    return try FfiConverterTypeTransferEntryKind.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTransferEntryKind_lower(_ value: TransferEntryKind) -> RustBuffer {
+    return FfiConverterTypeTransferEntryKind.lower(value)
+}
+
+
+
+
+public enum TransferProgress: Equatable, Hashable {
+    
+    case ratio(value: Double
+    )
+    case name(name: String
+    )
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension TransferProgress: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeTransferProgress: FfiConverterRustBuffer {
+    typealias SwiftType = TransferProgress
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TransferProgress {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .ratio(value: try FfiConverterDouble.read(from: &buf)
+        )
+        
+        case 2: return .name(name: try FfiConverterString.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: TransferProgress, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .ratio(value):
+            writeInt(&buf, Int32(1))
+            FfiConverterDouble.write(value, into: &buf)
+            
+        
+        case let .name(name):
+            writeInt(&buf, Int32(2))
+            FfiConverterString.write(name, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTransferProgress_lift(_ buf: RustBuffer) throws -> TransferProgress {
+    return try FfiConverterTypeTransferProgress.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTransferProgress_lower(_ value: TransferProgress) -> RustBuffer {
+    return FfiConverterTypeTransferProgress.lower(value)
+}
+
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -1619,6 +2089,55 @@ fileprivate struct FfiConverterOptionTypeSshAuthConfig: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeTransferProgress: FfiConverterRustBuffer {
+    typealias SwiftType = TransferProgress?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeTransferProgress.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeTransferProgress.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceString: FfiConverterRustBuffer {
+    typealias SwiftType = [String]
+
+    public static func write(_ value: [String], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterString.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [String] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [String]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterString.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeRect: FfiConverterRustBuffer {
     typealias SwiftType = [Rect]
 
@@ -1698,6 +2217,30 @@ public func generateSshKey()throws  -> GeneratedSshKey  {
     )
 })
 }
+public func parsePasteboardFileUrls(pasteboard: Data) -> [String]  {
+    return try!  FfiConverterSequenceString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_rfb_ffi_fn_func_parse_pasteboard_file_urls(
+        FfiConverterData.lower(pasteboard),uniffiCallStatus
+    )
+})
+}
+public func parseTransferAck(payload: Data) -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_rfb_ffi_fn_func_parse_transfer_ack(
+        FfiConverterData.lower(payload),uniffiCallStatus
+    )
+})
+}
+public func parseTransferProgress(payload: Data) -> TransferProgress?  {
+    return try!  FfiConverterOptionTypeTransferProgress.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_rfb_ffi_fn_func_parse_transfer_progress(
+        FfiConverterData.lower(payload),uniffiCallStatus
+    )
+})
+}
 /**
  * Returns the SHA-256 fingerprint of a private key in OpenSSH or PEM format.
  */
@@ -1722,6 +2265,14 @@ public func sshPublicKey(pem: String, passphrase: String?)throws  -> String  {
     )
 })
 }
+public func transferTimestamp1904(unixSeconds: UInt64) -> UInt32  {
+    return try!  FfiConverterUInt32.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_rfb_ffi_fn_func_transfer_timestamp_1904(
+        FfiConverterUInt64.lower(unixSeconds),uniffiCallStatus
+    )
+})
+}
 
 private enum InitializationResult {
     case ok
@@ -1741,10 +2292,28 @@ private let initializationResult: InitializationResult = {
     if (uniffi_rfb_ffi_checksum_func_generate_ssh_key() != 30038) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_rfb_ffi_checksum_func_parse_pasteboard_file_urls() != 55357) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_rfb_ffi_checksum_func_parse_transfer_ack() != 22892) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_rfb_ffi_checksum_func_parse_transfer_progress() != 18679) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_rfb_ffi_checksum_func_ssh_key_fingerprint() != 18616) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_rfb_ffi_checksum_func_ssh_public_key() != 43167) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_rfb_ffi_checksum_func_transfer_timestamp_1904() != 40683) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_rfb_ffi_checksum_method_remotesession_announce_upload() != 54961) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_rfb_ffi_checksum_method_remotesession_cancel_transfer() != 22553) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_rfb_ffi_checksum_method_remotesession_copy_region() != 60773) {
@@ -1754,6 +2323,12 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_rfb_ffi_checksum_method_remotesession_next_event() != 40415) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_rfb_ffi_checksum_method_remotesession_next_transfer_handle() != 13031) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_rfb_ffi_checksum_method_remotesession_request_download() != 60308) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_rfb_ffi_checksum_method_remotesession_request_refresh() != 18496) {
@@ -1775,6 +2350,24 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_rfb_ffi_checksum_method_remotesession_size() != 45230) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_rfb_ffi_checksum_method_remotesession_start_drag_out() != 1458) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_rfb_ffi_checksum_method_remotesession_upload_complete() != 6976) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_rfb_ffi_checksum_method_remotesession_upload_data() != 34089) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_rfb_ffi_checksum_method_remotesession_upload_destination() != 49467) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_rfb_ffi_checksum_method_remotesession_upload_entry() != 10514) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_rfb_ffi_checksum_method_remotesession_upload_summary() != 45751) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_rfb_ffi_checksum_constructor_remotesession_connect() != 42150) {

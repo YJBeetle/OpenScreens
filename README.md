@@ -9,13 +9,13 @@ Implemented:
 - RFB 3.3/3.7/3.8 client with VNC password and Apple DH authentication (macOS Screen Sharing)
 - Raw, CopyRect, RRE, Hextile, ZRLE, zlib and Tight/JPEG decoding into a BGRA framebuffer
 - Client-side cursor rendering on macOS (hover-driven pointer) and Android (Cursor and PointerPos pseudo-encodings); iOS keeps the server-composited cursor
-- Per-connection Tight JPEG quality selection (the Android quality menu) and paced framebuffer update requests
+- Per-connection Tight JPEG quality selection (the Android quality menu), paced update requests, and automatic quality adaptation under slow or congested links
 - The Android client requests only the visible framebuffer region and samples it at the on-screen pixel density, so 6K Retina hosts stay sharp when zoomed and within the app heap; Apple clients sample wide framebuffers to a 2560-pixel target to keep texture and memory use bounded
 - TCP and SSH (`direct-tcpip`) transports; SSH jump hosts with password or private-key auth. Android has an encrypted key manager, macOS selects keys directly from `~/.ssh`, and iOS imports private keys into the Keychain (Settings → SSH Keys)
 - Native SwiftUI apps for macOS and iOS/iPadOS with a Metal canvas
 - Compose Material 3 app for Android
 
-Not yet implemented: Apple Adaptive DCT, automatic quality adaptation, multi-display selection, file transfer, WireGuard/OpenVPN.
+Not yet implemented: Apple Adaptive DCT, multi-display selection, file transfer, WireGuard/OpenVPN.
 
 ## Layout
 

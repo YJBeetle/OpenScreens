@@ -2,7 +2,10 @@
 
 use std::fmt;
 use std::io;
+use std::pin::Pin;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
+use std::task::{Context, Poll};
 
 use bytes::{Buf, BytesMut};
 use rfb_codec::{CursorShape, DecodeError, Decoder, Framebuffer, Rect};
@@ -13,12 +16,13 @@ use rfb_proto::messages::{
     set_pixel_format,
 };
 use rfb_proto::pixel_format::PixelFormat;
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf};
 use tokio::sync::Mutex as AsyncMutex;
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 
 use crate::handshake::{self, ClientConfig, HandshakeError};
+use crate::quality::AdaptiveQuality;
 
 const EVENT_CHANNEL_CAPACITY: usize = 32;
 const COMMAND_CHANNEL_CAPACITY: usize = 64;
@@ -257,6 +261,7 @@ impl Session {
         let viewport = Arc::new(Mutex::new(None));
 
         let (read_half, write_half) = tokio::io::split(stream);
+        let bytes_read = Arc::new(AtomicU64::new(0));
         let (command_tx, command_rx) = mpsc::channel(COMMAND_CHANNEL_CAPACITY);
         let (event_tx, event_rx) = mpsc::channel(EVENT_CHANNEL_CAPACITY);
 
@@ -275,7 +280,10 @@ impl Session {
             .map_err(|_| SessionError::Closed)?;
 
         let reader = tokio::spawn(reader_task(
-            read_half,
+            CountingReader {
+                inner: read_half,
+                counter: bytes_read.clone(),
+            },
             command_tx.clone(),
             framebuffer.clone(),
             event_tx.clone(),
@@ -284,6 +292,9 @@ impl Session {
             name.clone(),
             std::time::Duration::from_millis(u64::from(config.frame_interval_ms)),
             viewport.clone(),
+            config.local_cursor,
+            config.quality,
+            bytes_read.clone(),
         ));
 
         Ok(Self {
@@ -395,6 +406,28 @@ where
     let _ = write.shutdown().await;
 }
 
+struct CountingReader<R> {
+    inner: R,
+    counter: Arc<AtomicU64>,
+}
+
+impl<R: AsyncRead + Unpin> AsyncRead for CountingReader<R> {
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut ReadBuf<'_>,
+    ) -> Poll<io::Result<()>> {
+        let this = self.as_mut().get_mut();
+        let before = buf.filled().len();
+        let result = Pin::new(&mut this.inner).poll_read(cx, buf);
+        if let Poll::Ready(Ok(())) = &result {
+            let read = buf.filled().len().saturating_sub(before);
+            this.counter.fetch_add(read as u64, Ordering::Relaxed);
+        }
+        result
+    }
+}
+
 struct ReaderState {
     buffer: BytesMut,
     decoder: Decoder,
@@ -413,6 +446,9 @@ async fn reader_task<R>(
     name: String,
     frame_interval: std::time::Duration,
     viewport: Arc<Mutex<Option<Rect>>>,
+    local_cursor: bool,
+    quality: u8,
+    bytes_read: Arc<AtomicU64>,
 ) where
     R: AsyncRead + Unpin,
 {
@@ -436,11 +472,26 @@ async fn reader_task<R>(
     };
     let mut sequence = 0u64;
     let mut last_request: Option<std::time::Instant> = None;
+    let mut adaptive = AdaptiveQuality::new(quality, std::time::Instant::now());
+    let mut last_bytes = bytes_read.load(Ordering::Relaxed);
 
     loop {
         match read_message(&mut read, &mut state, &events, &mut sequence).await {
             Ok(needs_request) => {
                 if needs_request {
+                    let now = std::time::Instant::now();
+                    let total_bytes = bytes_read.load(Ordering::Relaxed);
+                    let update_bytes = total_bytes.saturating_sub(last_bytes);
+                    last_bytes = total_bytes;
+                    if let Some(level) = adaptive.observe(now, update_bytes) {
+                        if commands
+                            .send(set_encodings(&encodings(local_cursor, level)))
+                            .await
+                            .is_err()
+                        {
+                            break;
+                        }
+                    }
                     if !frame_interval.is_zero() {
                         if let Some(last) = last_request {
                             let elapsed = last.elapsed();

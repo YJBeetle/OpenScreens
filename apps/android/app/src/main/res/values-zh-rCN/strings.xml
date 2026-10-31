@@ -92,6 +92,7 @@
     <string name="session_status_connected">已连接</string>
     <string name="session_status_disconnected">已断开</string>
     <string name="session_status_error">连接失败</string>
+    <string name="session_open_in_new_window">在新窗口打开</string>
     <string name="session_screenshot">截图</string>
     <string name="session_screenshot_saved">截图已保存到相册。</string>
     <string name="session_screenshot_empty">暂无可截取的远端画面。</string>

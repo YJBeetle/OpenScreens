@@ -1,5 +1,6 @@
 package com.openscreens.app
 
+import android.content.Intent
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.fillMaxSize
@@ -8,6 +9,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.openscreens.app.data.Connection
@@ -32,6 +34,8 @@ fun OpenScreensApp(viewModel: MainViewModel = viewModel()) {
         ThemeMode.Dark -> true
     }
 
+    val context = LocalContext.current
+
     OpenScreensTheme(darkTheme = darkTheme) {
         Surface(modifier = Modifier.fillMaxSize()) {
             BackHandler(enabled = route != Route.Library) {
@@ -42,6 +46,16 @@ fun OpenScreensApp(viewModel: MainViewModel = viewModel()) {
                 Route.Library -> LibraryScreen(
                     connections = connections,
                     onOpenConnection = { viewModel.navigate(Route.Session(it.id)) },
+                    onOpenInNewWindow = { connection ->
+                        val intent = Intent(context, SessionWindowActivity::class.java)
+                            .putExtra(SessionWindowActivity.EXTRA_CONNECTION_ID, connection.id)
+                            .addFlags(
+                                Intent.FLAG_ACTIVITY_NEW_TASK or
+                                    Intent.FLAG_ACTIVITY_NEW_DOCUMENT or
+                                    Intent.FLAG_ACTIVITY_MULTIPLE_TASK,
+                            )
+                        context.startActivity(intent)
+                    },
                     onAddConnection = { viewModel.navigate(Route.Editor(connectionId = null)) },
                     onEditConnection = { viewModel.navigate(Route.Editor(it.id)) },
                     onOpenSettings = { viewModel.navigate(Route.Settings) },

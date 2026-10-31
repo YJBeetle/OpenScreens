@@ -92,6 +92,7 @@
     <string name="session_status_connected">Connected</string>
     <string name="session_status_disconnected">Disconnected</string>
     <string name="session_status_error">Connection failed</string>
+    <string name="session_open_in_new_window">Open in New Window</string>
     <string name="session_screenshot">Screenshot</string>
     <string name="session_screenshot_saved">Screenshot saved to Photos.</string>
     <string name="session_screenshot_empty">No remote frame to capture.</string>

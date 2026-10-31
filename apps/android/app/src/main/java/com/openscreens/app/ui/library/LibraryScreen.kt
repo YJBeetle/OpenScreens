@@ -3,6 +3,7 @@ package com.openscreens.app.ui.library
 import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -34,6 +35,7 @@ import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.GridView
 import androidx.compose.material.icons.outlined.Monitor
 import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material.icons.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.AlertDialog
@@ -100,6 +102,7 @@ private enum class LibraryView(@StringRes val labelRes: Int) {
 fun LibraryScreen(
     connections: List<Connection>,
     onOpenConnection: (Connection) -> Unit,
+    onOpenInNewWindow: (Connection) -> Unit,
     onAddConnection: () -> Unit,
     onEditConnection: (Connection) -> Unit,
     onOpenSettings: () -> Unit,
@@ -326,6 +329,7 @@ fun LibraryScreen(
                                     connection = connection,
                                     onClick = { onOpenConnection(connection) },
                                     onEdit = { onEditConnection(connection) },
+                                    onOpenInNewWindow = { onOpenInNewWindow(connection) },
                                 )
                             }
                         }
@@ -345,6 +349,7 @@ fun LibraryScreen(
                                     connection = connection,
                                     onClick = { onOpenConnection(connection) },
                                     onEdit = { onEditConnection(connection) },
+                                    onOpenInNewWindow = { onOpenInNewWindow(connection) },
                                 )
                             }
                         }
@@ -499,15 +504,21 @@ private fun ConnectionCard(
     connection: Connection,
     onClick: () -> Unit,
     onEdit: () -> Unit,
+    onOpenInNewWindow: () -> Unit,
 ) {
     val gradient = (connection.accent ?: autoAccent(connection.name)).gradient
     val thumbnailDescription = stringResource(R.string.library_connection_thumbnail)
     val editDescription = stringResource(R.string.library_edit_connection)
+    var menuExpanded by remember { mutableStateOf(false) }
 
+    Box {
     ElevatedCard(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = { menuExpanded = true },
+            ),
         shape = RoundedCornerShape(18.dp),
     ) {
         Column {
@@ -575,6 +586,25 @@ private fun ConnectionCard(
             }
         }
     }
+    DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
+        DropdownMenuItem(
+            text = { Text(stringResource(R.string.session_open_in_new_window)) },
+            leadingIcon = { Icon(Icons.Outlined.OpenInNew, contentDescription = null) },
+            onClick = {
+                menuExpanded = false
+                onOpenInNewWindow()
+            },
+        )
+        DropdownMenuItem(
+            text = { Text(stringResource(R.string.library_edit_connection)) },
+            leadingIcon = { Icon(Icons.Outlined.Edit, contentDescription = null) },
+            onClick = {
+                menuExpanded = false
+                onEdit()
+            },
+        )
+    }
+    }
 }
 
 @Composable
@@ -582,14 +612,20 @@ private fun ConnectionRow(
     connection: Connection,
     onClick: () -> Unit,
     onEdit: () -> Unit,
+    onOpenInNewWindow: () -> Unit,
 ) {
     val gradient = (connection.accent ?: autoAccent(connection.name)).gradient
     val editDescription = stringResource(R.string.library_edit_connection)
+    var menuExpanded by remember { mutableStateOf(false) }
 
+    Box {
     ElevatedCard(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = { menuExpanded = true },
+            ),
         shape = RoundedCornerShape(18.dp),
     ) {
         Row(
@@ -650,6 +686,25 @@ private fun ConnectionRow(
                 )
             }
         }
+    }
+    DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
+        DropdownMenuItem(
+            text = { Text(stringResource(R.string.session_open_in_new_window)) },
+            leadingIcon = { Icon(Icons.Outlined.OpenInNew, contentDescription = null) },
+            onClick = {
+                menuExpanded = false
+                onOpenInNewWindow()
+            },
+        )
+        DropdownMenuItem(
+            text = { Text(stringResource(R.string.library_edit_connection)) },
+            leadingIcon = { Icon(Icons.Outlined.Edit, contentDescription = null) },
+            onClick = {
+                menuExpanded = false
+                onEdit()
+            },
+        )
+    }
     }
 }
 

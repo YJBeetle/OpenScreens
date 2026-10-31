@@ -67,6 +67,50 @@ public enum LibrarySection: String, Codable, CaseIterable, Identifiable, Sendabl
     public static var defaultDestination: LibrarySection { .custom }
 }
 
+/// How the SSH jump host authenticates.
+public enum SSHAuthMethod: String, Codable, CaseIterable, Identifiable, Sendable {
+    case password
+    case privateKey
+
+    public var id: String { rawValue }
+
+    public var title: String {
+        switch self {
+        case .password: "Password"
+        case .privateKey: "Private Key"
+        }
+    }
+}
+
+/// Optional SSH jump host used to reach a LAN-only VNC server.
+public struct SSHProfile: Codable, Hashable, Sendable {
+    public var enabled: Bool
+    public var host: String
+    public var port: Int
+    public var username: String
+    public var authMethod: SSHAuthMethod
+    public var keyPath: String
+    public var hostKeyFingerprint: String
+
+    public init(
+        enabled: Bool = false,
+        host: String = "",
+        port: Int = 22,
+        username: String = "",
+        authMethod: SSHAuthMethod = .password,
+        keyPath: String = "",
+        hostKeyFingerprint: String = ""
+    ) {
+        self.enabled = enabled
+        self.host = host
+        self.port = port
+        self.username = username
+        self.authMethod = authMethod
+        self.keyPath = keyPath
+        self.hostKeyFingerprint = hostKeyFingerprint
+    }
+}
+
 /// A saved remote computer.
 public struct ConnectionProfile: Identifiable, Codable, Hashable, Sendable {
     public var id: UUID
@@ -81,6 +125,7 @@ public struct ConnectionProfile: Identifiable, Codable, Hashable, Sendable {
     public var isFavorite: Bool
     public var isDiscovered: Bool
     public var controls: ControlPreferences
+    public var ssh: SSHProfile?
     public var createdAt: Date
     public var lastConnectedAt: Date?
 
@@ -97,6 +142,7 @@ public struct ConnectionProfile: Identifiable, Codable, Hashable, Sendable {
         isFavorite: Bool = false,
         isDiscovered: Bool = false,
         controls: ControlPreferences = ControlPreferences(),
+        ssh: SSHProfile? = nil,
         createdAt: Date = .now,
         lastConnectedAt: Date? = nil
     ) {
@@ -112,6 +158,7 @@ public struct ConnectionProfile: Identifiable, Codable, Hashable, Sendable {
         self.isFavorite = isFavorite
         self.isDiscovered = isDiscovered
         self.controls = controls
+        self.ssh = ssh
         self.createdAt = createdAt
         self.lastConnectedAt = lastConnectedAt
     }
@@ -125,6 +172,16 @@ public struct ConnectionProfile: Identifiable, Codable, Hashable, Sendable {
         !trimmedName.isEmpty
             && !trimmedHost.isEmpty
             && (1...65535).contains(port)
+            && sshIsValid
+    }
+
+    public var sshIsValid: Bool {
+        guard let ssh, ssh.enabled else { return true }
+        let username = ssh.username.trimmingCharacters(in: .whitespacesAndNewlines)
+        let keyPath = ssh.keyPath.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !username.isEmpty
+            && (1...65535).contains(ssh.port)
+            && (ssh.authMethod == .password || !keyPath.isEmpty)
     }
 
     public var endpoint: String {
@@ -150,6 +207,14 @@ public struct ConnectionProfile: Identifiable, Codable, Hashable, Sendable {
         copy.host = host.trimmingCharacters(in: .whitespacesAndNewlines)
         copy.username = username.trimmingCharacters(in: .whitespacesAndNewlines)
         copy.port = min(max(port, 1), 65535)
+        if var ssh = copy.ssh {
+            ssh.host = ssh.host.trimmingCharacters(in: .whitespacesAndNewlines)
+            ssh.username = ssh.username.trimmingCharacters(in: .whitespacesAndNewlines)
+            ssh.keyPath = ssh.keyPath.trimmingCharacters(in: .whitespacesAndNewlines)
+            ssh.hostKeyFingerprint = ssh.hostKeyFingerprint.trimmingCharacters(in: .whitespacesAndNewlines)
+            ssh.port = min(max(ssh.port, 1), 65535)
+            copy.ssh = ssh
+        }
         return copy
     }
 

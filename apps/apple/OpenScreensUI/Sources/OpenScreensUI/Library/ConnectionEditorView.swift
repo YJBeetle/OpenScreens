@@ -1,6 +1,10 @@
 import OpenScreensCanvas
 import SwiftUI
 
+#if os(macOS)
+import AppKit
+#endif
+
 /// How the editor was opened: a fresh custom connection or an existing one.
 public enum ConnectionEditorMode: Sendable {
     case create(LibrarySection)
@@ -18,6 +22,18 @@ public struct ConnectionEditorView: View {
 
     @State private var draft: ConnectionProfile
     @State private var password: String = ""
+    @State private var sshEnabled = false
+    @State private var sshHost = ""
+    @State private var sshPort = "22"
+    @State private var sshUsername = ""
+    @State private var sshAuthMethod: SSHAuthMethod = .password
+    @State private var sshPassword = ""
+    @State private var sshKeyPath = ""
+    @State private var sshKeyPassphrase = ""
+    @State private var sshFingerprint = ""
+    #if os(macOS)
+    @State private var sshKeyFiles: [SSHKeyFile] = []
+    #endif
     @State private var selectedSection: EditorSection = .connection
     @State private var appliedSettingsDefaults = false
 
@@ -46,6 +62,22 @@ public struct ConnectionEditorView: View {
         .onAppear {
             applySettingsDefaults()
             password = OpenScreensCredentials.password(for: draft.id) ?? ""
+            if let ssh = draft.ssh {
+                sshEnabled = ssh.enabled
+                sshHost = ssh.host
+                sshPort = String(ssh.port)
+                sshUsername = ssh.username
+                sshAuthMethod = ssh.authMethod
+                sshKeyPath = ssh.keyPath
+                sshFingerprint = ssh.hostKeyFingerprint
+            }
+            sshPassword = OpenScreensCredentials.secret(kind: "ssh-password", for: draft.id) ?? ""
+            sshKeyPassphrase = OpenScreensCredentials.secret(kind: "ssh-passphrase", for: draft.id) ?? ""
+            #if os(macOS)
+            sshKeyFiles = SSHKeyCatalog.available()
+            #else
+            sshAuthMethod = .password
+            #endif
         }
     }
 
@@ -89,7 +121,7 @@ public struct ConnectionEditorView: View {
                     save()
                 }
                 .fontWeight(.semibold)
-                .disabled(!draft.isValid)
+                .disabled(!canSave)
                 .accessibilityLabel("Save connection")
             }
             .padding(.horizontal, 16)
@@ -175,7 +207,7 @@ public struct ConnectionEditorView: View {
             .controlSize(.large)
             .buttonStyle(.borderedProminent)
             .keyboardShortcut(.defaultAction)
-            .disabled(!draft.isValid)
+            .disabled(!canSave)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
@@ -269,7 +301,86 @@ public struct ConnectionEditorView: View {
         } footer: {
             Text("Passwords are stored in the system Keychain for this connection.")
         }
+
+        Section {
+            Toggle("Tunnel through SSH", isOn: $sshEnabled)
+
+            if sshEnabled {
+                TextField("SSH host", text: $sshHost, prompt: Text("Same as hostname"))
+                    .modifier(PlainInputStyle())
+                TextField("SSH port", text: $sshPort)
+                    .modifier(PlainInputStyle())
+                    .monospacedDigit()
+                TextField("SSH user name", text: $sshUsername)
+                    .modifier(PlainInputStyle())
+
+                Picker("SSH authentication", selection: $sshAuthMethod) {
+                    Text("Password").tag(SSHAuthMethod.password)
+                    #if os(macOS)
+                    Text("Private Key").tag(SSHAuthMethod.privateKey)
+                    #endif
+                }
+
+                if sshAuthMethod == .password {
+                    SecureField("SSH password", text: $sshPassword, prompt: Text("SSH password"))
+                        .modifier(PlainInputStyle())
+                } else {
+                    #if os(macOS)
+                    Picker("Private key", selection: $sshKeyPath) {
+                        Text("Choose a key…").tag("")
+                        ForEach(sshKeyFiles) { file in
+                            Text(file.name).tag(file.path)
+                        }
+                        if !sshKeyPath.isEmpty,
+                           !sshKeyFiles.contains(where: { $0.path == sshKeyPath }) {
+                            Text(URL(fileURLWithPath: sshKeyPath).lastPathComponent).tag(sshKeyPath)
+                        }
+                    }
+                    HStack {
+                        Text("Keys from ~/.ssh")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Button("Browse…") { chooseSSHKeyFile() }
+                    }
+                    SecureField("Key passphrase", text: $sshKeyPassphrase, prompt: Text("Optional"))
+                        .modifier(PlainInputStyle())
+                    #else
+                    Text("Private-key SSH is available in the macOS app.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    #endif
+                }
+
+                TextField("Host key SHA-256 (optional)", text: $sshFingerprint)
+                    .modifier(PlainInputStyle())
+
+                if let error = sshValidationError {
+                    Text(error)
+                        .font(.footnote)
+                        .foregroundStyle(Theme.Colors.danger)
+                }
+            }
+        } header: {
+            Text("SSH Tunnel")
+        } footer: {
+            Text("The VNC address is resolved from the SSH host. SSH secrets are stored in the Keychain.")
+        }
     }
+
+    #if os(macOS)
+    private func chooseSSHKeyFile() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.directoryURL = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".ssh", isDirectory: true)
+        if panel.runModal() == .OK, let url = panel.url {
+            sshKeyPath = url.path
+        }
+    }
+    #endif
 
     @ViewBuilder
     private var controlsSection: some View {
@@ -312,6 +423,31 @@ public struct ConnectionEditorView: View {
         }
     }
 
+    // MARK: - SSH validation
+
+    private var sshPortNumber: Int? { Int(sshPort) }
+
+    private var sshValidationError: String? {
+        guard sshEnabled else { return nil }
+        if sshUsername.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return "SSH user name is required."
+        }
+        guard let port = sshPortNumber, (1...65535).contains(port) else {
+            return "SSH port must be between 1 and 65535."
+        }
+        #if os(macOS)
+        if sshAuthMethod == .privateKey,
+           sshKeyPath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return "Choose a private key from ~/.ssh."
+        }
+        #endif
+        return nil
+    }
+
+    private var canSave: Bool {
+        draft.isValid && sshValidationError == nil
+    }
+
     // MARK: - Actions
 
     private func applySettingsDefaults() {
@@ -323,6 +459,21 @@ public struct ConnectionEditorView: View {
     }
 
     private func save() {
+        guard canSave else { return }
+        if sshEnabled {
+            draft.ssh = SSHProfile(
+                enabled: true,
+                host: sshHost,
+                port: sshPortNumber ?? 22,
+                username: sshUsername,
+                authMethod: sshAuthMethod,
+                keyPath: sshKeyPath,
+                hostKeyFingerprint: sshFingerprint
+            )
+        } else {
+            draft.ssh = nil
+        }
+
         let profile = draft.normalized()
         guard profile.isValid else { return }
         if isCreating {
@@ -334,6 +485,19 @@ public struct ConnectionEditorView: View {
             OpenScreensCredentials.deletePassword(for: profile.id)
         } else {
             OpenScreensCredentials.setPassword(password, for: profile.id)
+        }
+        if let ssh = profile.ssh, ssh.enabled {
+            switch ssh.authMethod {
+            case .password:
+                OpenScreensCredentials.setSecret(sshPassword, kind: "ssh-password", for: profile.id)
+                OpenScreensCredentials.deleteSecret(kind: "ssh-passphrase", for: profile.id)
+            case .privateKey:
+                OpenScreensCredentials.deleteSecret(kind: "ssh-password", for: profile.id)
+                OpenScreensCredentials.setSecret(sshKeyPassphrase, kind: "ssh-passphrase", for: profile.id)
+            }
+        } else {
+            OpenScreensCredentials.deleteSecret(kind: "ssh-password", for: profile.id)
+            OpenScreensCredentials.deleteSecret(kind: "ssh-passphrase", for: profile.id)
         }
         onSaved?(profile)
         dismiss()

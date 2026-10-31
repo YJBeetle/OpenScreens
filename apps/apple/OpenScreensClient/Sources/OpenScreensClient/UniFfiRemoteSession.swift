@@ -6,6 +6,16 @@ import OpenScreensUI
 import os
 
 /// The production transport: drives the Rust RFB engine through UniFFI.
+private struct SessionSetupError: LocalizedError {
+    let message: String
+
+    init(_ message: String) {
+        self.message = message
+    }
+
+    var errorDescription: String? { message }
+}
+
 public struct UniFfiSessionService: OpenScreensUI.RemoteSessionService {
     public init() {}
 
@@ -63,17 +73,51 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
         let storedPassword = OpenScreensCredentials.password(for: profile.id)
         let password = storedPassword ?? debugPassword()
         let username = profile.username.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        var sshHost: String?
+        var sshPort: UInt16?
+        var sshUsername: String?
+        var sshAuth: OpenScreensCore.SshAuthConfig?
+        var sshFingerprint: String?
+        if let ssh = profile.ssh, ssh.enabled {
+            let sshUser = ssh.username.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !sshUser.isEmpty else {
+                throw SessionSetupError("SSH user name is required.")
+            }
+            let sshHostValue = ssh.host.trimmingCharacters(in: .whitespacesAndNewlines)
+            sshHost = sshHostValue.isEmpty ? profile.trimmedHost : sshHostValue
+            sshPort = UInt16(clamping: ssh.port)
+            sshUsername = sshUser
+            switch ssh.authMethod {
+            case .password:
+                let sshPassword = OpenScreensCredentials.secret(kind: "ssh-password", for: profile.id) ?? ""
+                sshAuth = .password(password: sshPassword)
+            case .privateKey:
+                let expanded = (ssh.keyPath as NSString).expandingTildeInPath
+                let pem: String
+                do {
+                    pem = try String(contentsOfFile: expanded, encoding: .utf8)
+                } catch {
+                    throw SessionSetupError("Unable to read SSH key at \(expanded).")
+                }
+                let passphrase = OpenScreensCredentials.secret(kind: "ssh-passphrase", for: profile.id)
+                sshAuth = .privateKey(pem: pem, passphrase: passphrase)
+            }
+            let fingerprint = ssh.hostKeyFingerprint.trimmingCharacters(in: .whitespacesAndNewlines)
+            sshFingerprint = fingerprint.isEmpty ? nil : fingerprint
+        }
+
         let config = OpenScreensCore.SessionConfig(
             host: profile.trimmedHost,
             port: UInt16(clamping: profile.port),
             username: username.isEmpty ? nil : username,
             password: (password?.isEmpty == false) ? password : nil,
             shared: true,
-            sshHost: nil,
-            sshPort: nil,
-            sshUsername: nil,
-            sshAuth: nil,
-            sshHostKeyFingerprint: nil
+            sshHost: sshHost,
+            sshPort: sshPort,
+            sshUsername: sshUsername,
+            sshAuth: sshAuth,
+            sshHostKeyFingerprint: sshFingerprint
         )
 
         do {

@@ -18,7 +18,16 @@ interface RemoteSession {
 
     suspend fun connect()
 
+    /**
+     * Restarts the transport after it went stale, e.g. when the app returns from
+     * the background. Implementations must keep the same instance and event flow.
+     */
+    suspend fun reconnect()
+
     suspend fun disconnect()
+
+    /** Releases the transport for good; the instance is not reusable afterwards. */
+    fun close()
 
     fun sendPointer(x: Int, y: Int, buttonMask: Int)
 

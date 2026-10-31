@@ -21,6 +21,8 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import uniffi.rfb_ffi.Rect
 import uniffi.rfb_ffi.SessionConfig
@@ -58,6 +60,8 @@ class UniFfiRemoteSession(
     private var session: NativeSession? = null
 
     private val closed = AtomicBoolean(false)
+    private val disposed = AtomicBoolean(false)
+    private val openMutex = Mutex()
 
     private var pollJob: Job? = null
 
@@ -72,7 +76,15 @@ class UniFfiRemoteSession(
     // Reused buffer for carrying the previous frame into the back buffer.
     private var copyBuffer: ByteBuffer? = null
 
-    override suspend fun connect() {
+    override suspend fun connect() = open()
+
+    override suspend fun reconnect() {
+        if (disposed.get()) return
+        open()
+    }
+
+    private suspend fun open() = openMutex.withLock {
+        detach()
         closed.set(false)
         _events.emit(SessionEvent.Connecting)
 
@@ -134,7 +146,29 @@ class UniFfiRemoteSession(
     }
 
     override suspend fun disconnect() {
+        if (disposed.get()) return
         closed.set(true)
+        detach()
+        _events.emit(SessionEvent.Disconnected)
+        close()
+    }
+
+    override fun close() {
+        if (!disposed.compareAndSet(false, true)) return
+        closed.set(true)
+
+        val job = pollJob
+        pollJob = null
+        job?.cancel()
+
+        val current = session
+        session = null
+        current?.let { runCatching { it.close() }.onFailure { error -> Log.w(TAG, "close failed", error) } }
+
+        scope.cancel()
+    }
+
+    private suspend fun detach() {
         val job = pollJob
         pollJob = null
         job?.cancelAndJoin()
@@ -142,9 +176,6 @@ class UniFfiRemoteSession(
         val current = session
         session = null
         current?.let { runCatching { it.close() }.onFailure { error -> Log.w(TAG, "close failed", error) } }
-
-        _events.emit(SessionEvent.Disconnected)
-        scope.cancel()
     }
 
     override fun sendPointer(x: Int, y: Int, buttonMask: Int) {

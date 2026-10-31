@@ -73,6 +73,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -98,6 +99,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
@@ -170,6 +174,7 @@ fun SessionScreen(
     var chromeVisible by rememberSaveable { mutableStateOf(true) }
     var keyboardActive by remember { mutableStateOf(false) }
     var modifiers by remember { mutableIntStateOf(0) }
+    var backgroundedAt by remember { mutableLongStateOf(0L) }
 
     val focusRequester = remember { FocusRequester() }
     val pointerMemory = remember(session) { PointerMemory() }
@@ -265,6 +270,37 @@ fun SessionScreen(
 
     LaunchedEffect(session) {
         session.connect()
+    }
+
+    // A backgrounded app may come back with a suspended socket: the poller is still
+    // blocked in a read that never returns, so no event ever flips the UI out of
+    // "Connected". Rebuild the transport once the app has been away long enough.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, session) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_STOP -> backgroundedAt = SystemClock.elapsedRealtime()
+                Lifecycle.Event.ON_START -> {
+                    val leftAt = backgroundedAt
+                    backgroundedAt = 0L
+                    if (leftAt == 0L || isExiting) return@LifecycleEventObserver
+                    val away = SystemClock.elapsedRealtime() - leftAt
+                    val lostWhileAway = status == SessionStatus.Disconnected ||
+                        status == SessionStatus.Failed
+                    val stale = away >= RESUME_RECONNECT_MS && status == SessionStatus.Connected
+                    if (lostWhileAway || stale) {
+                        scope.launch { session.reconnect() }
+                    }
+                }
+                else -> Unit
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    DisposableEffect(session) {
+        onDispose { session.close() }
     }
 
     LaunchedEffect(remoteWidth, remoteHeight) {
@@ -1305,6 +1341,7 @@ private const val ZOOM_ACTIVE_EPSILON = 1.01f
 private const val PINCH_ZOOM_EPSILON = 0.08f
 private const val LONG_PRESS_MS = 500L
 private const val IME_OPEN_GRACE_MS = 1200L
+private const val RESUME_RECONNECT_MS = 5_000L
 private const val DOUBLE_TAP_CLICK_MARGIN_MS = 32L
 
 // Wheel scrolling: one RFB button press/release pair per step of finger travel.

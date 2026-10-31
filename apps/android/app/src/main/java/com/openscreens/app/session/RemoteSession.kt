@@ -3,6 +3,7 @@ package com.openscreens.app.session
 import android.graphics.Bitmap
 import com.openscreens.app.data.Connection
 import com.openscreens.app.data.QualityPreset
+import com.openscreens.app.data.SshKey
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -51,6 +52,9 @@ sealed interface SessionEvent {
  * how frames are produced, only on [RemoteSession].
  */
 object SessionProvider {
-    fun create(connection: Connection, quality: QualityPreset): RemoteSession =
-        UniFfiRemoteSession(connection, quality)
+    fun create(
+        connection: Connection,
+        quality: QualityPreset,
+        sshKey: SshKey? = null,
+    ): RemoteSession = UniFfiRemoteSession(connection, quality, sshKey)
 }

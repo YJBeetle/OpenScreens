@@ -110,4 +110,34 @@
     <string name="settings_version">版本 %1$s</string>
     <string name="settings_license">基于 Apache-2.0 许可</string>
     <string name="settings_back">返回</string>
+
+    <string name="settings_security">安全</string>
+    <string name="settings_ssh_keys">SSH 密钥</string>
+    <string name="settings_ssh_keys_count">已保存 %1$d 个</string>
+    <string name="settings_manage">管理</string>
+    <string name="ssh_keys_title">SSH 密钥</string>
+    <string name="ssh_key_add">添加密钥</string>
+    <string name="ssh_key_generate">生成密钥</string>
+    <string name="ssh_key_import">导入密钥</string>
+    <string name="ssh_key_name">密钥名称</string>
+    <string name="ssh_key_passphrase">口令</string>
+    <string name="ssh_key_passphrase_optional">可选；加密密钥需要填写。</string>
+    <string name="ssh_key_public">SSH 公钥</string>
+    <string name="ssh_key_copy_public">复制公钥</string>
+    <string name="ssh_key_delete">删除</string>
+    <string name="ssh_key_delete_title">删除 SSH 密钥？</string>
+    <string name="ssh_key_delete_body">删除“%1$s”？使用它的连接需要重新选择密钥。</string>
+    <string name="ssh_keys_empty_title">还没有 SSH 密钥</string>
+    <string name="ssh_keys_empty_body">生成密钥或导入 OpenSSH 私钥。</string>
+    <string name="ssh_key_created">已生成 SSH 密钥</string>
+    <string name="ssh_key_imported">已导入 SSH 密钥</string>
+    <string name="ssh_key_copied">公钥已复制</string>
+    <string name="ssh_key_import_failed">无法读取所选密钥文件</string>
+    <string name="ssh_key_error">无法使用该密钥</string>
+    <string name="editor_ssh_auth_password">密码</string>
+    <string name="editor_ssh_auth_key">私钥</string>
+    <string name="editor_ssh_select_key">选择密钥</string>
+    <string name="editor_ssh_no_keys">在设置 → SSH 密钥中添加密钥。</string>
+    <string name="editor_ssh_manage_keys">在设置 → SSH 密钥中管理。</string>
+    <string name="editor_ssh_key_required">请选择 SSH 密钥</string>
 </resources>

@@ -5,6 +5,8 @@ import android.graphics.Color
 import android.util.Log
 import com.openscreens.app.data.Connection
 import com.openscreens.app.data.QualityPreset
+import com.openscreens.app.data.SshAuthMode
+import com.openscreens.app.data.SshKey
 import java.nio.ByteBuffer
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CancellationException
@@ -22,6 +24,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import uniffi.rfb_ffi.Rect
 import uniffi.rfb_ffi.SessionConfig
+import uniffi.rfb_ffi.SshAuthConfig
 import uniffi.rfb_ffi.SessionEvent as NativeEvent
 import uniffi.rfb_ffi.RemoteSession as NativeSession
 
@@ -35,6 +38,7 @@ import uniffi.rfb_ffi.RemoteSession as NativeSession
 class UniFfiRemoteSession(
     private val connection: Connection,
     private var quality: QualityPreset,
+    private val sshKey: SshKey?,
 ) : RemoteSession {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -73,6 +77,21 @@ class UniFfiRemoteSession(
         _events.emit(SessionEvent.Connecting)
 
         val ssh = connection.ssh
+        val sshAuth = when {
+            ssh == null -> null
+            ssh.authMode == SshAuthMode.PrivateKey -> {
+                val key = sshKey
+                if (key == null) {
+                    _events.emit(SessionEvent.Failed("SSH key not found for this connection"))
+                    return
+                }
+                SshAuthConfig.PrivateKey(
+                    pem = key.privateKeyPem,
+                    passphrase = key.passphrase.ifBlank { null },
+                )
+            }
+            else -> SshAuthConfig.Password(password = ssh.password)
+        }
         val config = SessionConfig(
             host = connection.host,
             port = connection.port.toUShort(),
@@ -82,7 +101,7 @@ class UniFfiRemoteSession(
             sshHost = ssh?.let { it.host.ifBlank { connection.host } },
             sshPort = ssh?.let { it.port.toUShort() },
             sshUsername = ssh?.username?.ifBlank { null },
-            sshPassword = ssh?.password?.ifBlank { null },
+            sshAuth = sshAuth,
             sshHostKeyFingerprint = ssh?.hostKeyFingerprint?.ifBlank { null },
         )
 

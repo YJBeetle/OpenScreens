@@ -94,7 +94,9 @@ class ConnectionStore(
                         .put("username", ssh.username)
                         .put("password", ssh.password)
                         .put("port", ssh.port)
-                        .put("hostKeyFingerprint", ssh.hostKeyFingerprint),
+                        .put("hostKeyFingerprint", ssh.hostKeyFingerprint)
+                        .put("authMode", ssh.authMode.name)
+                        .put("keyId", ssh.keyId),
                 )
             }
             connection.lastConnectedAt?.let { item.put("lastConnectedAt", it) }
@@ -118,6 +120,10 @@ class ConnectionStore(
                         password = it.optString("password"),
                         port = it.optInt("port", SshCredentials.DEFAULT_SSH_PORT),
                         hostKeyFingerprint = it.optString("hostKeyFingerprint"),
+                        authMode = runCatching {
+                            SshAuthMode.valueOf(it.optString("authMode", SshAuthMode.Password.name))
+                        }.getOrDefault(SshAuthMode.Password),
+                        keyId = it.optString("keyId"),
                     )
                 }
                 add(

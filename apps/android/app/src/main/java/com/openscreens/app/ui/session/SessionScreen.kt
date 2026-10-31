@@ -115,6 +115,7 @@ import androidx.core.view.WindowInsetsControllerCompat
 import com.openscreens.app.R
 import com.openscreens.app.data.Connection
 import com.openscreens.app.data.QualityPreset
+import com.openscreens.app.data.SshKey
 import com.openscreens.app.session.RemoteSession
 import com.openscreens.app.session.SessionEvent
 import com.openscreens.app.session.SessionProvider
@@ -139,6 +140,7 @@ private enum class SessionStatus { Connecting, Connected, Disconnected, Failed }
 @Composable
 fun SessionScreen(
     connection: Connection,
+    sshKey: SshKey?,
     quality: QualityPreset,
     onQualityChange: (QualityPreset) -> Unit,
     onConnected: () -> Unit,
@@ -151,7 +153,7 @@ fun SessionScreen(
     val snackbarHostState = remember { SnackbarHostState() }
 
     val session: RemoteSession = remember(connection.id) {
-        SessionProvider.create(connection, quality)
+        SessionProvider.create(connection, quality, sshKey)
     }
 
     var status by remember { mutableStateOf(SessionStatus.Connecting) }

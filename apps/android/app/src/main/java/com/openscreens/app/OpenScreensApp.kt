@@ -15,6 +15,7 @@ import com.openscreens.app.ui.editor.ConnectionEditorScreen
 import com.openscreens.app.ui.library.LibraryScreen
 import com.openscreens.app.ui.session.SessionScreen
 import com.openscreens.app.ui.settings.SettingsScreen
+import com.openscreens.app.ui.sshkeys.SshKeysScreen
 import com.openscreens.app.ui.theme.OpenScreensTheme
 
 @Composable
@@ -22,6 +23,7 @@ fun OpenScreensApp(viewModel: MainViewModel = viewModel()) {
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val route by viewModel.route.collectAsStateWithLifecycle()
     val connections by viewModel.connections.collectAsStateWithLifecycle()
+    val sshKeys by viewModel.sshKeys.collectAsStateWithLifecycle()
 
     val darkTheme = when (settings.themeMode) {
         ThemeMode.System -> isSystemInDarkTheme()
@@ -46,13 +48,24 @@ fun OpenScreensApp(viewModel: MainViewModel = viewModel()) {
 
                 Route.Settings -> SettingsScreen(
                     settings = settings,
+                    sshKeyCount = sshKeys.size,
                     onThemeModeChange = viewModel::setThemeMode,
                     onQualityChange = viewModel::setQuality,
+                    onManageSshKeys = { viewModel.navigate(Route.SshKeys) },
+                    onBack = viewModel::back,
+                )
+
+                Route.SshKeys -> SshKeysScreen(
+                    keys = sshKeys,
+                    onGenerate = viewModel::generateSshKey,
+                    onImport = viewModel::importSshKey,
+                    onDelete = viewModel::deleteSshKey,
                     onBack = viewModel::back,
                 )
 
                 is Route.Editor -> ConnectionEditorScreen(
                     connection = current.connectionId?.let(viewModel::connection),
+                    sshKeys = sshKeys,
                     onSave = {
                         viewModel.saveConnection(it)
                         viewModel.back()
@@ -67,6 +80,7 @@ fun OpenScreensApp(viewModel: MainViewModel = viewModel()) {
                     } else {
                         SessionScreen(
                             connection = connection,
+                            sshKey = viewModel.sshKey(connection.ssh?.keyId),
                             quality = settings.quality,
                             onQualityChange = viewModel::setQuality,
                             onConnected = { viewModel.markConnected(connection.id) },

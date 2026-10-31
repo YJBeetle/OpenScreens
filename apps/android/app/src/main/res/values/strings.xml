@@ -112,4 +112,34 @@
     <string name="settings_version">Version %1$s</string>
     <string name="settings_license">Licensed under Apache-2.0</string>
     <string name="settings_back">Back</string>
+
+    <string name="settings_security">Security</string>
+    <string name="settings_ssh_keys">SSH keys</string>
+    <string name="settings_ssh_keys_count">%1$d saved</string>
+    <string name="settings_manage">Manage</string>
+    <string name="ssh_keys_title">SSH keys</string>
+    <string name="ssh_key_add">Add key</string>
+    <string name="ssh_key_generate">Generate key</string>
+    <string name="ssh_key_import">Import key</string>
+    <string name="ssh_key_name">Key name</string>
+    <string name="ssh_key_passphrase">Passphrase</string>
+    <string name="ssh_key_passphrase_optional">Optional; required for encrypted keys.</string>
+    <string name="ssh_key_public">SSH public key</string>
+    <string name="ssh_key_copy_public">Copy public key</string>
+    <string name="ssh_key_delete">Delete</string>
+    <string name="ssh_key_delete_title">Delete SSH key?</string>
+    <string name="ssh_key_delete_body">Delete "%1$s"? Connections using it must select another key.</string>
+    <string name="ssh_keys_empty_title">No SSH keys</string>
+    <string name="ssh_keys_empty_body">Generate a key or import an OpenSSH private key.</string>
+    <string name="ssh_key_created">SSH key generated</string>
+    <string name="ssh_key_imported">SSH key imported</string>
+    <string name="ssh_key_copied">Public key copied</string>
+    <string name="ssh_key_import_failed">Unable to read the selected key file</string>
+    <string name="ssh_key_error">Unable to use this key</string>
+    <string name="editor_ssh_auth_password">Password</string>
+    <string name="editor_ssh_auth_key">Private key</string>
+    <string name="editor_ssh_select_key">Select a key</string>
+    <string name="editor_ssh_no_keys">Add a key in Settings → SSH keys.</string>
+    <string name="editor_ssh_manage_keys">Manage keys in Settings → SSH keys.</string>
+    <string name="editor_ssh_key_required">Select an SSH key</string>
 </resources>

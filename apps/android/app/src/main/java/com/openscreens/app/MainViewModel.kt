@@ -7,6 +7,8 @@ import com.openscreens.app.data.Connection
 import com.openscreens.app.data.ConnectionStore
 import com.openscreens.app.data.QualityPreset
 import com.openscreens.app.data.SettingsStore
+import com.openscreens.app.data.SshKey
+import com.openscreens.app.data.SshKeyStore
 import com.openscreens.app.data.ThemeMode
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -16,6 +18,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val connectionStore = ConnectionStore(application)
     val connections = connectionStore.connections
+
+    private val sshKeyStore = SshKeyStore(application)
+    val sshKeys = sshKeyStore.keys
 
     private val settingsStore = SettingsStore(application)
     private val _settings = MutableStateFlow(settingsStore.load())
@@ -32,6 +37,35 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun markConnected(id: String) {
         connectionStore.markConnected(id)
+    }
+
+    fun sshKey(id: String?): SshKey? = sshKeyStore.find(id)
+
+    fun generateSshKey(name: String): Result<SshKey> = runCatching {
+        val generated = uniffi.rfb_ffi.generateSshKey()
+        SshKey(
+            name = name,
+            privateKeyPem = generated.privateKeyPem,
+            publicKey = generated.publicKeyOpenssh,
+            fingerprint = generated.fingerprint,
+        ).also(sshKeyStore::add)
+    }
+
+    fun importSshKey(name: String, pem: String, passphrase: String): Result<SshKey> = runCatching {
+        val pass = passphrase.ifBlank { null }
+        val fingerprint = uniffi.rfb_ffi.sshKeyFingerprint(pem, pass)
+        val publicKey = uniffi.rfb_ffi.sshPublicKey(pem, pass)
+        SshKey(
+            name = name,
+            privateKeyPem = pem,
+            publicKey = publicKey,
+            fingerprint = fingerprint,
+            passphrase = passphrase,
+        ).also(sshKeyStore::add)
+    }
+
+    fun deleteSshKey(id: String) {
+        sshKeyStore.delete(id)
     }
 
     fun setThemeMode(mode: ThemeMode) {
@@ -58,6 +92,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 sealed interface Route {
     data object Library : Route
     data object Settings : Route
+    data object SshKeys : Route
     data class Editor(val connectionId: String?) : Route
     data class Session(val connectionId: String) : Route
 }

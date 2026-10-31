@@ -1,6 +1,7 @@
 package com.openscreens.app.ui.settings
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -49,8 +50,10 @@ import com.openscreens.app.ui.theme.ThemedSystemBarIcons
 @Composable
 fun SettingsScreen(
     settings: AppSettings,
+    sshKeyCount: Int,
     onThemeModeChange: (ThemeMode) -> Unit,
     onQualityChange: (QualityPreset) -> Unit,
+    onManageSshKeys: () -> Unit,
     onBack: () -> Unit,
 ) {
     ThemedSystemBarIcons()
@@ -106,6 +109,37 @@ fun SettingsScreen(
                     if (index != QualityPreset.entries.lastIndex) {
                         HorizontalDivider(Modifier.padding(start = 16.dp))
                     }
+                }
+            }
+
+            Spacer(Modifier.height(4.dp))
+            SectionHeader(stringResource(R.string.settings_security))
+            SettingsCard {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(onClick = onManageSshKeys)
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                        Text(
+                            text = stringResource(R.string.settings_ssh_keys),
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                        Text(
+                            text = stringResource(R.string.settings_ssh_keys_count, sshKeyCount),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Text(
+                        text = stringResource(R.string.settings_manage),
+                        color = MaterialTheme.colorScheme.primary,
+                    )
                 }
             }
 

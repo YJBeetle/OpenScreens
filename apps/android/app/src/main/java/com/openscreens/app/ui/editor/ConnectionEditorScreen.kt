@@ -21,8 +21,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -35,6 +39,8 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -46,16 +52,20 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.openscreens.app.R
 import com.openscreens.app.data.Connection
+import com.openscreens.app.data.SshAuthMode
 import com.openscreens.app.data.SshCredentials
+import com.openscreens.app.data.SshKey
 import com.openscreens.app.ui.theme.ThemedSystemBarIcons
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ConnectionEditorScreen(
     connection: Connection?,
+    sshKeys: List<SshKey> = emptyList(),
     onSave: (Connection) -> Unit,
     onCancel: () -> Unit,
 ) {
@@ -89,6 +99,13 @@ fun ConnectionEditorScreen(
     var sshFingerprint by rememberSaveable(editorKey) {
         mutableStateOf(connection?.ssh?.hostKeyFingerprint.orEmpty())
     }
+    var sshAuthMode by rememberSaveable(editorKey) {
+        mutableStateOf(connection?.ssh?.authMode ?: SshAuthMode.Password)
+    }
+    var sshKeyId by rememberSaveable(editorKey) {
+        mutableStateOf(connection?.ssh?.keyId.orEmpty())
+    }
+    var keyMenuExpanded by remember { mutableStateOf(false) }
     var validate by rememberSaveable { mutableStateOf(false) }
 
     val nameError = if (name.isBlank()) R.string.editor_error_required else null
@@ -114,19 +131,27 @@ fun ConnectionEditorScreen(
     } else {
         null
     }
+    val selectedSshKey = sshKeys.firstOrNull { it.id == sshKeyId }
+    val sshKeyError = if (sshEnabled && sshAuthMode == SshAuthMode.PrivateKey && selectedSshKey == null) {
+        R.string.editor_ssh_key_required
+    } else {
+        null
+    }
 
     val onSaveClick: () -> Unit = {
         validate = true
         if (nameError == null && hostError == null && portError == null &&
-            sshUsernameError == null && sshPortError == null
+            sshUsernameError == null && sshPortError == null && sshKeyError == null
         ) {
             val ssh = if (sshEnabled) {
                 SshCredentials(
                     host = sshHost.trim(),
                     username = sshUsername.trim(),
-                    password = sshPassword,
+                    password = if (sshAuthMode == SshAuthMode.Password) sshPassword else "",
                     port = sshPortNumber ?: SshCredentials.DEFAULT_SSH_PORT,
                     hostKeyFingerprint = sshFingerprint.trim(),
+                    authMode = sshAuthMode,
+                    keyId = if (sshAuthMode == SshAuthMode.PrivateKey) sshKeyId else "",
                 )
             } else {
                 null
@@ -329,12 +354,74 @@ fun ConnectionEditorScreen(
                                 imeAction = ImeAction.Next,
                             ),
                         )
-                        PasswordField(
-                            value = sshPassword,
-                            onValueChange = { sshPassword = it },
-                            label = stringResource(R.string.editor_ssh_password),
-                            supportingText = stringResource(R.string.editor_ssh_password_optional),
-                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            FilterChip(
+                                selected = sshAuthMode == SshAuthMode.Password,
+                                onClick = { sshAuthMode = SshAuthMode.Password },
+                                label = { Text(stringResource(R.string.editor_ssh_auth_password)) },
+                            )
+                            FilterChip(
+                                selected = sshAuthMode == SshAuthMode.PrivateKey,
+                                onClick = { sshAuthMode = SshAuthMode.PrivateKey },
+                                label = { Text(stringResource(R.string.editor_ssh_auth_key)) },
+                            )
+                        }
+                        if (sshAuthMode == SshAuthMode.Password) {
+                            PasswordField(
+                                value = sshPassword,
+                                onValueChange = { sshPassword = it },
+                                label = stringResource(R.string.editor_ssh_password),
+                                supportingText = stringResource(R.string.editor_ssh_password_optional),
+                            )
+                        } else {
+                            Box {
+                                OutlinedButton(
+                                    onClick = { keyMenuExpanded = true },
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) {
+                                    Text(selectedSshKey?.name ?: stringResource(R.string.editor_ssh_select_key))
+                                }
+                                DropdownMenu(
+                                    expanded = keyMenuExpanded,
+                                    onDismissRequest = { keyMenuExpanded = false },
+                                ) {
+                                    sshKeys.forEach { key ->
+                                        DropdownMenuItem(
+                                            text = {
+                                                Column {
+                                                    Text(key.name)
+                                                    Text(
+                                                        text = key.fingerprint,
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        maxLines = 1,
+                                                        overflow = TextOverflow.Ellipsis,
+                                                    )
+                                                }
+                                            },
+                                            onClick = {
+                                                sshKeyId = key.id
+                                                keyMenuExpanded = false
+                                            },
+                                        )
+                                    }
+                                }
+                            }
+                            Text(
+                                text = stringResource(
+                                    if (sshKeys.isEmpty()) {
+                                        R.string.editor_ssh_no_keys
+                                    } else {
+                                        R.string.editor_ssh_manage_keys
+                                    },
+                                ),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (validate && sshKeyError != null) {
+                                    MaterialTheme.colorScheme.error
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                },
+                            )
+                        }
                         OutlinedTextField(
                             value = sshPort,
                             onValueChange = { sshPort = it.filter(Char::isDigit) },

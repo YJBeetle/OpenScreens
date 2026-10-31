@@ -5,12 +5,14 @@ import SwiftUI
 struct OpenScreensMacApp: App {
     @State private var connections = ConnectionStore()
     @State private var settings = SettingsStore()
+    @State private var sshKeys = SSHKeyVault()
 
     var body: some Scene {
         WindowGroup {
             MacLibraryView()
                 .environment(connections)
                 .environment(settings)
+                .environment(sshKeys)
                 .preferredColorScheme(settings.settings.appearance.colorScheme)
                 .tint(Theme.Colors.accent)
         }
@@ -33,6 +35,7 @@ struct OpenScreensMacApp: App {
             }
             .environment(connections)
             .environment(settings)
+            .environment(sshKeys)
             .preferredColorScheme(settings.settings.appearance.colorScheme)
             .tint(Theme.Colors.accent)
         }
@@ -42,6 +45,7 @@ struct OpenScreensMacApp: App {
             MacSettingsView(appVersion: MacAppInfo.version)
                 .environment(connections)
                 .environment(settings)
+                .environment(sshKeys)
                 .preferredColorScheme(settings.settings.appearance.colorScheme)
                 .tint(Theme.Colors.accent)
         }

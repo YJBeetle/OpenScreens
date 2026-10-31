@@ -93,12 +93,23 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
                 let sshPassword = OpenScreensCredentials.secret(kind: "ssh-password", for: profile.id) ?? ""
                 sshAuth = .password(password: sshPassword)
             case .privateKey:
-                let expanded = (ssh.keyPath as NSString).expandingTildeInPath
                 let pem: String
-                do {
-                    pem = try String(contentsOfFile: expanded, encoding: .utf8)
-                } catch {
-                    throw SessionSetupError("Unable to read SSH key at \(expanded).")
+                if let keyID = ssh.importedKeyID,
+                   let stored = OpenScreensCredentials.secret(
+                       kind: SSHKeyVault.secretKind,
+                       for: keyID
+                   ),
+                   !stored.isEmpty {
+                    pem = stored
+                } else {
+                    let expanded = (ssh.keyPath as NSString).expandingTildeInPath
+                    do {
+                        pem = try String(contentsOfFile: expanded, encoding: .utf8)
+                    } catch {
+                        throw SessionSetupError(
+                            "Choose an SSH private key for this connection."
+                        )
+                    }
                 }
                 let passphrase = OpenScreensCredentials.secret(kind: "ssh-passphrase", for: profile.id)
                 sshAuth = .privateKey(pem: pem, passphrase: passphrase)

@@ -1,5 +1,6 @@
 import OpenScreensCanvas
 import SwiftUI
+import UniformTypeIdentifiers
 
 #if os(macOS)
 import AppKit
@@ -17,6 +18,7 @@ public enum ConnectionEditorMode: Sendable {
 public struct ConnectionEditorView: View {
     @Environment(ConnectionStore.self) private var store
     @Environment(SettingsStore.self) private var settings
+    @Environment(SSHKeyVault.self) private var keyVault
     @Environment(\.dismiss) private var dismiss
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
@@ -31,6 +33,9 @@ public struct ConnectionEditorView: View {
     @State private var sshKeyPath = ""
     @State private var sshKeyPassphrase = ""
     @State private var sshFingerprint = ""
+    @State private var sshImportedKeyID: UUID?
+    @State private var importingSSHKey = false
+    @State private var sshKeyImportError: String?
     #if os(macOS)
     @State private var sshKeyFiles: [SSHKeyFile] = []
     #endif
@@ -69,14 +74,13 @@ public struct ConnectionEditorView: View {
                 sshUsername = ssh.username
                 sshAuthMethod = ssh.authMethod
                 sshKeyPath = ssh.keyPath
+                sshImportedKeyID = ssh.importedKeyID
                 sshFingerprint = ssh.hostKeyFingerprint
             }
             sshPassword = OpenScreensCredentials.secret(kind: "ssh-password", for: draft.id) ?? ""
             sshKeyPassphrase = OpenScreensCredentials.secret(kind: "ssh-passphrase", for: draft.id) ?? ""
             #if os(macOS)
             sshKeyFiles = SSHKeyCatalog.available()
-            #else
-            sshAuthMethod = .password
             #endif
         }
     }
@@ -316,9 +320,7 @@ public struct ConnectionEditorView: View {
 
                 Picker("SSH authentication", selection: $sshAuthMethod) {
                     Text("Password").tag(SSHAuthMethod.password)
-                    #if os(macOS)
                     Text("Private Key").tag(SSHAuthMethod.privateKey)
-                    #endif
                 }
 
                 if sshAuthMethod == .password {
@@ -343,13 +345,32 @@ public struct ConnectionEditorView: View {
                         Spacer()
                         Button("Browse…") { chooseSSHKeyFile() }
                     }
-                    SecureField("Key passphrase", text: $sshKeyPassphrase, prompt: Text("Optional"))
-                        .modifier(PlainInputStyle())
                     #else
-                    Text("Private-key SSH is available in the macOS app.")
+                    Picker("Private key", selection: $sshImportedKeyID) {
+                        Text("Choose a key…").tag(UUID?.none)
+                        ForEach(keyVault.keys) { key in
+                            Text(key.name).tag(Optional(key.id))
+                        }
+                    }
+                    HStack {
+                        Text(
+                            keyVault.keys.isEmpty
+                                ? "No imported keys yet"
+                                : "Keys are stored in the Keychain"
+                        )
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                        Spacer()
+                        Button("Import Key…") { importingSSHKey = true }
+                    }
+                    if let error = sshKeyImportError {
+                        Text(error)
+                            .font(.footnote)
+                            .foregroundStyle(Theme.Colors.danger)
+                    }
                     #endif
+                    SecureField("Key passphrase", text: $sshKeyPassphrase, prompt: Text("Optional"))
+                        .modifier(PlainInputStyle())
                 }
 
                 TextField("Host key SHA-256 (optional)", text: $sshFingerprint)
@@ -365,6 +386,27 @@ public struct ConnectionEditorView: View {
             Text("SSH Tunnel")
         } footer: {
             Text("The VNC address is resolved from the SSH host. SSH secrets are stored in the Keychain.")
+        }
+        .fileImporter(
+            isPresented: $importingSSHKey,
+            allowedContentTypes: [.data]
+        ) { result in
+            switch result {
+            case .success(let url):
+                importSSHKey(from: url)
+            case .failure(let error):
+                sshKeyImportError = error.localizedDescription
+            }
+        }
+    }
+
+    private func importSSHKey(from url: URL) {
+        do {
+            let key = try keyVault.importKey(contentsOf: url)
+            sshImportedKeyID = key.id
+            sshKeyImportError = nil
+        } catch {
+            sshKeyImportError = error.localizedDescription
         }
     }
 
@@ -440,6 +482,10 @@ public struct ConnectionEditorView: View {
            sshKeyPath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return "Choose a private key from ~/.ssh."
         }
+        #else
+        if sshAuthMethod == .privateKey && sshImportedKeyID == nil {
+            return "Import a private key to continue."
+        }
         #endif
         return nil
     }
@@ -468,6 +514,7 @@ public struct ConnectionEditorView: View {
                 username: sshUsername,
                 authMethod: sshAuthMethod,
                 keyPath: sshKeyPath,
+                importedKeyID: sshImportedKeyID,
                 hostKeyFingerprint: sshFingerprint
             )
         } else {

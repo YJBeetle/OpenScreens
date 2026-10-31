@@ -90,6 +90,9 @@ public struct SSHProfile: Codable, Hashable, Sendable {
     public var username: String
     public var authMethod: SSHAuthMethod
     public var keyPath: String
+    /// Key imported through the app and kept in the Keychain (used on iOS,
+    /// where there is no `~/.ssh` to browse).
+    public var importedKeyID: UUID?
     public var hostKeyFingerprint: String
 
     public init(
@@ -99,6 +102,7 @@ public struct SSHProfile: Codable, Hashable, Sendable {
         username: String = "",
         authMethod: SSHAuthMethod = .password,
         keyPath: String = "",
+        importedKeyID: UUID? = nil,
         hostKeyFingerprint: String = ""
     ) {
         self.enabled = enabled
@@ -107,6 +111,7 @@ public struct SSHProfile: Codable, Hashable, Sendable {
         self.username = username
         self.authMethod = authMethod
         self.keyPath = keyPath
+        self.importedKeyID = importedKeyID
         self.hostKeyFingerprint = hostKeyFingerprint
     }
 }

@@ -5,12 +5,14 @@ import SwiftUI
 struct OpenScreensIOSApp: App {
     @State private var connections = ConnectionStore()
     @State private var settings = SettingsStore()
+    @State private var sshKeys = SSHKeyVault()
 
     var body: some Scene {
         WindowGroup {
             IOSRootView()
                 .environment(connections)
                 .environment(settings)
+                .environment(sshKeys)
                 .preferredColorScheme(settings.settings.appearance.colorScheme)
                 .tint(Theme.Colors.accent)
         }

@@ -48,6 +48,18 @@ public struct SettingsView: View {
                 Text("Defaults apply to new connections. Existing connections keep their own settings.")
             }
 
+            #if os(iOS)
+            Section {
+                NavigationLink("SSH Keys") {
+                    SSHKeyManagerView()
+                }
+            } header: {
+                Text("Security")
+            } footer: {
+                Text("Private keys imported for SSH tunnels are kept in the Keychain.")
+            }
+            #endif
+
             Section {
                 Button("Restore Sample Connections") {
                     confirmingRestore = true

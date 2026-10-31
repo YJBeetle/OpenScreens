@@ -10,11 +10,11 @@ Implemented:
 - Raw, CopyRect, RRE, Hextile, ZRLE, zlib and Tight/JPEG decoding into a BGRA framebuffer
 - Client-side cursor rendering on macOS (hover-driven pointer) and Android (Cursor and PointerPos pseudo-encodings); iOS keeps the server-composited cursor
 - Per-connection Tight JPEG quality selection (the Android quality menu) and paced framebuffer update requests
-- TCP and SSH (`direct-tcpip`) transports; SSH jump hosts and password/private-key auth are exposed in the Android editor (with an encrypted key manager) and in the macOS editor (private keys can be selected directly from `~/.ssh`)
+- TCP and SSH (`direct-tcpip`) transports; SSH jump hosts with password or private-key auth. Android has an encrypted key manager, macOS selects keys directly from `~/.ssh`, and iOS imports private keys into the Keychain (Settings → SSH Keys)
 - Native SwiftUI apps for macOS and iOS/iPadOS with a Metal canvas
 - Compose Material 3 app for Android
 
-Not yet implemented: Apple Adaptive DCT, automatic quality adaptation, multi-display selection, file transfer, WireGuard/OpenVPN. On iOS, SSH supports password auth only and has no key manager yet.
+Not yet implemented: Apple Adaptive DCT, automatic quality adaptation, multi-display selection, file transfer, WireGuard/OpenVPN.
 
 ## Layout
 

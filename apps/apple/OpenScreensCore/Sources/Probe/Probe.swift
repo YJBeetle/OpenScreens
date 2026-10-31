@@ -19,7 +19,7 @@ struct Probe {
             sshHost: nil,
             sshPort: nil,
             sshUsername: nil,
-            sshPassword: nil,
+            sshAuth: nil,
             sshHostKeyFingerprint: nil
         )
         let session = try await RemoteSession.connect(config: config)

@@ -72,7 +72,7 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
             sshHost: nil,
             sshPort: nil,
             sshUsername: nil,
-            sshPassword: nil,
+            sshAuth: nil,
             sshHostKeyFingerprint: nil
         )
 

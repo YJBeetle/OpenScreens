@@ -270,7 +270,11 @@ where
     } else if offered.contains(&SecurityType::VncAuthentication) {
         return Err(HandshakeError::MissingPassword);
     } else if apple.is_some() {
-        return Err(HandshakeError::MissingUsername);
+        return Err(if config.username.is_none() {
+            HandshakeError::MissingUsername
+        } else {
+            HandshakeError::MissingPassword
+        });
     } else {
         return Err(HandshakeError::UnsupportedSecurityType(offered[0]));
     };
@@ -565,6 +569,42 @@ mod tests {
             .await
             .unwrap_err();
         assert!(matches!(error, HandshakeError::MissingPassword));
+        task.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn reports_missing_apple_password() {
+        let (mut client, mut server) = duplex(1024);
+        let task = tokio::spawn(async move {
+            server.write_all(b"RFB 003.008\n").await.unwrap();
+            read_version_from(&mut server).await;
+            server.write_all(&[1, 32]).await.unwrap();
+        });
+
+        let config = ClientConfig {
+            username: Some("YJBeetle".to_owned()),
+            ..ClientConfig::default()
+        };
+        let error = perform(&mut client, &config).await.unwrap_err();
+        assert!(matches!(error, HandshakeError::MissingPassword));
+        task.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn reports_missing_apple_username() {
+        let (mut client, mut server) = duplex(1024);
+        let task = tokio::spawn(async move {
+            server.write_all(b"RFB 003.008\n").await.unwrap();
+            read_version_from(&mut server).await;
+            server.write_all(&[1, 32]).await.unwrap();
+        });
+
+        let config = ClientConfig {
+            password: Some("secret".to_owned()),
+            ..ClientConfig::default()
+        };
+        let error = perform(&mut client, &config).await.unwrap_err();
+        assert!(matches!(error, HandshakeError::MissingUsername));
         task.await.unwrap();
     }
 

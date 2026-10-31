@@ -709,15 +709,7 @@ class UniFfiRemoteSession(
                     )
                     if (pixels != null && pixels.size >= count * 4) {
                         val argb = scratchFor(count)
-                        var offset = 0
-                        for (index in 0 until count) {
-                            val blue = pixels[offset].toInt() and 0xFF
-                            val green = pixels[offset + 1].toInt() and 0xFF
-                            val red = pixels[offset + 2].toInt() and 0xFF
-                            val alpha = pixels[offset + 3].toInt() and 0xFF
-                            argb[index] = (alpha shl 24) or (red shl 16) or (green shl 8) or blue
-                            offset += 4
-                        }
+                        bgraBytesToArgb(pixels, count, argb)
                         target.setPixels(
                             argb,
                             0,
@@ -847,4 +839,10 @@ class UniFfiRemoteSession(
         // Cell size (source pixels) for the first-paint coverage grid.
         const val COVERAGE_CELL = 64
     }
+}
+
+// BGRA bytes are ARGB_8888's little-endian memory layout, so one bulk
+// IntBuffer copy replaces a per-pixel conversion loop.
+internal fun bgraBytesToArgb(pixels: ByteArray, count: Int, out: IntArray) {
+    ByteBuffer.wrap(pixels).order(ByteOrder.LITTLE_ENDIAN).asIntBuffer().get(out, 0, count)
 }

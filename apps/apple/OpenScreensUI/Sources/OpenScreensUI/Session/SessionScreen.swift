@@ -511,16 +511,30 @@ public struct SessionScreen: View {
 
     private func uploadStatusText(_ name: String) -> String {
         if let fraction = model.uploadFraction {
-            return "Sending \(name)… \(Int((fraction * 100).rounded()))%"
+            return String(
+                format: NSLocalizedString("Sending %@… %lld%%", comment: "Upload progress"),
+                name,
+                Int((fraction * 100).rounded())
+            )
         }
-        return "Sending \(name)…"
+        return String(
+            format: NSLocalizedString("Sending %@…", comment: "Upload status"),
+            name
+        )
     }
 
     private func downloadStatusText(_ name: String) -> String {
         if let fraction = model.downloadFraction {
-            return "Downloading \(name)… \(Int((fraction * 100).rounded()))%"
+            return String(
+                format: NSLocalizedString("Downloading %@… %lld%%", comment: "Download progress"),
+                name,
+                Int((fraction * 100).rounded())
+            )
         }
-        return "Downloading \(name)…"
+        return String(
+            format: NSLocalizedString("Downloading %@…", comment: "Download status"),
+            name
+        )
     }
 
     private var dropTargetOverlay: some View {
@@ -564,7 +578,11 @@ public struct SessionScreen: View {
     }
 
     private var accessibilityStatus: String {
-        "\(model.state.label), \(model.cursorMode.title) cursor mode"
+        String(
+            format: NSLocalizedString("%@, %@ cursor mode", comment: "Session accessibility value"),
+            model.state.label,
+            model.cursorMode.title
+        )
     }
 
     // MARK: - Drop to send

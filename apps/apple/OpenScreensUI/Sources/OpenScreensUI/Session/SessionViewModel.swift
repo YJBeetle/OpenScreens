@@ -95,7 +95,7 @@ public final class SessionViewModel {
         isKeyboardActive = false
         reconnectTask?.cancel()
         reconnectTask = nil
-        state = .disconnected(reason: "Disconnected")
+        state = .disconnected(reason: NSLocalizedString("Disconnected", comment: "Session state"))
         endTransport()
         PlatformScreen.setIdleTimerDisabled(false)
     }
@@ -245,7 +245,7 @@ public final class SessionViewModel {
 
         case .clipboard(let text):
             PlatformClipboard.setString(text)
-            showMessage("Remote clipboard copied.")
+            showMessage(NSLocalizedString("Remote clipboard copied.", comment: "Clipboard toast"))
 
         case .bell:
             PlatformFeedback.selection()
@@ -494,13 +494,13 @@ public final class SessionViewModel {
     public func sendLocalClipboard() {
         guard state.isConnected, !isObserving else { return }
         guard let text = PlatformClipboard.string, !text.isEmpty else {
-            showMessage("Local clipboard is empty.")
+            showMessage(NSLocalizedString("Local clipboard is empty.", comment: "Clipboard toast"))
             return
         }
         guard let session else { return }
         Task {
             await session.sendClipboard(text)
-            self.showMessage("Sent local clipboard.")
+            self.showMessage(NSLocalizedString("Sent local clipboard.", comment: "Clipboard toast"))
         }
     }
 
@@ -517,9 +517,14 @@ public final class SessionViewModel {
         guard state.isConnected, !urls.isEmpty, let session else { return }
         if urls.count == 1 {
             let name = urls[0].lastPathComponent
-            uploadFileName = name.isEmpty ? "file" : name
+            uploadFileName = name.isEmpty
+                ? NSLocalizedString("file", comment: "Fallback file name")
+                : name
         } else {
-            uploadFileName = "\(urls.count) files"
+            uploadFileName = String(
+                format: NSLocalizedString("%lld files", comment: "Upload label for several files"),
+                urls.count
+            )
         }
         uploadFraction = nil
         Task { await session.uploadFiles(urls) }

@@ -86,7 +86,7 @@ struct SessionKeyboardAccessoryRow: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(label)
+        .accessibilityLabel(NSLocalizedString(label, comment: "Keyboard key"))
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
@@ -116,6 +116,6 @@ struct SessionKeyboardAccessoryRow: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(label)
+        .accessibilityLabel(NSLocalizedString(label, comment: "Keyboard key"))
     }
 }

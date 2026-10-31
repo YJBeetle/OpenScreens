@@ -99,7 +99,7 @@ struct SessionToolbar: View {
     private var selectedDisplayLabel: String {
         guard let id = model.selectedDisplayID,
               let display = model.displays.first(where: { $0.id == id })
-        else { return "All Displays" }
+        else { return NSLocalizedString("All Displays", comment: "Display picker") }
         return display.name
     }
 
@@ -124,9 +124,13 @@ struct SessionToolbar: View {
         .disabled(!model.profile.controls.sharedClipboard)
         .opacity(model.profile.controls.sharedClipboard ? 1 : 0.4)
         .accessibilityLabel("Clipboard")
-        .accessibilityHint(model.profile.controls.sharedClipboard
-            ? "Send or fetch clipboard text"
-            : "Shared clipboard is turned off for this connection")
+        .accessibilityHint(clipboardHint)
+    }
+
+    private var clipboardHint: String {
+        model.profile.controls.sharedClipboard
+            ? NSLocalizedString("Send or fetch clipboard text", comment: "Clipboard hint")
+            : NSLocalizedString("Shared clipboard is turned off for this connection", comment: "Clipboard hint")
     }
 
     private var displayMenu: some View {

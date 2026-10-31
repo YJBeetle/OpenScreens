@@ -69,7 +69,7 @@ struct ConnectionGrid: View {
             .padding(Theme.Spacing.content)
         }
         .confirmationDialog(
-            pendingDeletion.map { "Delete “\($0.name)”?" } ?? "Delete Connection?",
+            deletionTitle,
             isPresented: deletionBinding,
             titleVisibility: .visible
         ) {
@@ -85,6 +85,16 @@ struct ConnectionGrid: View {
         } message: {
             Text("This removes the connection from this device. You can add it again at any time.")
         }
+    }
+
+    private var deletionTitle: String {
+        guard let profile = pendingDeletion else {
+            return NSLocalizedString("Delete Connection?", comment: "Delete confirmation")
+        }
+        return String(
+            format: NSLocalizedString("Delete “%@”?", comment: "Delete confirmation with name"),
+            profile.name
+        )
     }
 
     private var deletionBinding: Binding<Bool> {
@@ -162,9 +172,15 @@ public struct LibrarySectionView: View {
     private var serviceExplanation: String {
         switch section {
         case .connect:
-            "OpenScreens connects directly to your computers. There is no relay account: use a LAN address, an SSH tunnel or your own VPN."
+            NSLocalizedString(
+                "OpenScreens connects directly to your computers. There is no relay account: use a LAN address, an SSH tunnel or your own VPN.",
+                comment: "Connect service explanation"
+            )
         case .tailscale:
-            "Enter a Tailscale 100.x address as a hostname today. A native Tailscale integration is not part of this build."
+            NSLocalizedString(
+                "Enter a Tailscale 100.x address as a hostname today. A native Tailscale integration is not part of this build.",
+                comment: "Tailscale service explanation"
+            )
         default:
             ""
         }
@@ -196,11 +212,20 @@ public struct LibrarySectionView: View {
     private var emptyExplanation: String {
         switch section {
         case .nearby:
-            "Computers discovered on this network appear here. You can also add one manually."
+            NSLocalizedString(
+                "Computers discovered on this network appear here. You can also add one manually.",
+                comment: "Empty library explanation"
+            )
         case .links:
-            "Connections shared with you as links appear here."
+            NSLocalizedString(
+                "Connections shared with you as links appear here.",
+                comment: "Empty library explanation"
+            )
         default:
-            "Add a computer to start a remote session."
+            NSLocalizedString(
+                "Add a computer to start a remote session.",
+                comment: "Empty library explanation"
+            )
         }
     }
 }

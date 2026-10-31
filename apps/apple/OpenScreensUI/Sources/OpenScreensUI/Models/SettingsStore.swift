@@ -13,9 +13,9 @@ public enum AppAppearance: String, Codable, CaseIterable, Identifiable, Sendable
 
     public var title: String {
         switch self {
-        case .system: "System"
-        case .light: "Light"
-        case .dark: "Dark"
+        case .system: NSLocalizedString("System", comment: "Appearance")
+        case .light: NSLocalizedString("Light", comment: "Appearance")
+        case .dark: NSLocalizedString("Dark", comment: "Appearance")
         }
     }
 
@@ -37,9 +37,9 @@ public enum TileDensity: String, Codable, CaseIterable, Identifiable, Sendable {
 
     public var title: String {
         switch self {
-        case .compact: "Compact"
-        case .comfortable: "Comfortable"
-        case .spacious: "Spacious"
+        case .compact: NSLocalizedString("Compact", comment: "Tile density")
+        case .comfortable: NSLocalizedString("Comfortable", comment: "Tile density")
+        case .spacious: NSLocalizedString("Spacious", comment: "Tile density")
         }
     }
 
@@ -77,9 +77,9 @@ public enum UpdateChannel: String, Codable, CaseIterable, Identifiable, Sendable
 
     public var title: String {
         switch self {
-        case .release: "Release"
-        case .prerelease: "Pre-release"
-        case .snapshot: "Snapshot"
+        case .release: NSLocalizedString("Release", comment: "Update channel")
+        case .prerelease: NSLocalizedString("Pre-release", comment: "Update channel")
+        case .snapshot: NSLocalizedString("Snapshot", comment: "Update channel")
         }
     }
 }

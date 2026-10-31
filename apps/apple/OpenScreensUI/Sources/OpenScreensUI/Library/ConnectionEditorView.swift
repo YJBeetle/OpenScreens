@@ -153,7 +153,7 @@ public struct ConnectionEditorView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(.title3.weight(.semibold))
-                Text(isCreating ? "Configure a remote computer" : draft.endpoint)
+                Text(headerSubtitle)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -265,9 +265,7 @@ public struct ConnectionEditorView: View {
         } header: {
             Text("Address")
         } footer: {
-            Text(draft.trimmedHost.isEmpty
-                ? "The server's hostname or IP address. VNC uses port 5900 by default."
-                : "Connects to \(draft.endpoint).")
+            Text(addressFooter)
         }
 
         Section {
@@ -358,11 +356,7 @@ public struct ConnectionEditorView: View {
                         }
                     }
                     HStack {
-                        Text(
-                            keyVault.keys.isEmpty
-                                ? "No imported keys yet"
-                                : "Keys are stored in the Keychain"
-                        )
+                        Text(sshKeyHint)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         Spacer()
@@ -407,7 +401,7 @@ public struct ConnectionEditorView: View {
         Section {
             if draft.hasWireGuardConfig {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(wireGuardFileName ?? "WireGuard configuration")
+                    Text(wireGuardFileName ?? NSLocalizedString("WireGuard configuration", comment: "WireGuard file fallback"))
                         .font(.subheadline)
                         .lineLimit(1)
                     Text(wireGuardSummary)
@@ -483,7 +477,7 @@ public struct ConnectionEditorView: View {
 
         do {
             guard url.pathExtension.lowercased() == "conf" else {
-                throw WireGuardImportError("Choose a WireGuard .conf file.")
+                throw WireGuardImportError(NSLocalizedString("Choose a WireGuard .conf file.", comment: "WireGuard import error"))
             }
 
             let handle = try FileHandle(forReadingFrom: url)
@@ -497,16 +491,18 @@ public struct ConnectionEditorView: View {
             }
             guard data.count <= Self.wireGuardByteLimit else {
                 throw WireGuardImportError(
-                    "WireGuard configurations must be 64 KiB or smaller."
+                    NSLocalizedString("WireGuard configurations must be 64 KiB or smaller.", comment: "WireGuard import error")
                 )
             }
             guard let text = String(data: data, encoding: .utf8) else {
                 throw WireGuardImportError(
-                    "The WireGuard configuration is not UTF-8 text."
+                    NSLocalizedString("The WireGuard configuration is not UTF-8 text.", comment: "WireGuard import error")
                 )
             }
             guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-                throw WireGuardImportError("The WireGuard configuration is empty.")
+                throw WireGuardImportError(
+                    NSLocalizedString("The WireGuard configuration is empty.", comment: "WireGuard import error")
+                )
             }
 
             draft.wireGuardConfig = text
@@ -593,19 +589,19 @@ public struct ConnectionEditorView: View {
     private var sshValidationError: String? {
         guard sshEnabled else { return nil }
         if sshUsername.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return "SSH user name is required."
+            return NSLocalizedString("SSH user name is required.", comment: "SSH validation")
         }
         guard let port = sshPortNumber, (1...65535).contains(port) else {
-            return "SSH port must be between 1 and 65535."
+            return NSLocalizedString("SSH port must be between 1 and 65535.", comment: "SSH validation")
         }
         #if os(macOS)
         if sshAuthMethod == .privateKey,
            sshKeyPath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return "Choose a private key from ~/.ssh."
+            return NSLocalizedString("Choose a private key from ~/.ssh.", comment: "SSH validation")
         }
         #else
         if sshAuthMethod == .privateKey && sshImportedKeyID == nil {
-            return "Import a private key to continue."
+            return NSLocalizedString("Import a private key to continue.", comment: "SSH validation")
         }
         #endif
         return nil
@@ -677,17 +673,44 @@ public struct ConnectionEditorView: View {
     }
 
     private var title: String {
-        isCreating ? "New Connection" : "Edit Connection"
+        isCreating
+            ? NSLocalizedString("New Connection", comment: "Connection editor title")
+            : NSLocalizedString("Edit Connection", comment: "Connection editor title")
+    }
+
+    private var headerSubtitle: String {
+        isCreating
+            ? NSLocalizedString("Configure a remote computer", comment: "Connection editor subtitle")
+            : draft.endpoint
+    }
+
+    private var addressFooter: String {
+        guard !draft.trimmedHost.isEmpty else {
+            return NSLocalizedString(
+                "The server's hostname or IP address. VNC uses port 5900 by default.",
+                comment: "Address section footer"
+            )
+        }
+        return String(
+            format: NSLocalizedString("Connects to %@.", comment: "Address section footer"),
+            draft.endpoint
+        )
+    }
+
+    private var sshKeyHint: String {
+        keyVault.keys.isEmpty
+            ? NSLocalizedString("No imported keys yet", comment: "SSH key hint")
+            : NSLocalizedString("Keys are stored in the Keychain", comment: "SSH key hint")
     }
 
     private var missingFieldsMessage: String {
         if draft.trimmedName.isEmpty && draft.trimmedHost.isEmpty {
-            return "Enter a name and a hostname to continue."
+            return NSLocalizedString("Enter a name and a hostname to continue.", comment: "Missing fields")
         }
         if draft.trimmedName.isEmpty {
-            return "Enter a name to continue."
+            return NSLocalizedString("Enter a name to continue.", comment: "Missing fields")
         }
-        return "Enter a hostname to continue."
+        return NSLocalizedString("Enter a hostname to continue.", comment: "Missing fields")
     }
 }
 
@@ -701,10 +724,10 @@ private enum EditorSection: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .connection: "Connection"
-        case .security: "Security"
-        case .controls: "Controls"
-        case .advanced: "Advanced"
+        case .connection: NSLocalizedString("Connection", comment: "Editor section")
+        case .security: NSLocalizedString("Security", comment: "Editor section")
+        case .controls: NSLocalizedString("Controls", comment: "Editor section")
+        case .advanced: NSLocalizedString("Advanced", comment: "Editor section")
         }
     }
 

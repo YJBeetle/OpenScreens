@@ -25,18 +25,18 @@ public enum LibrarySection: String, Codable, CaseIterable, Identifiable, Sendabl
 
     public var title: String {
         switch self {
-        case .nearby: "Nearby"
-        case .links: "Links"
-        case .connect: "Connect"
+        case .nearby: NSLocalizedString("Nearby", comment: "Library section")
+        case .links: NSLocalizedString("Links", comment: "Library section")
+        case .connect: NSLocalizedString("Connect", comment: "Library section")
         case .tailscale: "Tailscale"
-        case .custom: "Custom"
+        case .custom: NSLocalizedString("Custom", comment: "Library section")
         }
     }
 
     /// Title used for the content pane. The custom library is the app's main
     /// "all connections" list.
     public var screenTitle: String {
-        self == .custom ? "All Connections" : title
+        self == .custom ? NSLocalizedString("All Connections", comment: "Library pane title") : title
     }
 
     public var systemImage: String {
@@ -57,8 +57,8 @@ public enum LibrarySection: String, Codable, CaseIterable, Identifiable, Sendabl
 
     public var serviceStatus: String? {
         switch self {
-        case .connect: "Not configured"
-        case .tailscale: "Optional"
+        case .connect: NSLocalizedString("Not configured", comment: "Service status")
+        case .tailscale: NSLocalizedString("Optional", comment: "Service status")
         default: nil
         }
     }
@@ -76,8 +76,8 @@ public enum SSHAuthMethod: String, Codable, CaseIterable, Identifiable, Sendable
 
     public var title: String {
         switch self {
-        case .password: "Password"
-        case .privateKey: "Private Key"
+        case .password: NSLocalizedString("Password", comment: "SSH authentication method")
+        case .privateKey: NSLocalizedString("Private Key", comment: "SSH authentication method")
         }
     }
 }
@@ -211,7 +211,13 @@ public struct ConnectionProfile: Identifiable, Codable, Hashable, Sendable {
     /// Subtitle under the tile name.
     public var subtitle: String {
         if isDiscovered {
-            return host.isEmpty ? "Discovered nearby" : "\(host) · Nearby"
+            guard !host.isEmpty else {
+                return NSLocalizedString("Discovered nearby", comment: "Tile subtitle")
+            }
+            return String(
+                format: NSLocalizedString("%@ · Nearby", comment: "Tile subtitle: host · Nearby"),
+                host
+            )
         }
         return endpoint
     }
@@ -295,7 +301,7 @@ public enum RemoteOS: String, Codable, CaseIterable, Identifiable, Sendable {
         case .windows: "Windows"
         case .linux: "Linux"
         case .unix: "Unix"
-        case .generic: "Other"
+        case .generic: NSLocalizedString("Other", comment: "Remote operating system")
         }
     }
 
@@ -322,9 +328,9 @@ public enum AuthenticationMethod: String, Codable, CaseIterable, Identifiable, S
 
     public var title: String {
         switch self {
-        case .vncPassword: "VNC Password"
-        case .macOSAccount: "macOS Account"
-        case .none: "None"
+        case .vncPassword: NSLocalizedString("VNC Password", comment: "Authentication method")
+        case .macOSAccount: NSLocalizedString("macOS Account", comment: "Authentication method")
+        case .none: NSLocalizedString("None", comment: "Authentication method")
         }
     }
 
@@ -341,9 +347,9 @@ public enum CursorMode: String, Codable, CaseIterable, Identifiable, Sendable {
 
     public var title: String {
         switch self {
-        case .touch: "Touch"
-        case .trackpad: "Trackpad"
-        case .trackpadAndMouse: "Trackpad & Mouse"
+        case .touch: NSLocalizedString("Touch", comment: "Cursor mode")
+        case .trackpad: NSLocalizedString("Trackpad", comment: "Cursor mode")
+        case .trackpadAndMouse: NSLocalizedString("Trackpad & Mouse", comment: "Cursor mode")
         }
     }
 
@@ -358,11 +364,20 @@ public enum CursorMode: String, Codable, CaseIterable, Identifiable, Sendable {
     public var help: String {
         switch self {
         case .touch:
-            "Taps jump the pointer to the touched spot. Drag to move the pointer."
+            NSLocalizedString(
+                "Taps jump the pointer to the touched spot. Drag to move the pointer.",
+                comment: "Cursor mode help"
+            )
         case .trackpad:
-            "The screen behaves like a trackpad; the pointer moves relative to your fingers."
+            NSLocalizedString(
+                "The screen behaves like a trackpad; the pointer moves relative to your fingers.",
+                comment: "Cursor mode help"
+            )
         case .trackpadAndMouse:
-            "Use relative touch movement and pair a hardware mouse when one is available."
+            NSLocalizedString(
+                "Use relative touch movement and pair a hardware mouse when one is available.",
+                comment: "Cursor mode help"
+            )
         }
     }
 }

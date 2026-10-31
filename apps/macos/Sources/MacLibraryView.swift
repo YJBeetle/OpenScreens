@@ -79,7 +79,7 @@ struct MacLibraryView: View {
     }
 
     private var navigationTitle: String {
-        if isSearching { return "Search" }
+        if isSearching { return NSLocalizedString("Search", comment: "Navigation title") }
         return selection?.screenTitle ?? "OpenScreens"
     }
 

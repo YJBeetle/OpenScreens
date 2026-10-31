@@ -1,0 +1,315 @@
+/*
+   Localizable.strings (zh-Hans)
+   OpenScreens Apple apps — Simplified Chinese.
+
+   English is the development language: the keys are the English source
+   strings, so a missing entry simply falls back to English at runtime.
+   Protocol and product names (VNC, SSH, WireGuard, Tailscale, OpenScreens)
+   are intentionally left untranslated.
+*/
+
+/* MARK: - Common actions */
+"Cancel" = "取消";
+"Save" = "保存";
+"Done" = "完成";
+"OK" = "好";
+"Close" = "关闭";
+"Connect" = "连接";
+"Disconnect" = "断开连接";
+"Reconnect" = "重新连接";
+"Delete" = "删除";
+"Duplicate" = "复制";
+"Edit" = "编辑";
+"Import" = "导入";
+"Download" = "下载";
+"Settings" = "设置";
+"Optional" = "可选";
+
+/* MARK: - Library sections and navigation */
+"Nearby" = "附近";
+"Links" = "链接";
+"Custom" = "自定义";
+"All Connections" = "全部连接";
+"Library" = "连接库";
+"Library tabs" = "连接库标签页";
+"Services" = "服务";
+"Not configured" = "未配置";
+"Search" = "搜索";
+"Search Connections" = "搜索连接";
+"Search connections" = "搜索连接";
+"Clear search" = "清除搜索";
+"Choose a Library" = "选择连接库";
+"Select a section in the sidebar to see its connections." = "在边栏中选择一个分区以查看其中的连接。";
+"Find a saved computer by name, address, section or user name." = "按名称、地址、分区或用户名查找已保存的电脑。";
+
+/* MARK: - Library content */
+"New Connection" = "新建连接";
+"Delete Connection?" = "删除连接？";
+"Delete “%@”?" = "删除“%@”？";
+"Delete…" = "删除…";
+"Edit…" = "编辑…";
+"This removes the connection from this device. You can add it again at any time." = "这会将连接从此设备移除。你可以随时重新添加。";
+"No Connections" = "暂无连接";
+"No Results" = "无结果";
+"No connections match “%@”." = "没有与“%@”匹配的连接。";
+"No connections in %@ match “%@”." = "“%@”中没有与“%@”匹配的连接。";
+"Computers discovered on this network appear here. You can also add one manually." = "在此网络中发现的计算机会显示在这里。你也可以手动添加。";
+"Connections shared with you as links appear here." = "以链接分享给你的连接会显示在这里。";
+"Add a computer to start a remote session." = "添加一台电脑以开始远程会话。";
+"OpenScreens connects directly to your computers. There is no relay account: use a LAN address, an SSH tunnel or your own VPN." = "OpenScreens 会直接连接你的电脑，无需中继账号：可使用局域网地址、SSH 隧道或你自己的 VPN。";
+"Enter a Tailscale 100.x address as a hostname today. A native Tailscale integration is not part of this build." = "目前可将 Tailscale 的 100.x 地址作为主机名填写。此版本暂未内置 Tailscale 集成。";
+
+/* MARK: - Phone library subtitles */
+"1 computer discovered" = "发现 1 台电脑";
+"%lld computers discovered" = "发现 %lld 台电脑";
+"Connections shared with you" = "分享给你的连接";
+"1 saved computer" = "1 台已保存的电脑";
+"%lld saved computers" = "%lld 台已保存的电脑";
+"Across every section of your library" = "跨连接库的所有分区";
+
+/* MARK: - Tiles */
+"Discovered nearby" = "附近发现";
+"%@ · Nearby" = "%@ · 附近";
+"Tile colour" = "卡片颜色";
+"Tile Colour" = "卡片颜色";
+"Connects to this remote screen" = "连接到这台远程屏幕";
+"Ocean" = "海洋";
+"Plum" = "梅紫";
+"Forest" = "森林";
+"Ember" = "余烬";
+"Midnight" = "午夜";
+"Orchid" = "兰花";
+"Sand" = "沙丘";
+"Slate" = "石板";
+
+/* MARK: - Connection editor */
+"Edit Connection" = "编辑连接";
+"Configure a remote computer" = "配置远程电脑";
+"Cancel editing" = "取消编辑";
+"Save connection" = "保存连接";
+"Connection" = "连接";
+"Security" = "安全";
+"Controls" = "控制";
+"Advanced" = "高级";
+"Details" = "详细信息";
+"Address" = "地址";
+"Name" = "名称";
+"Studio Mac" = "工作室 Mac";
+"System" = "系统";
+"Hostname" = "主机名";
+"hostname or IP address" = "主机名或 IP 地址";
+"Port" = "端口";
+"The server's hostname or IP address. VNC uses port 5900 by default." = "服务器的主机名或 IP 地址。VNC 默认使用 5900 端口。";
+"Connects to %@." = "将连接到 %@。";
+"The colour appears only on this connection's library tile." = "该颜色仅用于此连接在连接库中的卡片。";
+"Favorite" = "收藏";
+"Other" = "其他";
+"VNC Password" = "VNC 密码";
+"macOS Account" = "macOS 账户";
+"None" = "无";
+"Authentication" = "身份验证";
+"User Name" = "用户名";
+"Remote account" = "远程账户";
+"Password" = "密码";
+"Connection password" = "连接密码";
+"Passwords are stored in the system Keychain for this connection." = "密码会保存在此连接的系统钥匙串中。";
+"Enter a name and a hostname to continue." = "请输入名称和主机名以继续。";
+"Enter a name to continue." = "请输入名称以继续。";
+"Enter a hostname to continue." = "请输入主机名以继续。";
+
+/* MARK: - SSH tunnel */
+"Tunnel through SSH" = "通过 SSH 建立隧道";
+"SSH host" = "SSH 主机";
+"Same as hostname" = "与主机名相同";
+"SSH port" = "SSH 端口";
+"SSH user name" = "SSH 用户名";
+"SSH authentication" = "SSH 身份验证";
+"Private Key" = "私钥";
+"Private key" = "私钥";
+"SSH password" = "SSH 密码";
+"Choose a key…" = "选择密钥…";
+"Keys from ~/.ssh" = "来自 ~/.ssh 的密钥";
+"Browse…" = "浏览…";
+"No imported keys yet" = "尚未导入密钥";
+"Keys are stored in the Keychain" = "密钥保存在钥匙串中";
+"Import Key…" = "导入密钥…";
+"Key passphrase" = "密钥口令";
+"Host key SHA-256 (optional)" = "主机密钥 SHA-256（可选）";
+"SSH Tunnel" = "SSH 隧道";
+"The VNC address is resolved from the SSH host. SSH secrets are stored in the Keychain." = "VNC 地址将通过 SSH 主机解析。SSH 密钥信息保存在钥匙串中。";
+"SSH user name is required." = "请填写 SSH 用户名。";
+"SSH port must be between 1 and 65535." = "SSH 端口必须在 1 到 65535 之间。";
+"Choose a private key from ~/.ssh." = "请从 ~/.ssh 中选择一个私钥。";
+"Import a private key to continue." = "请导入一个私钥以继续。";
+"Choose an SSH private key for this connection." = "请为此连接选择一个 SSH 私钥。";
+"Import Failed" = "导入失败";
+"The selected file is not an SSH private key in PEM format." = "所选文件不是 PEM 格式的 SSH 私钥。";
+"Imported key" = "导入的密钥";
+"No SSH Keys" = "暂无 SSH 密钥";
+"Import a private key to use key authentication over SSH." = "导入私钥以使用 SSH 密钥认证。";
+"SSH Keys" = "SSH 密钥";
+"Private keys imported for SSH tunnels are kept in the Keychain." = "为 SSH 隧道导入的私钥保存在钥匙串中。";
+
+/* MARK: - WireGuard */
+"WireGuard configuration" = "WireGuard 配置";
+"Import WireGuard Configuration…" = "导入 WireGuard 配置…";
+"Remove Configuration" = "移除配置";
+"SSH and WireGuard cannot be used together. Turn one off to save." = "SSH 和 WireGuard 不能同时使用。请关闭其中一个后再保存。";
+"SSH and WireGuard cannot be used together. Choose one." = "SSH 和 WireGuard 不能同时使用。请选择其中一个。";
+"Import a wg-quick .conf file (64 KiB maximum). The configuration is stored with this connection and used instead of SSH." = "导入 wg-quick .conf 文件（最大 64 KiB）。该配置会随此连接保存，并替代 SSH 使用。";
+"Choose a WireGuard .conf file." = "请选择 WireGuard 的 .conf 文件。";
+"WireGuard configurations must be 64 KiB or smaller." = "WireGuard 配置不得大于 64 KiB。";
+"The WireGuard configuration is not UTF-8 text." = "此 WireGuard 配置不是 UTF-8 文本。";
+"The WireGuard configuration is empty." = "此 WireGuard 配置为空。";
+
+/* MARK: - Cursor and session defaults */
+"Cursor Mode" = "指针模式";
+"Cursor mode" = "指针模式";
+"Pointer" = "指针";
+"Touch" = "触摸";
+"Trackpad" = "触控板";
+"Trackpad & Mouse" = "触控板与鼠标";
+"Taps jump the pointer to the touched spot. Drag to move the pointer." = "轻点会将指针移到触摸位置，拖移可移动指针。";
+"The screen behaves like a trackpad; the pointer moves relative to your fingers." = "屏幕如同触控板，指针会相对手指移动。";
+"Use relative touch movement and pair a hardware mouse when one is available." = "使用相对触摸移动，并在有硬件鼠标时配对使用。";
+"Start in Observe Mode" = "以查看模式启动";
+"Use Shared Clipboard" = "使用共享剪贴板";
+"Session" = "会话";
+"Observe mode shows the screen without sending input. Shared clipboard enables manual send and fetch while connected." = "查看模式仅显示屏幕，不发送输入。共享剪贴板可在连接期间手动发送和获取内容。";
+"Display Scaling" = "显示缩放";
+"Scale to Fit" = "适应大小";
+"Scale to Fill" = "填满";
+"Stretch" = "拉伸";
+"Reconnect Automatically" = "自动重新连接";
+"Keep Screen Awake" = "保持屏幕常亮";
+"Display" = "显示器";
+"Scaling controls how the framebuffer fits the session window. Automatic reconnect retries up to three times after an unexpected close." = "缩放决定画面如何适配会话窗口。意外断开后，自动重连最多重试三次。";
+
+/* MARK: - Session toolbar and menus */
+"Show Toolbar" = "显示工具栏";
+"Hide Toolbar" = "隐藏工具栏";
+"Show Keyboard" = "显示键盘";
+"Hide Keyboard" = "隐藏键盘";
+"Download Remote File" = "下载远程文件";
+"Observe Mode On" = "查看模式已开启";
+"Observe Mode Off" = "查看模式已关闭";
+"Observe" = "查看中";
+"Observe mode is on" = "查看模式已开启";
+"Toggle Observe Mode" = "切换查看模式";
+"Close session" = "关闭会话";
+"Remote screen for %@" = "%@ 的远程屏幕";
+"Tap to click, drag to move the pointer" = "轻点以单击，拖移以移动指针";
+"Drop files to send" = "拖放文件以发送";
+"Select display" = "选择显示器";
+"All Displays" = "所有显示器";
+"Display options" = "显示选项";
+"Scaling" = "缩放";
+"Clipboard" = "剪贴板";
+"Send Local Clipboard" = "发送本地剪贴板";
+"Copy Remote Clipboard" = "复制远程剪贴板";
+"Send or fetch clipboard text" = "发送或获取剪贴板文本";
+"Shared clipboard is turned off for this connection" = "此连接已关闭共享剪贴板";
+
+/* MARK: - Keyboard accessory */
+"Escape" = "退出键";
+"Tab" = "制表键";
+"Control" = "控制键";
+"Option" = "选项键";
+"Command" = "命令键";
+"Left Arrow" = "左方向键";
+"Up Arrow" = "上方向键";
+"Down Arrow" = "下方向键";
+"Right Arrow" = "右方向键";
+"Return" = "回车键";
+"Backspace" = "退格键";
+
+/* MARK: - Session state and overlays */
+"Idle" = "空闲";
+"Connecting…" = "正在连接…";
+"Connected" = "已连接";
+"Reconnecting… (%lld)" = "正在重新连接…（%lld）";
+"Disconnected" = "已断开连接";
+"Connecting to %@" = "正在连接到 %@";
+"Connection Closed" = "连接已关闭";
+"Connection closed" = "连接已关闭";
+"The remote computer ended the session." = "远程电脑结束了此会话。";
+"Disconnect from “%@”?" = "断开与“%@”的连接？";
+"The remote session ends. You can reconnect from the library at any time." = "远程会话将结束。你可以随时从连接库重新连接。";
+"%@, %@ cursor mode" = "%@，%@ 指针模式";
+
+/* MARK: - File transfer */
+"Download Complete" = "下载完成";
+"Saved to %@" = "已保存到 %@";
+"/path/on/remote/computer" = "/远程/电脑/上的/路径";
+"Enter the POSIX path of a file on the remote computer. It is saved to your Downloads folder." = "请输入远程电脑上文件的 POSIX 路径，文件将保存到你的“下载”文件夹。";
+"Sending %@… %lld%%" = "正在发送 %@… %lld%%";
+"Sending %@…" = "正在发送 %@…";
+"Downloading %@… %lld%%" = "正在下载 %@… %lld%%";
+"Downloading %@…" = "正在下载 %@…";
+"%lld files" = "%lld 个文件";
+"file" = "文件";
+"Remote clipboard copied." = "已复制远程剪贴板。";
+"Local clipboard is empty." = "本地剪贴板为空。";
+"Sent local clipboard." = "已发送本地剪贴板。";
+"Only regular files can be sent to the remote computer." = "只能向远程电脑发送普通文件。";
+"The dropped items could not be read." = "无法读取拖入的项目。";
+"Could not send files: %@" = "无法发送文件：%@";
+"File transfer failed: %@" = "文件传输失败：%@";
+"Enter a remote path to download." = "请输入要下载的远程路径。";
+"The session is not connected." = "会话未连接。";
+"No local folder is available for downloads." = "没有可用的本地下载文件夹。";
+"Could not download “%@”: %@" = "无法下载“%@”：%@";
+"Download failed: %@" = "下载失败：%@";
+"Could not switch display: %@" = "无法切换显示器：%@";
+"Display %lld" = "显示器 %lld";
+
+/* MARK: - Settings */
+"Appearance" = "外观";
+"Theme" = "主题";
+"Light" = "浅色";
+"Dark" = "深色";
+"Library Tile Size" = "连接库卡片大小";
+"Compact" = "紧凑";
+"Comfortable" = "舒适";
+"Spacious" = "宽松";
+"Session Defaults" = "会话默认设置";
+"Confirm Before Disconnecting" = "断开前确认";
+"Defaults apply to new connections. Existing connections keep their own settings." = "默认设置会应用于新连接。现有连接保留各自的设置。";
+"Restore Sample Connections" = "恢复示例连接";
+"Adds the demo computers back to your library without removing anything you saved." = "将演示电脑重新加入连接库，不会移除你已保存的内容。";
+"Restore sample connections?" = "恢复示例连接？";
+"Restore Samples" = "恢复示例";
+"The demo hosts are added to your library again. Existing connections are kept." = "演示主机会重新加入连接库，现有连接会保留。";
+"Version" = "版本";
+"Protocol" = "协议";
+"Transport" = "传输方式";
+"Direct connection" = "直接连接";
+"OpenScreens is open source software, licensed under AGPL-3.0. This build uses a local mock session; the Rust RFB engine plugs in behind the same session interface." = "OpenScreens 是开源软件，采用 AGPL-3.0 许可。此构建使用本地模拟会话；Rust RFB 引擎通过同一会话接口接入。";
+"About" = "关于";
+
+/* MARK: - Updates (macOS) */
+"Update channel" = "更新通道";
+"Release" = "正式版";
+"Pre-release" = "预发布版";
+"Snapshot" = "快照版";
+"Updates" = "更新";
+"Check for Updates" = "检查更新";
+"Checking…" = "正在检查…";
+"Downloading…" = "正在下载…";
+"Check GitHub Releases for a newer build." = "在 GitHub Releases 中检查是否有更新版本。";
+"You're on the latest version for this channel." = "你已是最新版本（当前通道）。";
+"No releases published for this channel yet." = "此通道尚未发布任何版本。";
+"A new build is available." = "有新版本可用。";
+"Couldn't check for updates: %@" = "无法检查更新：%@";
+"Version %@ is available" = "版本 %@ 已可用";
+"Release Notes" = "发布说明";
+"Download & Open Installer" = "下载并打开安装程序";
+"No macOS asset in this release" = "此版本中没有 macOS 安装包";
+"Release receives stable builds, pre-release includes betas, and snapshot follows development builds. Installers are downloaded from GitHub Releases." = "正式版接收稳定构建，预发布版包含测试版，快照版跟随开发构建。安装程序从 GitHub Releases 下载。";
+
+/* MARK: - macOS windows */
+"No Session" = "无会话";
+"Open a connection from the library." = "从连接库中打开一个连接。";
+"Opening Session…" = "正在打开会话…";
+"Connection Not Found" = "找不到该连接";
+"This connection was removed from the library." = "此连接已从连接库中移除。";

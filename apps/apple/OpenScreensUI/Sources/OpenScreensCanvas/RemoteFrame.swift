@@ -36,9 +36,9 @@ public enum RemoteContentMode: String, CaseIterable, Codable, Sendable, Identifi
 
     public var title: String {
         switch self {
-        case .fit: "Scale to Fit"
-        case .fill: "Scale to Fill"
-        case .stretch: "Stretch"
+        case .fit: NSLocalizedString("Scale to Fit", comment: "Display scaling")
+        case .fill: NSLocalizedString("Scale to Fill", comment: "Display scaling")
+        case .stretch: NSLocalizedString("Stretch", comment: "Display scaling")
         }
     }
 }

@@ -1,3 +1,4 @@
+import Foundation
 import SwiftUI
 
 /// Colour palettes for the screen-shaped connection tiles. These are original
@@ -16,14 +17,14 @@ public enum TilePalette: String, Codable, CaseIterable, Identifiable, Sendable {
 
     public var title: String {
         switch self {
-        case .ocean: "Ocean"
-        case .plum: "Plum"
-        case .forest: "Forest"
-        case .ember: "Ember"
-        case .midnight: "Midnight"
-        case .orchid: "Orchid"
-        case .sand: "Sand"
-        case .slate: "Slate"
+        case .ocean: NSLocalizedString("Ocean", comment: "Tile colour")
+        case .plum: NSLocalizedString("Plum", comment: "Tile colour")
+        case .forest: NSLocalizedString("Forest", comment: "Tile colour")
+        case .ember: NSLocalizedString("Ember", comment: "Tile colour")
+        case .midnight: NSLocalizedString("Midnight", comment: "Tile colour")
+        case .orchid: NSLocalizedString("Orchid", comment: "Tile colour")
+        case .sand: NSLocalizedString("Sand", comment: "Tile colour")
+        case .slate: NSLocalizedString("Slate", comment: "Tile colour")
         }
     }
 

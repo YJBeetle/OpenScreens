@@ -7,6 +7,11 @@ options:
   createIntermediateGroups: true
   groupSortPosition: top
   xcodeVersion: "26.0"
+  developmentLanguage: en
+  knownRegions:
+    - en
+    - Base
+    - zh-Hans
 
 settings:
   base:
@@ -30,6 +35,7 @@ targets:
     platform: macOS
     sources:
       - path: Sources
+      - path: Resources
     dependencies:
       - package: OpenScreensUI
         product: OpenScreensUI

@@ -144,14 +144,26 @@ struct PhoneLibraryView: View {
         switch tab {
         case .nearby:
             let count = store.count(in: .nearby)
-            return count == 1 ? "1 computer discovered" : "\(count) computers discovered"
+            guard count != 1 else {
+                return NSLocalizedString("1 computer discovered", comment: "Library subtitle")
+            }
+            return String(
+                format: NSLocalizedString("%lld computers discovered", comment: "Library subtitle"),
+                count
+            )
         case .links:
-            return "Connections shared with you"
+            return NSLocalizedString("Connections shared with you", comment: "Library subtitle")
         case .library:
             let count = store.count(in: .custom)
-            return count == 1 ? "1 saved computer" : "\(count) saved computers"
+            guard count != 1 else {
+                return NSLocalizedString("1 saved computer", comment: "Library subtitle")
+            }
+            return String(
+                format: NSLocalizedString("%lld saved computers", comment: "Library subtitle"),
+                count
+            )
         case .search:
-            return "Across every section of your library"
+            return NSLocalizedString("Across every section of your library", comment: "Library subtitle")
         }
     }
 
@@ -183,16 +195,16 @@ enum PhoneTab: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .nearby: "Nearby"
-        case .links: "Links"
-        case .library: "Library"
-        case .search: "Search"
+        case .nearby: NSLocalizedString("Nearby", comment: "Library tab")
+        case .links: NSLocalizedString("Links", comment: "Library tab")
+        case .library: NSLocalizedString("Library", comment: "Library tab")
+        case .search: NSLocalizedString("Search", comment: "Library tab")
         }
     }
 
     var screenTitle: String {
         switch self {
-        case .library: "All Connections"
+        case .library: NSLocalizedString("All Connections", comment: "Library pane title")
         default: title
         }
     }

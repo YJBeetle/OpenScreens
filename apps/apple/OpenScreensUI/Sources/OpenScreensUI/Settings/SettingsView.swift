@@ -79,7 +79,7 @@ public struct SettingsView: View {
                         }
                     }
                     Spacer()
-                    Button(isChecking ? "Checking…" : "Check for Updates") {
+                    Button(checkButtonTitle) {
                         checkForUpdates()
                     }
                     .disabled(isChecking || isDownloadingUpdate)
@@ -97,7 +97,7 @@ public struct SettingsView: View {
                             Link("Release Notes", destination: pageURL)
                         }
                         if release.downloadURL != nil {
-                            Button(isDownloadingUpdate ? "Downloading…" : "Download & Open Installer") {
+                            Button(downloadButtonTitle) {
                                 downloadUpdate(release)
                             }
                             .disabled(isDownloadingUpdate)
@@ -140,7 +140,7 @@ public struct SettingsView: View {
             Section {
                 LabeledContent("Version", value: appVersion)
                 LabeledContent("Protocol", value: "RFB (VNC)")
-                LabeledContent("Transport", value: "Direct connection")
+                LabeledContent("Transport", value: NSLocalizedString("Direct connection", comment: "Transport kind"))
 
                 Text("OpenScreens is open source software, licensed under AGPL-3.0. This build uses a local mock session; the Rust RFB engine plugs in behind the same session interface.")
                     .font(.caption)
@@ -171,14 +171,35 @@ public struct SettingsView: View {
         return false
     }
 
+    private var checkButtonTitle: String {
+        isChecking
+            ? NSLocalizedString("Checking…", comment: "Update status")
+            : NSLocalizedString("Check for Updates", comment: "Update action")
+    }
+
+    private var downloadButtonTitle: String {
+        isDownloadingUpdate
+            ? NSLocalizedString("Downloading…", comment: "Update status")
+            : NSLocalizedString("Download & Open Installer", comment: "Update action")
+    }
+
     private var updateStatusText: String {
         switch updateStatus {
-        case .idle: "Check GitHub Releases for a newer build."
-        case .checking: "Checking…"
-        case .upToDate: "You're on the latest version for this channel."
-        case .noReleases: "No releases published for this channel yet."
-        case .available: "A new build is available."
-        case .failed(let message): "Couldn't check for updates: \(message)"
+        case .idle:
+            NSLocalizedString("Check GitHub Releases for a newer build.", comment: "Update status")
+        case .checking:
+            NSLocalizedString("Checking…", comment: "Update status")
+        case .upToDate:
+            NSLocalizedString("You're on the latest version for this channel.", comment: "Update status")
+        case .noReleases:
+            NSLocalizedString("No releases published for this channel yet.", comment: "Update status")
+        case .available:
+            NSLocalizedString("A new build is available.", comment: "Update status")
+        case .failed(let message):
+            String(
+                format: NSLocalizedString("Couldn't check for updates: %@", comment: "Update error"),
+                message
+            )
         }
     }
 

@@ -110,7 +110,9 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
         if let ssh = profile.ssh, ssh.enabled {
             let sshUser = ssh.username.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !sshUser.isEmpty else {
-                throw SessionSetupError("SSH user name is required.")
+                throw SessionSetupError(
+                    NSLocalizedString("SSH user name is required.", comment: "Session setup error")
+                )
             }
             let sshHostValue = ssh.host.trimmingCharacters(in: .whitespacesAndNewlines)
             sshHost = sshHostValue.isEmpty ? profile.trimmedHost : sshHostValue
@@ -135,7 +137,10 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
                         pem = try String(contentsOfFile: expanded, encoding: .utf8)
                     } catch {
                         throw SessionSetupError(
-                            "Choose an SSH private key for this connection."
+                            NSLocalizedString(
+                                "Choose an SSH private key for this connection.",
+                                comment: "Session setup error"
+                            )
                         )
                     }
                 }
@@ -146,7 +151,12 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
             sshFingerprint = fingerprint.isEmpty ? nil : fingerprint
         }
         if profile.hasTunnelConflict {
-            throw SessionSetupError("SSH and WireGuard cannot be used together. Choose one.")
+            throw SessionSetupError(
+                NSLocalizedString(
+                    "SSH and WireGuard cannot be used together. Choose one.",
+                    comment: "Session setup error"
+                )
+            )
         }
 
         // macOS draws the pointer client-side; on touch platforms the remote
@@ -197,7 +207,7 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
     }
 
     public func disconnect() async {
-        finish(reason: "Connection closed")
+        finish(reason: NSLocalizedString("Connection closed", comment: "Session disconnect reason"))
     }
 
     public func sendPointer(_ event: PointerEvent) async {
@@ -267,7 +277,10 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
             try await session.selectDisplay(displayId: displayID)
         } catch {
             logger.error("select display failed: \(error.localizedDescription, privacy: .public)")
-            continuation.yield(.failure("Could not switch display: \(error.localizedDescription)"))
+            continuation.yield(.failure(String(
+                format: NSLocalizedString("Could not switch display: %@", comment: "Display switch error"),
+                error.localizedDescription
+            )))
         }
     }
 
@@ -279,7 +292,10 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
         guard let session, !finished else { return }
         let files = urls.filter(Self.isUploadable)
         guard !files.isEmpty else {
-            continuation.yield(.failure("Only regular files can be sent to the remote computer."))
+            continuation.yield(.failure(NSLocalizedString(
+                "Only regular files can be sent to the remote computer.",
+                comment: "Upload error"
+            )))
             continuation.yield(.transferFinished(name: nil))
             return
         }
@@ -298,7 +314,10 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
             logger.error(
                 "upload announce failed: \(error.localizedDescription, privacy: .public)"
             )
-            continuation.yield(.failure("Could not send files: \(error.localizedDescription)"))
+            continuation.yield(.failure(String(
+                format: NSLocalizedString("Could not send files: %@", comment: "Upload error"),
+                error.localizedDescription
+            )))
             continuation.yield(.transferFinished(name: nil))
         }
     }
@@ -327,7 +346,10 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
         let files = urls.compactMap(Self.describeUpload)
         guard !files.isEmpty else {
             try? await session.cancelTransfer(handle: handle)
-            continuation.yield(.failure("The dropped items could not be read."))
+            continuation.yield(.failure(NSLocalizedString(
+                "The dropped items could not be read.",
+                comment: "Upload error"
+            )))
             continuation.yield(.transferFinished(name: nil))
             return
         }
@@ -377,7 +399,10 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
         } catch {
             logger.error("upload failed: \(error.localizedDescription, privacy: .public)")
             try? await session.cancelTransfer(handle: handle)
-            continuation.yield(.failure("File transfer failed: \(error.localizedDescription)"))
+            continuation.yield(.failure(String(
+                format: NSLocalizedString("File transfer failed: %@", comment: "Upload error"),
+                error.localizedDescription
+            )))
             continuation.yield(.transferFinished(name: nil))
         }
         uploadFileNames.removeValue(forKey: handle)
@@ -397,7 +422,9 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
 
         let modified = attributes?[.modificationDate] as? Date ?? Date()
         let created = attributes?[.creationDate] as? Date ?? modified
-        let name = url.lastPathComponent.isEmpty ? "file" : url.lastPathComponent
+        let name = url.lastPathComponent.isEmpty
+            ? NSLocalizedString("file", comment: "Fallback file name")
+            : url.lastPathComponent
         let stamp = appleTimestamp(modified)
 
         return UploadFile(
@@ -434,15 +461,15 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
     public func download(remotePath: String) async {
         let path = remotePath.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !path.isEmpty else {
-            yieldDownloadFailure("Enter a remote path to download.")
+            yieldDownloadFailure(NSLocalizedString("Enter a remote path to download.", comment: "Download error"))
             return
         }
         guard let session, !finished else {
-            yieldDownloadFailure("The session is not connected.")
+            yieldDownloadFailure(NSLocalizedString("The session is not connected.", comment: "Download error"))
             return
         }
         guard let root = downloadRootDirectory() else {
-            yieldDownloadFailure("No local folder is available for downloads.")
+            yieldDownloadFailure(NSLocalizedString("No local folder is available for downloads.", comment: "Download error"))
             return
         }
 
@@ -458,7 +485,11 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
             downloadRoots.removeValue(forKey: handle)
             let message = error.localizedDescription
             logger.error("download failed: \(message, privacy: .public)")
-            continuation.yield(.failure("Could not download “\(path)”: \(message)"))
+            continuation.yield(.failure(String(
+                format: NSLocalizedString("Could not download “%@”: %@", comment: "Download error"),
+                path,
+                message
+            )))
             // Also closes the in-flight status in the UI.
             continuation.yield(.downloadComplete(savedPath: nil, error: message))
         }
@@ -580,7 +611,12 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
             self.height = height
             updateDisplayScale()
             continuation.yield(.displays([
-                RemoteDisplay(id: 0, name: "Display", width: Int(width), height: Int(height)),
+                RemoteDisplay(
+                    id: 0,
+                    name: NSLocalizedString("Display", comment: "Fallback display name"),
+                    width: Int(width),
+                    height: Int(height)
+                ),
             ]))
 
         case .desktopLayout(let width, let height, let screens):
@@ -590,7 +626,10 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
             continuation.yield(.displays(screens.map { screen in
                 RemoteDisplay(
                     id: Int(screen.id),
-                    name: "Display \(screen.id)",
+                    name: String(
+                        format: NSLocalizedString("Display %lld", comment: "Fallback display name with index"),
+                        Int64(screen.id)
+                    ),
                     width: Int(screen.width),
                     height: Int(screen.height)
                 )
@@ -649,7 +688,10 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
             guard let root = downloadRoots.removeValue(forKey: handle) else { return }
             if let error {
                 logger.error("download \(handle) failed: \(error, privacy: .public)")
-                continuation.yield(.failure("Download failed: \(error)"))
+                continuation.yield(.failure(String(
+                    format: NSLocalizedString("Download failed: %@", comment: "Download error"),
+                    error
+                )))
                 continuation.yield(.downloadComplete(savedPath: nil, error: error))
             } else {
                 logger.info(

@@ -56,7 +56,7 @@ public struct FloatingIconButton: View {
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(title)
+        .accessibilityLabel(NSLocalizedString(title, comment: "Floating control"))
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }

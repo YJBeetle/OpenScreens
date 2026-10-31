@@ -22,11 +22,15 @@ public enum RemoteSessionState: Equatable, Sendable {
 
     public var label: String {
         switch self {
-        case .idle: "Idle"
-        case .connecting: "Connecting…"
-        case .connected: "Connected"
-        case .reconnecting(let attempt): "Reconnecting… (\(attempt))"
-        case .disconnected: "Disconnected"
+        case .idle: NSLocalizedString("Idle", comment: "Session state")
+        case .connecting: NSLocalizedString("Connecting…", comment: "Session state")
+        case .connected: NSLocalizedString("Connected", comment: "Session state")
+        case .reconnecting(let attempt):
+            String(
+                format: NSLocalizedString("Reconnecting… (%lld)", comment: "Session state with attempt"),
+                attempt
+            )
+        case .disconnected: NSLocalizedString("Disconnected", comment: "Session state")
         }
     }
 }

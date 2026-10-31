@@ -19,7 +19,10 @@ public enum SSHKeyImportError: LocalizedError {
     case notAPrivateKey
 
     public var errorDescription: String? {
-        "The selected file is not an SSH private key in PEM format."
+        NSLocalizedString(
+            "The selected file is not an SSH private key in PEM format.",
+            comment: "SSH key import error"
+        )
     }
 }
 
@@ -62,7 +65,9 @@ public final class SSHKeyVault {
 
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let key = ImportedSSHKey(
-            name: trimmed.isEmpty ? "Imported key" : trimmed
+            name: trimmed.isEmpty
+                ? NSLocalizedString("Imported key", comment: "Fallback SSH key name")
+                : trimmed
         )
         OpenScreensCredentials.setSecret(text, kind: Self.secretKind, for: key.id)
         keys.append(key)

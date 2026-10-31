@@ -207,6 +207,52 @@ struct AppleDisplayState {
     selected: Option<u32>,
 }
 
+/// Machine-readable classification of a session failure. Frontends localize on
+/// this value; the human-readable reason stays available for logs and for
+/// failures the enum cannot classify.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum FailureKind {
+    #[default]
+    Unknown,
+    Network,
+    ConnectionRefused,
+    MissingUsername,
+    MissingPassword,
+    AuthenticationFailed,
+    UnsupportedVersion,
+    UnsupportedSecurityType,
+    Protocol,
+    Decode,
+    Tunnel,
+    SshTunnel,
+    Closed,
+}
+
+impl FailureKind {
+    pub fn classify(error: &SessionError) -> Self {
+        match error {
+            SessionError::Io(_) => Self::Network,
+            SessionError::Handshake(error) => match error {
+                HandshakeError::Io(_) => Self::Network,
+                HandshakeError::Protocol(_) | HandshakeError::ServerNameTooLong(_) => {
+                    Self::Protocol
+                }
+                HandshakeError::ConnectionRefused(_) => Self::ConnectionRefused,
+                HandshakeError::UnsupportedVersion(_) => Self::UnsupportedVersion,
+                HandshakeError::UnsupportedSecurityType(_) => Self::UnsupportedSecurityType,
+                HandshakeError::MissingUsername => Self::MissingUsername,
+                HandshakeError::MissingPassword => Self::MissingPassword,
+                HandshakeError::AuthenticationFailed(_) => Self::AuthenticationFailed,
+            },
+            SessionError::Decode(_) => Self::Decode,
+            SessionError::Protocol(_) => Self::Protocol,
+            SessionError::Tunnel(_) => Self::Tunnel,
+            SessionError::Ssh(_) => Self::SshTunnel,
+            SessionError::Closed => Self::Closed,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Event {
     Connected {
@@ -278,6 +324,7 @@ pub enum Event {
         error: Option<String>,
     },
     Disconnected {
+        kind: FailureKind,
         reason: String,
     },
 }
@@ -1045,14 +1092,17 @@ async fn reader_task<R>(
             Err(SessionError::Closed) => {
                 let _ = events
                     .send(Event::Disconnected {
+                        kind: FailureKind::Closed,
                         reason: "connection closed".to_owned(),
                     })
                     .await;
                 return;
             }
             Err(error) => {
+                let kind = FailureKind::classify(&error);
                 let _ = events
                     .send(Event::Disconnected {
+                        kind,
                         reason: error.to_string(),
                     })
                     .await;
@@ -2094,6 +2144,34 @@ mod tests {
         assert_eq!(
             apple_desktop_pointer(5, 7, Some(4), &origins),
             (-1915i16 as u16, -1073i16 as u16)
+        );
+    }
+
+    #[test]
+    fn classifies_session_failures() {
+        use crate::handshake::HandshakeError;
+
+        assert_eq!(
+            FailureKind::classify(&SessionError::Handshake(HandshakeError::MissingUsername)),
+            FailureKind::MissingUsername
+        );
+        assert_eq!(
+            FailureKind::classify(&SessionError::Handshake(HandshakeError::MissingPassword)),
+            FailureKind::MissingPassword
+        );
+        assert_eq!(
+            FailureKind::classify(&SessionError::Handshake(HandshakeError::ConnectionRefused(
+                "refused".to_owned()
+            ))),
+            FailureKind::ConnectionRefused
+        );
+        assert_eq!(
+            FailureKind::classify(&SessionError::Protocol("bad message")),
+            FailureKind::Protocol
+        );
+        assert_eq!(
+            FailureKind::classify(&SessionError::Closed),
+            FailureKind::Closed
         );
     }
 

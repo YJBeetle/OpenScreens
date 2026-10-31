@@ -243,6 +243,21 @@
 "Connection Closed" = "连接已关闭";
 "Connection closed" = "连接已关闭";
 "The remote computer ended the session." = "远程电脑结束了此会话。";
+
+/* MARK: - Connection failures */
+"The server requires Apple authentication, but no username is configured." = "服务器要求 Apple 账户认证，但尚未配置用户名。";
+"The server requires authentication, but no password is configured." = "服务器要求身份验证，但尚未配置密码。";
+"Authentication failed. Check the username and password." = "身份验证失败，请检查用户名和密码。";
+"The server refused the connection." = "服务器拒绝了连接。";
+"A network error interrupted the connection." = "网络错误，连接已中断。";
+"The server's RFB version is not supported." = "不支持服务器的 RFB 版本。";
+"The server requires an authentication method this app does not support." = "服务器要求的认证方式不受支持。";
+"The server sent data this app could not understand." = "服务器返回了无法识别的数据。";
+"The remote screen data could not be decoded." = "无法解码远程画面。";
+"The tunnel connection failed." = "隧道连接失败。";
+"The SSH tunnel failed." = "SSH 隧道连接失败。";
+"The connection was closed." = "连接已关闭。";
+"The connection settings are invalid." = "连接设置无效。";
 "Disconnect from “%@”?" = "断开与“%@”的连接？";
 "The remote session ends. You can reconnect from the library at any time." = "远程会话将结束。你可以随时从连接库重新连接。";
 "%@, %@ cursor mode" = "%@，%@ 指针模式";

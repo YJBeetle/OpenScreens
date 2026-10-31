@@ -51,8 +51,8 @@ struct Probe {
                 print("clipboard \(text.count) chars")
             case .bell:
                 print("bell")
-            case .disconnected(let reason):
-                print("disconnected: \(reason)")
+            case .disconnected(let kind, let reason):
+                print("disconnected (\(kind)): \(reason)")
                 return
             }
         }

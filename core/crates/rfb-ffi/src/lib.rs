@@ -228,6 +228,7 @@ pub enum SessionEvent {
         error: Option<String>,
     },
     Disconnected {
+        kind: SessionFailureKind,
         reason: String,
     },
 }
@@ -324,7 +325,10 @@ impl From<EngineEvent> for SessionEvent {
                 bytes,
                 error,
             },
-            EngineEvent::Disconnected { reason } => Self::Disconnected { reason },
+            EngineEvent::Disconnected { kind, reason } => Self::Disconnected {
+                kind: kind.into(),
+                reason,
+            },
         }
     }
 }
@@ -362,6 +366,7 @@ impl TransferEntry {
     fn to_engine(&self) -> Result<ft::Entry<'_>, SessionFailure> {
         if self.finder_info.len() != 32 {
             return Err(SessionFailure::Session {
+                kind: SessionFailureKind::InvalidInput,
                 reason: "finder_info must be 32 bytes".to_string(),
             });
         }
@@ -391,7 +396,52 @@ impl TransferEntry {
 #[derive(Debug, thiserror::Error, uniffi::Error)]
 pub enum SessionFailure {
     #[error("{reason}")]
-    Session { reason: String },
+    Session {
+        kind: SessionFailureKind,
+        reason: String,
+    },
+}
+
+/// Machine-readable session failure code. Frontends localize on this value;
+/// `reason` carries the diagnostic text for logs and unknown codes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, uniffi::Enum)]
+pub enum SessionFailureKind {
+    #[default]
+    Unknown,
+    Network,
+    ConnectionRefused,
+    MissingUsername,
+    MissingPassword,
+    AuthenticationFailed,
+    UnsupportedVersion,
+    UnsupportedSecurityType,
+    Protocol,
+    Decode,
+    Tunnel,
+    SshTunnel,
+    Closed,
+    InvalidInput,
+}
+
+impl From<rfb_engine::session::FailureKind> for SessionFailureKind {
+    fn from(kind: rfb_engine::session::FailureKind) -> Self {
+        use rfb_engine::session::FailureKind as Kind;
+        match kind {
+            Kind::Unknown => Self::Unknown,
+            Kind::Network => Self::Network,
+            Kind::ConnectionRefused => Self::ConnectionRefused,
+            Kind::MissingUsername => Self::MissingUsername,
+            Kind::MissingPassword => Self::MissingPassword,
+            Kind::AuthenticationFailed => Self::AuthenticationFailed,
+            Kind::UnsupportedVersion => Self::UnsupportedVersion,
+            Kind::UnsupportedSecurityType => Self::UnsupportedSecurityType,
+            Kind::Protocol => Self::Protocol,
+            Kind::Decode => Self::Decode,
+            Kind::Tunnel => Self::Tunnel,
+            Kind::SshTunnel => Self::SshTunnel,
+            Kind::Closed => Self::Closed,
+        }
+    }
 }
 
 /// Summary of a validated `.ovpn` profile, shown before saving a connection.
@@ -467,12 +517,7 @@ pub struct RemoteSession {
 impl RemoteSession {
     #[uniffi::constructor]
     pub async fn connect(config: SessionConfig) -> Result<Arc<Self>, SessionFailure> {
-        let session =
-            Session::connect(config.into())
-                .await
-                .map_err(|error| SessionFailure::Session {
-                    reason: error.to_string(),
-                })?;
+        let session = Session::connect(config.into()).await.map_err(to_failure)?;
         Ok(Arc::new(Self {
             session: Arc::new(session),
         }))
@@ -699,13 +744,16 @@ pub fn transfer_timestamp_1904(unix_seconds: u64) -> u32 {
 }
 
 fn to_failure(error: rfb_engine::session::SessionError) -> SessionFailure {
+    let kind = rfb_engine::session::FailureKind::classify(&error);
     SessionFailure::Session {
+        kind: kind.into(),
         reason: error.to_string(),
     }
 }
 
 fn to_ssh_failure(error: rfb_io::SshError) -> SessionFailure {
     SessionFailure::Session {
+        kind: SessionFailureKind::InvalidInput,
         reason: error.to_string(),
     }
 }

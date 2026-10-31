@@ -158,10 +158,7 @@ public struct SessionScreen: View {
                 .frame(width: rect.width, height: rect.height)
                 .scaleEffect(model.zoom)
                 .offset(model.pan)
-                .position(
-                    x: rect.midX + model.pan.width,
-                    y: rect.midY + model.pan.height
-                )
+                .position(x: rect.midX, y: rect.midY)
             }
         }
         #else

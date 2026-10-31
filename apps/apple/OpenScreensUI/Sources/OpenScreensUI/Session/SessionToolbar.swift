@@ -84,6 +84,14 @@ struct SessionToolbar: View {
             ) {
                 model.toggleObserveMode()
             }
+        case .screenshot:
+            FloatingIconButton(
+                systemImage: "camera",
+                title: "Screenshot",
+                size: buttonSize
+            ) {
+                model.grabScreenshot()
+            }
         }
     }
 

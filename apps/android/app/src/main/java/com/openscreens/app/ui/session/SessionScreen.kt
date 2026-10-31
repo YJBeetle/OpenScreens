@@ -2,9 +2,14 @@ package com.openscreens.app.ui.session
 
 import android.content.ClipData
 import android.content.ClipboardManager
+import android.content.ContentValues
+import android.content.Context
+import android.graphics.Bitmap
 import android.net.Uri
+import android.os.Build
 import android.os.Environment
 import android.os.SystemClock
+import android.provider.MediaStore
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -61,6 +66,7 @@ import androidx.compose.material.icons.outlined.Keyboard
 import androidx.compose.material.icons.outlined.KeyboardHide
 import androidx.compose.material.icons.outlined.Monitor
 import androidx.compose.material.icons.outlined.Mouse
+import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.material.icons.outlined.TouchApp
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.outlined.Visibility
@@ -144,9 +150,12 @@ import com.openscreens.app.session.SessionProvider
 import com.openscreens.app.ui.common.label
 import com.openscreens.app.ui.theme.SystemBarIconAppearance
 import com.openscreens.app.ui.theme.findActivity
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import kotlin.math.abs
@@ -1448,6 +1457,9 @@ fun SessionScreen(
                 onClipboard = { showClipboardDialog = true },
                 onUpload = { sendFilePicker.launch(arrayOf("*/*")) },
                 onDownload = { showDownloadDialog = true },
+                onScreenshot = {
+                    captureScreenshot(context, frame?.bitmap, scope, snackbarHostState)
+                },
                 onToggleFullscreen = { isFullscreen = !isFullscreen },
                 onHideChrome = { chromeVisible = false },
                 onDisconnect = exitSession,
@@ -1747,6 +1759,7 @@ private fun SessionToolbar(
     onClipboard: () -> Unit,
     onUpload: () -> Unit,
     onDownload: () -> Unit,
+    onScreenshot: () -> Unit,
     onToggleFullscreen: () -> Unit,
     onHideChrome: () -> Unit,
     onDisconnect: () -> Unit,
@@ -1869,6 +1882,11 @@ private fun SessionToolbar(
                     },
                 ),
                 onClick = onToggleFullscreen,
+            )
+            ToolbarButton(
+                icon = Icons.Outlined.PhotoCamera,
+                label = stringResource(R.string.session_screenshot),
+                onClick = onScreenshot,
             )
             ToolbarButton(
                 icon = Icons.Outlined.VisibilityOff,
@@ -2362,4 +2380,65 @@ private fun statusColor(status: SessionStatus): Color = when (status) {
     SessionStatus.Connected -> Color(0xFF6FDD9B)
     SessionStatus.Disconnected -> Color(0xFFBFC8C8)
     SessionStatus.Failed -> Color(0xFFFFB4AB)
+}
+
+/** Saves the current remote frame to the photo library, reporting through the snackbar. */
+private fun captureScreenshot(
+    context: Context,
+    frame: Bitmap?,
+    scope: CoroutineScope,
+    snackbarHostState: SnackbarHostState,
+) {
+    val snapshot = frame?.copy(Bitmap.Config.ARGB_8888, false)
+    if (snapshot == null) {
+        scope.launch {
+            snackbarHostState.showSnackbar(context.getString(R.string.session_screenshot_empty))
+        }
+        return
+    }
+    scope.launch {
+        val saved = withContext(Dispatchers.IO) {
+            runCatching { writeScreenshot(context, snapshot) }.isSuccess
+        }
+        snackbarHostState.showSnackbar(
+            context.getString(
+                if (saved) {
+                    R.string.session_screenshot_saved
+                } else {
+                    R.string.session_screenshot_failed
+                },
+            ),
+        )
+    }
+}
+
+private fun writeScreenshot(context: Context, bitmap: Bitmap): Uri {
+    require(Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        "Saving screenshots requires Android 10"
+    }
+    val resolver = context.contentResolver
+    val values = ContentValues().apply {
+        put(MediaStore.Images.Media.DISPLAY_NAME, "OpenScreens-${System.currentTimeMillis()}.png")
+        put(MediaStore.Images.Media.MIME_TYPE, "image/png")
+        put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/OpenScreens")
+        put(MediaStore.Images.Media.IS_PENDING, 1)
+    }
+    val uri = resolver.insert(
+        MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY),
+        values,
+    ) ?: error("Unable to create a photo entry")
+    try {
+        resolver.openOutputStream(uri)?.use { output ->
+            if (!bitmap.compress(Bitmap.CompressFormat.PNG, 100, output)) {
+                error("Unable to encode the screenshot")
+            }
+        } ?: error("Unable to open the photo entry")
+        values.clear()
+        values.put(MediaStore.Images.Media.IS_PENDING, 0)
+        resolver.update(uri, values, null, null)
+    } catch (error: Throwable) {
+        resolver.delete(uri, null, null)
+        throw error
+    }
+    return uri
 }

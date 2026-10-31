@@ -348,3 +348,7 @@
 "Keyboard" = "键盘";
 "Select Display" = "选择显示器";
 "Observe Mode" = "查看模式";
+"Screenshot" = "截图";
+"No remote frame to capture." = "暂无可截取的远端画面。";
+"Screenshot saved to Photos." = "截图已存储到相册。";
+"Screenshot copied to clipboard." = "截图已复制到剪贴板。";

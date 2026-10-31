@@ -147,6 +147,7 @@ public enum SessionToolbarItem: String, Codable, CaseIterable, Identifiable, Sen
     case download
     case display
     case observe
+    case screenshot
 
     public var id: String { rawValue }
 
@@ -159,6 +160,7 @@ public enum SessionToolbarItem: String, Codable, CaseIterable, Identifiable, Sen
         case .download: NSLocalizedString("Download", comment: "Toolbar item")
         case .display: NSLocalizedString("Display options", comment: "Toolbar item")
         case .observe: NSLocalizedString("Observe Mode", comment: "Toolbar item")
+        case .screenshot: NSLocalizedString("Screenshot", comment: "Toolbar item")
         }
     }
 
@@ -171,6 +173,7 @@ public enum SessionToolbarItem: String, Codable, CaseIterable, Identifiable, Sen
         case .download: "arrow.down.doc"
         case .display: "display"
         case .observe: "eye"
+        case .screenshot: "camera"
         }
     }
 }

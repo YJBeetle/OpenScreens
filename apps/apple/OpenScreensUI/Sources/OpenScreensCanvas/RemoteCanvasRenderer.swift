@@ -156,6 +156,42 @@ public final class RemoteCanvasRenderer {
         requestRedraw()
     }
 
+    /// Copies the latest frame into an immutable image, or returns nil when no
+    /// frame has arrived yet.
+    public func snapshot() -> CGImage? {
+        guard let texture, frameWidth > 0, frameHeight > 0 else { return nil }
+
+        let bytesPerRow = frameWidth * 4
+        var pixels = Data(count: bytesPerRow * frameHeight)
+        let copied = pixels.withUnsafeMutableBytes { buffer -> Bool in
+            guard let base = buffer.baseAddress else { return false }
+            texture.getBytes(
+                base,
+                bytesPerRow: bytesPerRow,
+                from: MTLRegionMake2D(0, 0, frameWidth, frameHeight),
+                mipmapLevel: 0
+            )
+            return true
+        }
+        guard copied, let provider = CGDataProvider(data: pixels as CFData) else { return nil }
+
+        let bitmapInfo = CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedFirst.rawValue)
+            .union(.byteOrder32Little)
+        return CGImage(
+            width: frameWidth,
+            height: frameHeight,
+            bitsPerComponent: 8,
+            bitsPerPixel: 32,
+            bytesPerRow: bytesPerRow,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: bitmapInfo,
+            provider: provider,
+            decode: nil,
+            shouldInterpolate: false,
+            intent: .defaultIntent
+        )
+    }
+
     /// Draws the latest frame into the supplied view.
     func draw(in view: MTKView) {
         guard let pipeline, let commandQueue, let texture,

@@ -5,6 +5,7 @@ import SwiftUI
 #if os(macOS)
 import AppKit
 #else
+import Photos
 import UIKit
 #endif
 
@@ -31,6 +32,45 @@ public enum PlatformClipboard {
         UIPasteboard.general.string = value
         #endif
     }
+
+    public static func setImage(_ image: CGImage) {
+        #if os(macOS)
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        let representation = NSBitmapImageRep(cgImage: image)
+        if let png = representation.representation(using: .png, properties: [:]) {
+            pasteboard.setData(png, forType: .png)
+        }
+        #else
+        UIPasteboard.general.image = UIImage(cgImage: image)
+        #endif
+    }
+}
+
+/// Delivers captured remote screenshots: Photos on iOS, the pasteboard on macOS.
+public enum PlatformScreenshot {
+    #if os(iOS)
+    public static func save(_ image: CGImage, completion: @escaping @MainActor (Bool) -> Void) {
+        PHPhotoLibrary.requestAuthorization(for: .addOnly) { status in
+            guard status == .authorized || status == .limited else {
+                Task { @MainActor in completion(false) }
+                return
+            }
+            let photo = UIImage(cgImage: image)
+            PHPhotoLibrary.shared().performChanges {
+                PHAssetChangeRequest.creationRequestForAsset(from: photo)
+            } completionHandler: { success, _ in
+                Task { @MainActor in completion(success) }
+            }
+        }
+    }
+    #else
+    @MainActor
+    public static func save(_ image: CGImage, completion: @escaping @MainActor (Bool) -> Void) {
+        PlatformClipboard.setImage(image)
+        completion(true)
+    }
+    #endif
 }
 
 /// Idle-timer control for full-screen sessions.

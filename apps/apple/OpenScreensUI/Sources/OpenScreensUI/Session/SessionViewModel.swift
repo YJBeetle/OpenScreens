@@ -849,6 +849,27 @@ public final class SessionViewModel {
         showsChrome.toggle()
     }
 
+    public func grabScreenshot() {
+        guard state.isConnected, let image = renderer.snapshot() else {
+            showMessage(NSLocalizedString("No remote frame to capture.", comment: "Screenshot toast"))
+            return
+        }
+        PlatformScreenshot.save(image) { [weak self] saved in
+            guard let self else { return }
+            if !saved {
+                PlatformClipboard.setImage(image)
+            }
+            #if os(iOS)
+            let message = saved
+                ? "Screenshot saved to Photos."
+                : "Screenshot copied to clipboard."
+            #else
+            let message = "Screenshot copied to clipboard."
+            #endif
+            self.showMessage(NSLocalizedString(message, comment: "Screenshot toast"))
+        }
+    }
+
     public func clearMessages() {
         clipboardMessage = nil
         messageTask?.cancel()

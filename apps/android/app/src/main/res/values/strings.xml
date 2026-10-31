@@ -92,6 +92,10 @@
     <string name="session_status_connected">Connected</string>
     <string name="session_status_disconnected">Disconnected</string>
     <string name="session_status_error">Connection failed</string>
+    <string name="session_screenshot">Screenshot</string>
+    <string name="session_screenshot_saved">Screenshot saved to Photos.</string>
+    <string name="session_screenshot_empty">No remote frame to capture.</string>
+    <string name="session_screenshot_failed">Unable to save the screenshot.</string>
     <string name="session_disconnect">Disconnect</string>
     <string name="session_waiting_title">Waiting for the remote screen</string>
     <string name="session_waiting_body">The remote desktop will appear here as soon as the first frame arrives.</string>

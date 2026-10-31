@@ -624,6 +624,11 @@ public protocol RemoteSessionProtocol: AnyObject, Sendable {
      */
     func copyRegion(rect: Rect)  -> Data?
     
+    /**
+     * Returns a region sampled every `scale` pixels for a downscaled display.
+     */
+    func copyRegionScaled(rect: Rect, scale: UInt16)  -> Data?
+    
     func nextEvent() async  -> SessionEvent?
     
     func requestRefresh() async throws 
@@ -716,6 +721,20 @@ open func copyRegion(rect: Rect) -> Data?  {
     uniffi_rfb_ffi_fn_method_remotesession_copy_region(
             self.uniffiCloneHandle(),
         FfiConverterTypeRect_lower(rect),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * Returns a region sampled every `scale` pixels for a downscaled display.
+     */
+open func copyRegionScaled(rect: Rect, scale: UInt16) -> Data?  {
+    return try!  FfiConverterOptionData.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_rfb_ffi_fn_method_remotesession_copy_region_scaled(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeRect_lower(rect),
+        FfiConverterUInt16.lower(scale),uniffiCallStatus
     )
 })
 }
@@ -1703,6 +1722,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_rfb_ffi_checksum_method_remotesession_copy_region() != 60773) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_rfb_ffi_checksum_method_remotesession_copy_region_scaled() != 46113) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_rfb_ffi_checksum_method_remotesession_next_event() != 40415) {

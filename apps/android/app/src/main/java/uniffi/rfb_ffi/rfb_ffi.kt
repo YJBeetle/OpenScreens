@@ -690,6 +690,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Int
     external fun uniffi_rfb_ffi_checksum_method_remotesession_copy_region(
     ): Int
+    external fun uniffi_rfb_ffi_checksum_method_remotesession_copy_region_scaled(
+    ): Int
     external fun uniffi_rfb_ffi_checksum_method_remotesession_next_event(
     ): Int
     external fun uniffi_rfb_ffi_checksum_method_remotesession_request_refresh(
@@ -733,6 +735,8 @@ internal object UniffiLib {
     external fun uniffi_rfb_ffi_fn_constructor_remotesession_connect(`config`: RustBuffer.ByValue,
     ): Long
     external fun uniffi_rfb_ffi_fn_method_remotesession_copy_region(`ptr`: Long,`rect`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_rfb_ffi_fn_method_remotesession_copy_region_scaled(`ptr`: Long,`rect`: RustBuffer.ByValue,`scale`: Short,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_rfb_ffi_fn_method_remotesession_next_event(`ptr`: Long,
     ): Long
@@ -883,6 +887,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_rfb_ffi_checksum_method_remotesession_copy_region() and 0xFFFF) != 60773) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_rfb_ffi_checksum_method_remotesession_copy_region_scaled() and 0xFFFF) != 46113) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_rfb_ffi_checksum_method_remotesession_next_event() and 0xFFFF) != 40415) {
@@ -1408,6 +1415,11 @@ public interface RemoteSessionInterface {
      */
     fun `copyRegion`(`rect`: Rect): kotlin.ByteArray?
     
+    /**
+     * Returns a region sampled every `scale` pixels for a downscaled display.
+     */
+    fun `copyRegionScaled`(`rect`: Rect, `scale`: kotlin.UShort): kotlin.ByteArray?
+    
     suspend fun `nextEvent`(): SessionEvent?
     
     suspend fun `requestRefresh`()
@@ -1537,6 +1549,24 @@ open class RemoteSession: Disposable, AutoCloseable, RemoteSessionInterface
         it,
         
         FfiConverterTypeRect.lower(`rect`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * Returns a region sampled every `scale` pixels for a downscaled display.
+     */override fun `copyRegionScaled`(`rect`: Rect, `scale`: kotlin.UShort): kotlin.ByteArray? {
+            return FfiConverterOptionalByteArray.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_rfb_ffi_fn_method_remotesession_copy_region_scaled(
+        it,
+        
+        FfiConverterTypeRect.lower(`rect`),
+        FfiConverterUShort.lower(`scale`),_status)
 }
     }
     )

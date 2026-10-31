@@ -247,6 +247,11 @@ impl RemoteSession {
     pub fn copy_region(&self, rect: Rect) -> Option<Vec<u8>> {
         self.session.copy_region(rect.into())
     }
+
+    /// Returns a region sampled every `scale` pixels for a downscaled display.
+    pub fn copy_region_scaled(&self, rect: Rect, scale: u16) -> Option<Vec<u8>> {
+        self.session.copy_region_scaled(rect.into(), scale)
+    }
 }
 
 fn to_failure(error: rfb_engine::session::SessionError) -> SessionFailure {

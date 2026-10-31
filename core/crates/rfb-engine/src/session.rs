@@ -313,6 +313,14 @@ impl Session {
         copy_region_from(&framebuffer, rect)
     }
 
+    /// Copies a region sampled every `scale` pixels, for clients that render a
+    /// downscaled framebuffer. The returned size covers the display pixels
+    /// whose sample point falls inside `rect`.
+    pub fn copy_region_scaled(&self, rect: Rect, scale: u16) -> Option<Vec<u8>> {
+        let framebuffer = self.framebuffer.lock().ok()?;
+        copy_region_scaled_from(&framebuffer, rect, scale)
+    }
+
     pub async fn next_event(&self) -> Option<Event> {
         self.events.lock().await.recv().await
     }
@@ -768,6 +776,41 @@ fn copy_region_from(framebuffer: &Framebuffer, rect: Rect) -> Option<Vec<u8>> {
     Some(out)
 }
 
+fn copy_region_scaled_from(framebuffer: &Framebuffer, rect: Rect, scale: u16) -> Option<Vec<u8>> {
+    if scale <= 1 {
+        return copy_region_from(framebuffer, rect);
+    }
+
+    let width = usize::from(framebuffer.width());
+    let height = usize::from(framebuffer.height());
+    let x = usize::from(rect.x);
+    let y = usize::from(rect.y);
+    let rect_width = usize::from(rect.width);
+    let rect_height = usize::from(rect.height);
+    if rect_width == 0 || rect_height == 0 || x + rect_width > width || y + rect_height > height {
+        return None;
+    }
+
+    let scale = usize::from(scale);
+    let start_x = x / scale;
+    let start_y = y / scale;
+    let end_x = (x + rect_width - 1) / scale;
+    let end_y = (y + rect_height - 1) / scale;
+    let out_width = end_x - start_x + 1;
+    let out_height = end_y - start_y + 1;
+
+    let stride = width * 4;
+    let mut out = Vec::with_capacity(out_width * out_height * 4);
+    for row in start_y..=end_y {
+        let source_row = row * scale * stride;
+        for column in start_x..=end_x {
+            let start = source_row + column * scale * 4;
+            out.extend_from_slice(&framebuffer.pixels()[start..start + 4]);
+        }
+    }
+    Some(out)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -791,6 +834,49 @@ mod tests {
         assert_eq!(ids[ids.len() - 3], -29);
         assert!(ids.contains(&Encoding::Cursor.to_id()));
         assert!(ids.contains(&Encoding::PointerPos.to_id()));
+    }
+
+    #[test]
+    fn copy_region_scaled_samples_pixels() {
+        let mut framebuffer = Framebuffer::new(4, 4);
+        for y in 0..4u8 {
+            for x in 0..4u8 {
+                let offset = (usize::from(y) * 4 + usize::from(x)) * 4;
+                framebuffer.pixels_mut()[offset..offset + 4].copy_from_slice(&[x, y, 7, 255]);
+            }
+        }
+
+        let full = copy_region_scaled_from(
+            &framebuffer,
+            Rect {
+                x: 0,
+                y: 0,
+                width: 4,
+                height: 4,
+            },
+            2,
+        )
+        .unwrap();
+        assert_eq!(full.len(), 2 * 2 * 4);
+        assert_eq!(&full[0..4], &[0, 0, 7, 255]);
+        assert_eq!(&full[4..8], &[2, 0, 7, 255]);
+        assert_eq!(&full[8..12], &[0, 2, 7, 255]);
+        assert_eq!(&full[12..16], &[2, 2, 7, 255]);
+
+        let odd = copy_region_scaled_from(
+            &framebuffer,
+            Rect {
+                x: 1,
+                y: 1,
+                width: 3,
+                height: 3,
+            },
+            2,
+        )
+        .unwrap();
+        assert_eq!(odd.len(), 2 * 2 * 4);
+        assert_eq!(&odd[0..4], &[0, 0, 7, 255]);
+        assert_eq!(&odd[12..16], &[2, 2, 7, 255]);
     }
 
     #[test]

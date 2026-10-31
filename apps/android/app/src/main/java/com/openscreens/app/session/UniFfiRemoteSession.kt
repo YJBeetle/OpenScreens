@@ -1,6 +1,7 @@
 package com.openscreens.app.session
 
 import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.graphics.Color
 import android.util.Log
 import com.openscreens.app.data.Connection
@@ -67,15 +68,20 @@ class UniFfiRemoteSession(
     private var pollJob: Job? = null
 
     // Rotating framebuffer pair. Written only by the poller; handed to the UI as
-    // immutable-by-contract [SessionEvent.Frame] snapshots.
+    // immutable-by-contract [SessionEvent.Frame] snapshots. Bitmaps use the
+    // downscaled display size, not the server framebuffer size.
     private var front: Bitmap? = null
     private var back: Bitmap? = null
 
     // Reused conversion buffer so partial updates do not allocate per rectangle.
     private var scratch = IntArray(0)
 
-    // Reused buffer for carrying the previous frame into the back buffer.
-    private var copyBuffer: ByteBuffer? = null
+    // Server framebuffer size and the sampled size Android keeps in memory.
+    private var serverWidth = 0
+    private var serverHeight = 0
+    private var displayWidth = 0
+    private var displayHeight = 0
+    private var displayScale = 1
 
     override suspend fun connect() = open()
 
@@ -142,13 +148,26 @@ class UniFfiRemoteSession(
             return
         }
 
-        val width = size.width.toInt()
-        val height = size.height.toInt()
-        withContext(Dispatchers.Default) { allocate(width, height) }
+        val serverWidth = size.width.toInt()
+        val serverHeight = size.height.toInt()
+        val scale = displayScaleFor(serverWidth, serverHeight)
+        if (!prepareFramebuffer(serverWidth, serverHeight, scale)) {
+            connected.close()
+            _events.emit(
+                SessionEvent.Failed(
+                    "Not enough memory to display ${serverWidth}×$serverHeight.",
+                ),
+            )
+            return
+        }
 
         session = connected
-        _events.emit(SessionEvent.Connected(width, height))
-        Log.i(TAG, "connected to ${connection.address} (${connected.serverName()}) at $width x $height")
+        _events.emit(SessionEvent.Connected(displayWidth, displayHeight))
+        Log.i(
+            TAG,
+            "connected to ${connection.address} (${connected.serverName()}) at " +
+                "$serverWidth x $serverHeight, showing $displayWidth x $displayHeight (1/$scale)",
+        )
         pollJob = scope.launch { poll(connected) }
     }
 
@@ -187,12 +206,16 @@ class UniFfiRemoteSession(
 
     override fun sendPointer(x: Int, y: Int, buttonMask: Int) {
         val current = session ?: return
+        // The UI works in downscaled display pixels; the server expects pixels
+        // of its own framebuffer.
+        val serverX = displayToServer(x, displayScale, serverWidth)
+        val serverY = displayToServer(y, displayScale, serverHeight)
         scope.launch(inputDispatcher) {
             runCatching {
                 current.sendPointer(
                     mask = buttonMask.toUByte(),
-                    x = x.coerceIn(0, UShort.MAX_VALUE.toInt()).toUShort(),
-                    y = y.coerceIn(0, UShort.MAX_VALUE.toInt()).toUShort(),
+                    x = serverX.toUShort(),
+                    y = serverY.toUShort(),
                 )
             }.onFailure { error -> Log.w(TAG, "sendPointer failed", error) }
         }
@@ -259,21 +282,35 @@ class UniFfiRemoteSession(
     }
 
     private suspend fun renderCursor(event: NativeEvent.Cursor) {
-        val width = event.width.toInt()
-        val height = event.height.toInt()
+        val scale = displayScale.coerceAtLeast(1)
+        val sourceWidth = event.width.toInt()
+        val sourceHeight = event.height.toInt()
         val pixels = event.pixels
-        if (width <= 0 || height <= 0 || pixels.size < width * height * 4) return
+        if (sourceWidth <= 0 || sourceHeight <= 0 ||
+            pixels.size < sourceWidth * sourceHeight * 4
+        ) {
+            return
+        }
 
+        val width = ceilDiv(sourceWidth, scale)
+        val height = ceilDiv(sourceHeight, scale)
         val bitmap = withContext(Dispatchers.Default) {
             val argb = IntArray(width * height)
             val buffer = ByteBuffer.wrap(pixels).order(ByteOrder.LITTLE_ENDIAN)
-            for (index in argb.indices) {
-                val bgra = buffer.getInt()
-                val blue = bgra and 0xFF
-                val green = (bgra ushr 8) and 0xFF
-                val red = (bgra ushr 16) and 0xFF
-                val alpha = (bgra ushr 24) and 0xFF
-                argb[index] = (alpha shl 24) or (red shl 16) or (green shl 8) or blue
+            val sourcePixels = sourceWidth * sourceHeight
+            for (y in 0 until height) {
+                for (x in 0 until width) {
+                    val source = (y * scale) * sourceWidth + x * scale
+                    if (source >= sourcePixels) continue
+                    buffer.position(source * 4)
+                    val bgra = buffer.getInt()
+                    val blue = bgra and 0xFF
+                    val green = (bgra ushr 8) and 0xFF
+                    val red = (bgra ushr 16) and 0xFF
+                    val alpha = (bgra ushr 24) and 0xFF
+                    argb[y * width + x] =
+                        (alpha shl 24) or (red shl 16) or (green shl 8) or blue
+                }
             }
             Bitmap.createBitmap(argb, width, height, Bitmap.Config.ARGB_8888)
                 .apply { setHasAlpha(true) }
@@ -281,26 +318,55 @@ class UniFfiRemoteSession(
         _events.emit(
             SessionEvent.Cursor(
                 bitmap = bitmap,
-                hotspotX = event.hotspotX.toInt(),
-                hotspotY = event.hotspotY.toInt(),
+                hotspotX = event.hotspotX.toInt() / scale,
+                hotspotY = event.hotspotY.toInt() / scale,
             ),
         )
     }
 
     private suspend fun applySize(width: Int, height: Int) {
-        if (width == front?.width && height == front?.height) return
-        withContext(Dispatchers.Default) { allocate(width, height) }
-        _events.emit(SessionEvent.Resized(width, height))
+        if (width == serverWidth && height == serverHeight && front != null) return
+        val scale = displayScaleFor(width, height)
+        if (!prepareFramebuffer(width, height, scale)) {
+            _events.emit(
+                SessionEvent.Failed("Not enough memory to display ${width}×$height."),
+            )
+            return
+        }
+        _events.emit(SessionEvent.Resized(displayWidth, displayHeight))
+    }
+
+    private suspend fun prepareFramebuffer(
+        serverWidth: Int,
+        serverHeight: Int,
+        scale: Int,
+    ): Boolean {
+        val displayWidth = ceilDiv(serverWidth, scale)
+        val displayHeight = ceilDiv(serverHeight, scale)
+        val allocated = withContext(Dispatchers.Default) {
+            runCatching { allocate(displayWidth, displayHeight) }.isSuccess
+        }
+        if (!allocated) {
+            Log.w(TAG, "unable to allocate $displayWidth x $displayHeight bitmaps")
+            return false
+        }
+        this.serverWidth = serverWidth
+        this.serverHeight = serverHeight
+        this.displayWidth = displayWidth
+        this.displayHeight = displayHeight
+        this.displayScale = scale
+        return true
     }
 
     private suspend fun renderFrame(connected: NativeSession, event: NativeEvent.Frame) {
         val target = back ?: front ?: return
+        val scale = displayScale.coerceAtLeast(1)
         // The poller rotates buffers, so the target starts as the previous frame;
         // otherwise incremental updates would be painted on a stale (often black)
         // bitmap. A full-frame update overwrites everything and skips the copy.
         val coversFrame = event.rects.any { rect ->
             rect.x == 0.toUShort() && rect.y == 0.toUShort() &&
-                rect.width.toInt() == target.width && rect.height.toInt() == target.height
+                rect.width.toInt() == serverWidth && rect.height.toInt() == serverHeight
         }
         if (!coversFrame) {
             front?.let { copyInto(target, it) }
@@ -313,10 +379,16 @@ class UniFfiRemoteSession(
 
             val left = rect.x.toInt()
             val top = rect.y.toInt()
-            if (left + rectWidth > target.width || top + rectHeight > target.height) continue
+            if (left + rectWidth > serverWidth || top + rectHeight > serverHeight) continue
 
-            val pixels = connected.copyRegion(rect) ?: continue
-            val count = rectWidth * rectHeight
+            val destLeft = left / scale
+            val destTop = top / scale
+            val destWidth = (left + rectWidth - 1) / scale - destLeft + 1
+            val destHeight = (top + rectHeight - 1) / scale - destTop + 1
+            val count = destWidth * destHeight
+            if (count <= 0) continue
+
+            val pixels = connected.copyRegionScaled(rect, scale.toUShort()) ?: continue
             if (pixels.size < count * 4) continue
 
             val argb = scratchFor(count)
@@ -329,7 +401,7 @@ class UniFfiRemoteSession(
                 argb[index] = (alpha shl 24) or (red shl 16) or (green shl 8) or blue
                 offset += 4
             }
-            target.setPixels(argb, 0, rectWidth, left, top, rectWidth, rectHeight)
+            target.setPixels(argb, 0, destWidth, destLeft, destTop, destWidth, destHeight)
         }
 
         val previous = front
@@ -344,14 +416,31 @@ class UniFfiRemoteSession(
     }
 
     private fun copyInto(target: Bitmap, source: Bitmap) {
-        val needed = source.byteCount
-        val buffer = copyBuffer?.takeIf { it.capacity() >= needed }
-            ?: ByteBuffer.allocateDirect(needed).also { copyBuffer = it }
-        buffer.clear()
-        source.copyPixelsToBuffer(buffer)
-        buffer.rewind()
-        target.copyPixelsFromBuffer(buffer)
+        Canvas(target).drawBitmap(source, 0f, 0f, null)
     }
+
+    private fun displayToServer(value: Int, scale: Int, limit: Int): Int {
+        if (limit <= 1) return 0
+        val step = scale.coerceAtLeast(1)
+        val mapped = value.toLong() * step + step / 2
+        return mapped.coerceIn(0L, (limit - 1).toLong()).toInt()
+    }
+
+    private fun displayScaleFor(width: Int, height: Int): Int {
+        var scale = 1
+        while (scale < MAX_DISPLAY_SCALE) {
+            val w = ceilDiv(width, scale)
+            val h = ceilDiv(height, scale)
+            val fits = w.toLong() * h <= MAX_DISPLAY_PIXELS &&
+                w <= MAX_DISPLAY_DIM && h <= MAX_DISPLAY_DIM
+            if (fits) break
+            scale++
+        }
+        return scale
+    }
+
+    private fun ceilDiv(value: Int, divisor: Int): Int =
+        (value + divisor - 1) / divisor
 
     private fun allocate(width: Int, height: Int) {
         val a = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888).apply {
@@ -376,5 +465,11 @@ class UniFfiRemoteSession(
 
     private companion object {
         const val TAG = "UniFfiRemoteSession"
+
+        // Bounded at roughly a 2560x1440 ARGB frame (16 MB per bitmap) so a
+        // 6K Retina Mac cannot exhaust the Android heap.
+        const val MAX_DISPLAY_PIXELS = 4_000_000L
+        const val MAX_DISPLAY_DIM = 4096
+        const val MAX_DISPLAY_SCALE = 16
     }
 }

@@ -10,6 +10,7 @@ Implemented:
 - Raw, CopyRect, RRE, Hextile, ZRLE, zlib and Tight/JPEG decoding into a BGRA framebuffer
 - Client-side cursor rendering on macOS (hover-driven pointer) and Android (Cursor and PointerPos pseudo-encodings); iOS keeps the server-composited cursor
 - Per-connection Tight JPEG quality selection (the Android quality menu) and paced framebuffer update requests
+- Android samples large framebuffers into a bounded bitmap budget, so 6K Retina hosts stay within the app heap
 - TCP and SSH (`direct-tcpip`) transports; SSH jump hosts with password or private-key auth. Android has an encrypted key manager, macOS selects keys directly from `~/.ssh`, and iOS imports private keys into the Keychain (Settings → SSH Keys)
 - Native SwiftUI apps for macOS and iOS/iPadOS with a Metal canvas
 - Compose Material 3 app for Android

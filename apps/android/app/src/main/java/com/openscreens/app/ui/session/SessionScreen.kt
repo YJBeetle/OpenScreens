@@ -177,8 +177,8 @@ fun SessionScreen(
     }
 
     var status by remember { mutableStateOf(SessionStatus.Connecting) }
-    var remoteWidth by remember { mutableIntStateOf(1920) }
-    var remoteHeight by remember { mutableIntStateOf(1200) }
+    var remoteWidth by remember { mutableIntStateOf(0) }
+    var remoteHeight by remember { mutableIntStateOf(0) }
     var frame by remember { mutableStateOf<SessionEvent.Frame?>(null) }
     var lastAction by remember { mutableStateOf<String?>(null) }
     var zoom by remember { mutableFloatStateOf(1f) }
@@ -1289,20 +1289,22 @@ private fun RemoteCanvasPlaceholder(
             textAlign = TextAlign.Center,
             modifier = Modifier.widthIn(max = 300.dp),
         )
-        Spacer(Modifier.height(12.dp))
-        Surface(
-            color = Color.White.copy(alpha = 0.08f),
-            contentColor = Color.White.copy(alpha = 0.8f),
-            shape = RoundedCornerShape(50),
-        ) {
-            Text(
-                text = stringResource(R.string.session_resolution, remoteWidth, remoteHeight),
-                style = MaterialTheme.typography.labelSmall.copy(
-                    fontFamily = FontFamily.Monospace,
-                    letterSpacing = 0.5.sp,
-                ),
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
-            )
+        if (remoteWidth > 0 && remoteHeight > 0) {
+            Spacer(Modifier.height(12.dp))
+            Surface(
+                color = Color.White.copy(alpha = 0.08f),
+                contentColor = Color.White.copy(alpha = 0.8f),
+                shape = RoundedCornerShape(50),
+            ) {
+                Text(
+                    text = stringResource(R.string.session_resolution, remoteWidth, remoteHeight),
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontFamily = FontFamily.Monospace,
+                        letterSpacing = 0.5.sp,
+                    ),
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
+                )
+            }
         }
     }
 }

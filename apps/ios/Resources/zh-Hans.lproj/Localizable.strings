@@ -154,13 +154,22 @@
 "WireGuard configuration" = "WireGuard 配置";
 "Import WireGuard Configuration…" = "导入 WireGuard 配置…";
 "Remove Configuration" = "移除配置";
-"SSH and WireGuard cannot be used together. Turn one off to save." = "SSH 和 WireGuard 不能同时使用。请关闭其中一个后再保存。";
-"SSH and WireGuard cannot be used together. Choose one." = "SSH 和 WireGuard 不能同时使用。请选择其中一个。";
-"Import a wg-quick .conf file (64 KiB maximum). The configuration is stored with this connection and used instead of SSH." = "导入 wg-quick .conf 文件（最大 64 KiB）。该配置会随此连接保存，并替代 SSH 使用。";
+"SSH, WireGuard and OpenVPN are mutually exclusive. Turn one off to save." = "SSH、WireGuard 与 OpenVPN 互斥。请关闭其中一个后再保存。";
+"SSH, WireGuard and OpenVPN are mutually exclusive. Choose one." = "SSH、WireGuard 与 OpenVPN 互斥。请选择其中一个。";
+"Import a wg-quick .conf file (64 KiB maximum). The configuration is stored with this connection and used instead of SSH or OpenVPN." = "导入 wg-quick .conf 文件（最大 64 KiB）。该配置会随此连接保存，并替代 SSH 或 OpenVPN 使用。";
 "Choose a WireGuard .conf file." = "请选择 WireGuard 的 .conf 文件。";
 "WireGuard configurations must be 64 KiB or smaller." = "WireGuard 配置不得大于 64 KiB。";
 "The WireGuard configuration is not UTF-8 text." = "此 WireGuard 配置不是 UTF-8 文本。";
 "The WireGuard configuration is empty." = "此 WireGuard 配置为空。";
+
+/* MARK: - OpenVPN */
+"OpenVPN profile" = "OpenVPN 配置";
+"Import OpenVPN Profile…" = "导入 OpenVPN 配置…";
+"Import an .ovpn profile with embedded certificates (256 KiB maximum). The profile is stored with this connection and used instead of SSH or WireGuard." = "导入内嵌证书的 .ovpn 配置（最大 256 KiB）。该配置会随此连接保存，并替代 SSH 或 WireGuard 使用。";
+"Choose an OpenVPN .ovpn profile." = "请选择 OpenVPN 的 .ovpn 配置。";
+"OpenVPN profiles must be 256 KiB or smaller." = "OpenVPN 配置不得大于 256 KiB。";
+"The OpenVPN profile is not UTF-8 text." = "此 OpenVPN 配置不是 UTF-8 文本。";
+"The OpenVPN profile is empty." = "此 OpenVPN 配置为空。";
 
 /* MARK: - Cursor and session defaults */
 "Cursor Mode" = "指针模式";

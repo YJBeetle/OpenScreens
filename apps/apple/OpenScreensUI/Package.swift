@@ -11,13 +11,19 @@ let package = Package(
         .library(name: "OpenScreensUI", targets: ["OpenScreensUI"]),
         .library(name: "OpenScreensCanvas", targets: ["OpenScreensCanvas"])
     ],
+    dependencies: [
+        .package(path: "../OpenScreensCore"),
+    ],
     targets: [
         .target(
             name: "OpenScreensCanvas"
         ),
         .target(
             name: "OpenScreensUI",
-            dependencies: ["OpenScreensCanvas"]
+            dependencies: [
+                "OpenScreensCanvas",
+                .product(name: "OpenScreensCore", package: "OpenScreensCore"),
+            ]
         ),
         .testTarget(
             name: "OpenScreensUITests",

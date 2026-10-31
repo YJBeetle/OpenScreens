@@ -131,8 +131,10 @@ public struct ConnectionProfile: Identifiable, Codable, Hashable, Sendable {
     public var isDiscovered: Bool
     public var controls: ControlPreferences
     public var ssh: SSHProfile?
-    /// Full wg-quick configuration text. Mutually exclusive with `ssh`.
+    /// Full wg-quick configuration text. Mutually exclusive with `ssh` and OpenVPN.
     public var wireGuardConfig: String?
+    /// Full `.ovpn` profile text. Mutually exclusive with `ssh` and WireGuard.
+    public var openVpnConfig: String?
     public var createdAt: Date
     public var lastConnectedAt: Date?
 
@@ -151,6 +153,7 @@ public struct ConnectionProfile: Identifiable, Codable, Hashable, Sendable {
         controls: ControlPreferences = ControlPreferences(),
         ssh: SSHProfile? = nil,
         wireGuardConfig: String? = nil,
+        openVpnConfig: String? = nil,
         createdAt: Date = .now,
         lastConnectedAt: Date? = nil
     ) {
@@ -168,6 +171,7 @@ public struct ConnectionProfile: Identifiable, Codable, Hashable, Sendable {
         self.controls = controls
         self.ssh = ssh
         self.wireGuardConfig = wireGuardConfig
+        self.openVpnConfig = openVpnConfig
         self.createdAt = createdAt
         self.lastConnectedAt = lastConnectedAt
     }
@@ -198,10 +202,17 @@ public struct ConnectionProfile: Identifiable, Codable, Hashable, Sendable {
         return !wireGuardConfig.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    /// SSH and WireGuard both build the transport tunnel; the core rejects a
-    /// session that carries both.
+    public var hasOpenVpnConfig: Bool {
+        guard let openVpnConfig else { return false }
+        return !openVpnConfig.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    /// SSH, WireGuard and OpenVPN each build the transport tunnel; the core
+    /// rejects a session that carries more than one.
     public var hasTunnelConflict: Bool {
-        hasWireGuardConfig && (ssh?.enabled ?? false)
+        [ssh?.enabled ?? false, hasWireGuardConfig, hasOpenVpnConfig]
+            .filter { $0 }
+            .count > 1
     }
 
     public var endpoint: String {
@@ -244,6 +255,10 @@ public struct ConnectionProfile: Identifiable, Codable, Hashable, Sendable {
         if let config = copy.wireGuardConfig {
             let trimmed = config.trimmingCharacters(in: .whitespacesAndNewlines)
             copy.wireGuardConfig = trimmed.isEmpty ? nil : trimmed
+        }
+        if let config = copy.openVpnConfig {
+            let trimmed = config.trimmingCharacters(in: .whitespacesAndNewlines)
+            copy.openVpnConfig = trimmed.isEmpty ? nil : trimmed
         }
         return copy
     }

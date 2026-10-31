@@ -1,4 +1,5 @@
 import OpenScreensCanvas
+import OpenScreensCore
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -42,10 +43,15 @@ public struct ConnectionEditorView: View {
     @State private var importingWireGuard = false
     @State private var wireGuardFileName: String?
     @State private var wireGuardImportError: String?
+    @State private var importingOpenVpn = false
+    @State private var openVpnFileName: String?
+    @State private var openVpnImportError: String?
+    @State private var openVpnSummary: String?
     @State private var selectedSection: EditorSection = .connection
     @State private var appliedSettingsDefaults = false
 
     private static let wireGuardByteLimit = 64 * 1024
+    private static let openVpnByteLimit = 256 * 1024
 
     private let mode: ConnectionEditorMode
     private let onSaved: ((ConnectionProfile) -> Void)?
@@ -84,6 +90,9 @@ public struct ConnectionEditorView: View {
             }
             sshPassword = OpenScreensCredentials.secret(kind: "ssh-password", for: draft.id) ?? ""
             sshKeyPassphrase = OpenScreensCredentials.secret(kind: "ssh-passphrase", for: draft.id) ?? ""
+            if let config = draft.openVpnConfig {
+                openVpnSummary = Self.openVpnSummary(for: config)
+            }
             #if os(macOS)
             sshKeyFiles = SSHKeyCatalog.available()
             #endif
@@ -431,7 +440,7 @@ public struct ConnectionEditorView: View {
 
             if tunnelConflict {
                 Label(
-                    "SSH and WireGuard cannot be used together. Turn one off to save.",
+                    "SSH, WireGuard and OpenVPN are mutually exclusive. Turn one off to save.",
                     systemImage: "exclamationmark.triangle.fill"
                 )
                 .font(.footnote)
@@ -440,7 +449,7 @@ public struct ConnectionEditorView: View {
         } header: {
             Text("WireGuard")
         } footer: {
-            Text("Import a wg-quick .conf file (64 KiB maximum). The configuration is stored with this connection and used instead of SSH.")
+            Text("Import a wg-quick .conf file (64 KiB maximum). The configuration is stored with this connection and used instead of SSH or OpenVPN.")
         }
         .fileImporter(
             isPresented: $importingWireGuard,
@@ -451,6 +460,65 @@ public struct ConnectionEditorView: View {
                 importWireGuardConfig(from: url)
             case .failure(let error):
                 wireGuardImportError = error.localizedDescription
+            }
+        }
+
+        Section {
+            if draft.hasOpenVpnConfig {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(openVpnFileName ?? NSLocalizedString("OpenVPN profile", comment: "OpenVPN file fallback"))
+                        .font(.subheadline)
+                        .lineLimit(1)
+                    if let openVpnSummary {
+                        Text(openVpnSummary)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                    }
+                }
+
+                Button("Remove Configuration", role: .destructive) {
+                    draft.openVpnConfig = nil
+                    openVpnFileName = nil
+                    openVpnSummary = nil
+                    openVpnImportError = nil
+                }
+            } else {
+                Button {
+                    importingOpenVpn = true
+                } label: {
+                    Label("Import OpenVPN Profile…", systemImage: "doc.badge.plus")
+                }
+            }
+
+            if let error = openVpnImportError {
+                Text(error)
+                    .font(.footnote)
+                    .foregroundStyle(Theme.Colors.danger)
+            }
+
+            if tunnelConflict {
+                Label(
+                    "SSH, WireGuard and OpenVPN are mutually exclusive. Turn one off to save.",
+                    systemImage: "exclamationmark.triangle.fill"
+                )
+                .font(.footnote)
+                .foregroundStyle(Theme.Colors.danger)
+            }
+        } header: {
+            Text("OpenVPN")
+        } footer: {
+            Text("Import an .ovpn profile with embedded certificates (256 KiB maximum). The profile is stored with this connection and used instead of SSH or WireGuard.")
+        }
+        .fileImporter(
+            isPresented: $importingOpenVpn,
+            allowedContentTypes: [.data]
+        ) { result in
+            switch result {
+            case .success(let url):
+                importOpenVpnConfig(from: url)
+            case .failure(let error):
+                openVpnImportError = error.localizedDescription
             }
         }
     }
@@ -511,6 +579,71 @@ public struct ConnectionEditorView: View {
         } catch {
             wireGuardImportError = error.localizedDescription
         }
+    }
+
+    private func importOpenVpnConfig(from url: URL) {
+        let accessing = url.startAccessingSecurityScopedResource()
+        defer {
+            if accessing { url.stopAccessingSecurityScopedResource() }
+        }
+
+        do {
+            guard url.pathExtension.lowercased() == "ovpn" else {
+                throw OpenVpnImportError(NSLocalizedString("Choose an OpenVPN .ovpn profile.", comment: "OpenVPN import error"))
+            }
+
+            let handle = try FileHandle(forReadingFrom: url)
+            defer { try? handle.close() }
+
+            var data = Data()
+            while data.count <= Self.openVpnByteLimit,
+                  let chunk = try handle.read(upToCount: 16 * 1024),
+                  !chunk.isEmpty {
+                data.append(chunk)
+            }
+            guard data.count <= Self.openVpnByteLimit else {
+                throw OpenVpnImportError(
+                    NSLocalizedString("OpenVPN profiles must be 256 KiB or smaller.", comment: "OpenVPN import error")
+                )
+            }
+            guard let text = String(data: data, encoding: .utf8) else {
+                throw OpenVpnImportError(
+                    NSLocalizedString("The OpenVPN profile is not UTF-8 text.", comment: "OpenVPN import error")
+                )
+            }
+            guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                throw OpenVpnImportError(
+                    NSLocalizedString("The OpenVPN profile is empty.", comment: "OpenVPN import error")
+                )
+            }
+
+            let summary: OpenVpnProfileSummary
+            do {
+                summary = try OpenScreensCore.validateOpenvpnProfile(text: text)
+            } catch OpenVpnProfileError.Invalid(let reason) {
+                throw OpenVpnImportError(reason)
+            }
+
+            draft.openVpnConfig = text
+            openVpnFileName = url.lastPathComponent
+            openVpnSummary = Self.summaryText(summary)
+            openVpnImportError = nil
+        } catch {
+            openVpnImportError = error.localizedDescription
+        }
+    }
+
+    private static func openVpnSummary(for text: String) -> String? {
+        guard let summary = try? OpenScreensCore.validateOpenvpnProfile(text: text) else {
+            return nil
+        }
+        return summaryText(summary)
+    }
+
+    private static func summaryText(_ summary: OpenVpnProfileSummary) -> String {
+        [summary.remote, summary.proto, summary.cipher, summary.tlsWrap]
+            .compactMap { $0 }
+            .joined(separator: " · ")
     }
 
     private func importSSHKey(from url: URL) {
@@ -583,7 +716,9 @@ public struct ConnectionEditorView: View {
     private var sshPortNumber: Int? { Int(sshPort) }
 
     private var tunnelConflict: Bool {
-        sshEnabled && draft.hasWireGuardConfig
+        [sshEnabled, draft.hasWireGuardConfig, draft.hasOpenVpnConfig]
+            .filter { $0 }
+            .count > 1
     }
 
     private var sshValidationError: String? {
@@ -777,6 +912,16 @@ private struct PlainInputStyle: ViewModifier {
         content.autocorrectionDisabled()
         #endif
     }
+}
+
+private struct OpenVpnImportError: LocalizedError {
+    let message: String
+
+    init(_ message: String) {
+        self.message = message
+    }
+
+    var errorDescription: String? { message }
 }
 
 private struct WireGuardImportError: LocalizedError {

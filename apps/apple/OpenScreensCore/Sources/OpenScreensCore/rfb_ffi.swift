@@ -1316,6 +1316,71 @@ public func FfiConverterTypeGeneratedSshKey_lower(_ value: GeneratedSshKey) -> R
 }
 
 
+/**
+ * Summary of a validated `.ovpn` profile, shown before saving a connection.
+ */
+public struct OpenVpnProfileSummary: Equatable, Hashable {
+    public var remote: String
+    public var proto: String
+    public var cipher: String
+    public var tlsWrap: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(remote: String, proto: String, cipher: String, tlsWrap: String?) {
+        self.remote = remote
+        self.proto = proto
+        self.cipher = cipher
+        self.tlsWrap = tlsWrap
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension OpenVpnProfileSummary: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeOpenVpnProfileSummary: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> OpenVpnProfileSummary {
+        return
+            try OpenVpnProfileSummary(
+                remote: FfiConverterString.read(from: &buf), 
+                proto: FfiConverterString.read(from: &buf), 
+                cipher: FfiConverterString.read(from: &buf), 
+                tlsWrap: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: OpenVpnProfileSummary, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.remote, into: &buf)
+        FfiConverterString.write(value.proto, into: &buf)
+        FfiConverterString.write(value.cipher, into: &buf)
+        FfiConverterOptionString.write(value.tlsWrap, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeOpenVpnProfileSummary_lift(_ buf: RustBuffer) throws -> OpenVpnProfileSummary {
+    return try FfiConverterTypeOpenVpnProfileSummary.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeOpenVpnProfileSummary_lower(_ value: OpenVpnProfileSummary) -> RustBuffer {
+    return FfiConverterTypeOpenVpnProfileSummary.lower(value)
+}
+
+
 public struct Rect: Equatable, Hashable {
     public var x: UInt16
     public var y: UInt16
@@ -1468,10 +1533,15 @@ public struct SessionConfig: Equatable, Hashable {
     public var frameIntervalMs: UInt16
     /**
      * Full wg-quick text; when set the target is dialled through a userspace
-     * WireGuard tunnel (mutually exclusive with SSH).
+     * WireGuard tunnel (mutually exclusive with OpenVPN and SSH).
      */
     public var wireguardConfig: String?
     public var wireguardDnsFallback: Bool
+    /**
+     * Full `.ovpn` text; when set the target is dialled through a userspace
+     * OpenVPN tunnel (mutually exclusive with WireGuard and SSH).
+     */
+    public var openvpnConfig: String?
     public var sshHost: String?
     public var sshPort: UInt16?
     public var sshUsername: String?
@@ -1483,8 +1553,12 @@ public struct SessionConfig: Equatable, Hashable {
     public init(host: String, port: UInt16, username: String?, password: String?, shared: Bool, localCursor: Bool, quality: UInt8, frameIntervalMs: UInt16, 
         /**
          * Full wg-quick text; when set the target is dialled through a userspace
-         * WireGuard tunnel (mutually exclusive with SSH).
-         */wireguardConfig: String?, wireguardDnsFallback: Bool, sshHost: String?, sshPort: UInt16?, sshUsername: String?, sshAuth: SshAuthConfig?, sshHostKeyFingerprint: String?) {
+         * WireGuard tunnel (mutually exclusive with OpenVPN and SSH).
+         */wireguardConfig: String?, wireguardDnsFallback: Bool, 
+        /**
+         * Full `.ovpn` text; when set the target is dialled through a userspace
+         * OpenVPN tunnel (mutually exclusive with WireGuard and SSH).
+         */openvpnConfig: String?, sshHost: String?, sshPort: UInt16?, sshUsername: String?, sshAuth: SshAuthConfig?, sshHostKeyFingerprint: String?) {
         self.host = host
         self.port = port
         self.username = username
@@ -1495,6 +1569,7 @@ public struct SessionConfig: Equatable, Hashable {
         self.frameIntervalMs = frameIntervalMs
         self.wireguardConfig = wireguardConfig
         self.wireguardDnsFallback = wireguardDnsFallback
+        self.openvpnConfig = openvpnConfig
         self.sshHost = sshHost
         self.sshPort = sshPort
         self.sshUsername = sshUsername
@@ -1528,6 +1603,7 @@ public struct FfiConverterTypeSessionConfig: FfiConverterRustBuffer {
                 frameIntervalMs: FfiConverterUInt16.read(from: &buf), 
                 wireguardConfig: FfiConverterOptionString.read(from: &buf), 
                 wireguardDnsFallback: FfiConverterBool.read(from: &buf), 
+                openvpnConfig: FfiConverterOptionString.read(from: &buf), 
                 sshHost: FfiConverterOptionString.read(from: &buf), 
                 sshPort: FfiConverterOptionUInt16.read(from: &buf), 
                 sshUsername: FfiConverterOptionString.read(from: &buf), 
@@ -1547,6 +1623,7 @@ public struct FfiConverterTypeSessionConfig: FfiConverterRustBuffer {
         FfiConverterUInt16.write(value.frameIntervalMs, into: &buf)
         FfiConverterOptionString.write(value.wireguardConfig, into: &buf)
         FfiConverterBool.write(value.wireguardDnsFallback, into: &buf)
+        FfiConverterOptionString.write(value.openvpnConfig, into: &buf)
         FfiConverterOptionString.write(value.sshHost, into: &buf)
         FfiConverterOptionUInt16.write(value.sshPort, into: &buf)
         FfiConverterOptionString.write(value.sshUsername, into: &buf)
@@ -1716,6 +1793,81 @@ public func FfiConverterTypeTransferEntry_lift(_ buf: RustBuffer) throws -> Tran
 #endif
 public func FfiConverterTypeTransferEntry_lower(_ value: TransferEntry) -> RustBuffer {
     return FfiConverterTypeTransferEntry.lower(value)
+}
+
+
+public 
+enum OpenVpnProfileError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
+
+    
+    
+    case Invalid(reason: String
+    )
+
+    
+
+    
+
+    
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+    
+}
+
+#if compiler(>=6)
+extension OpenVpnProfileError: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeOpenVpnProfileError: FfiConverterRustBuffer {
+    typealias SwiftType = OpenVpnProfileError
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> OpenVpnProfileError {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        
+
+        
+        case 1: return .Invalid(
+            reason: try FfiConverterString.read(from: &buf)
+            )
+
+         default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: OpenVpnProfileError, into buf: inout [UInt8]) {
+        switch value {
+
+        
+
+        
+        
+        case let .Invalid(reason):
+            writeInt(&buf, Int32(1))
+            FfiConverterString.write(reason, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeOpenVpnProfileError_lift(_ buf: RustBuffer) throws -> OpenVpnProfileError {
+    return try FfiConverterTypeOpenVpnProfileError.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeOpenVpnProfileError_lower(_ value: OpenVpnProfileError) -> RustBuffer {
+    return FfiConverterTypeOpenVpnProfileError.lower(value)
 }
 
 
@@ -2640,6 +2792,21 @@ public func transferTimestamp1904(unixSeconds: UInt64) -> UInt32  {
     )
 })
 }
+/**
+ * Parses an `.ovpn` profile without touching the network.
+ *
+ * Profiles must embed the CA, certificate, key and optional tls-auth/tls-crypt
+ * material: frontends persist only the text, so external file references
+ * would break after import.
+ */
+public func validateOpenvpnProfile(text: String)throws  -> OpenVpnProfileSummary  {
+    return try  FfiConverterTypeOpenVpnProfileSummary_lift(try rustCallWithError(FfiConverterTypeOpenVpnProfileError_lift) {
+        uniffiCallStatus in
+    uniffi_rfb_ffi_fn_func_validate_openvpn_profile(
+        FfiConverterString.lower(text),uniffiCallStatus
+    )
+})
+}
 
 private enum InitializationResult {
     case ok
@@ -2675,6 +2842,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_rfb_ffi_checksum_func_transfer_timestamp_1904() != 40683) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_rfb_ffi_checksum_func_validate_openvpn_profile() != 34946) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_rfb_ffi_checksum_method_remotesession_announce_upload() != 54961) {

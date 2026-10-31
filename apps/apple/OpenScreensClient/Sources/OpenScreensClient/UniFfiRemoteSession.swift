@@ -165,7 +165,7 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
         if profile.hasTunnelConflict {
             throw SessionSetupError(
                 NSLocalizedString(
-                    "SSH and WireGuard cannot be used together. Choose one.",
+                    "SSH, WireGuard and OpenVPN are mutually exclusive. Choose one.",
                     comment: "Session setup error"
                 )
             )
@@ -190,6 +190,7 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
             frameIntervalMs: 16,
             wireguardConfig: profile.wireGuardConfig,
             wireguardDnsFallback: true,
+            openvpnConfig: profile.openVpnConfig,
             sshHost: sshHost,
             sshPort: sshPort,
             sshUsername: sshUsername,

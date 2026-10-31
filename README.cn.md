@@ -8,11 +8,11 @@
 
 - RFB 3.3/3.7/3.8 客户端，支持 VNC 密码认证与 Apple DH 认证（macOS 屏幕共享）
 - Raw、CopyRect、RRE、Hextile、ZRLE、zlib、Tight/JPEG 解码到 BGRA 帧缓冲
-- TCP 与 SSH（direct-tcpip）传输；Android 编辑器已提供 SSH 配置
+- TCP 与 SSH（direct-tcpip）传输；Android 已支持跳板机、密码/私钥认证和加密的 SSH 密钥管理
 - macOS 与 iOS/iPadOS 的 SwiftUI 应用，Metal 画布
 - Android 的 Compose Material 3 应用
 
-尚未实现：Apple Adaptive DCT、自适应画质、本地光标渲染、多显示器选择、文件传输、WireGuard/OpenVPN。
+尚未实现：Apple Adaptive DCT、自适应画质、本地光标渲染、多显示器选择、文件传输、WireGuard/OpenVPN。Apple 端尚未接入 SSH UI 与密钥管理（core 已支持）。
 
 ## 目录
 

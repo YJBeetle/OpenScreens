@@ -9,6 +9,7 @@ repository.workspace = true
 
 [dependencies]
 bytes = "1"
+flate2 = "1"
 rfb-codec = { path = "../rfb-codec" }
 rfb-io = { path = "../rfb-io" }
 rfb-proto = { path = "../rfb-proto" }

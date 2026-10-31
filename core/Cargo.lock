@@ -1865,6 +1865,7 @@ name = "rfb-engine"
 version = "0.1.0"
 dependencies = [
  "bytes",
+ "flate2",
  "rfb-codec",
  "rfb-io",
  "rfb-proto",

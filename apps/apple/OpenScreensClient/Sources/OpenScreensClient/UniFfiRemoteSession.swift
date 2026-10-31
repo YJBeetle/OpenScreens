@@ -104,6 +104,10 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
 
     private let logger = Logger(subsystem: "app.openscreens", category: "Session")
     private static let displayTargetWidth = 2560
+    /// Conservative Metal 2D texture limit; keeps the simulator and every
+    /// supported device inside `maxTextureDimension2D`.
+    private static let maxTextureDimension = 8192
+    private static let maxSamplingScale = 16
     private static let uploadChunkSize = 64 * 1024
     /// POSIX 0100644: a plain file owned by the uploading user.
     private static let uploadFileMode: UInt16 = 0o100644
@@ -356,13 +360,28 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
     /// Subscribes only to the visible framebuffer region and samples it at
     /// roughly one stored pixel per screen pixel, so a zoomed crop stays sharp
     /// without transferring the whole desktop.
-    public func setViewport(_ rect: CGRect?, screenPixelWidth: Int) async {
+    public func setViewport(_ normalizedRect: CGRect?, screenPixelWidth: Int) async {
         guard let session, !finished, width > 0, height > 0 else { return }
+        let unit = CGRect(x: 0, y: 0, width: 1, height: 1)
+        let fraction = (normalizedRect ?? unit).intersection(unit)
+        guard fraction.width > 0, fraction.height > 0 else { return }
+
         let full = CGRect(x: 0, y: 0, width: Int(width), height: Int(height))
-        let visible = (rect ?? full).integral.intersection(full)
+        let visible = CGRect(
+            x: (fraction.minX * CGFloat(width)).rounded(.down),
+            y: (fraction.minY * CGFloat(height)).rounded(.down),
+            width: (fraction.width * CGFloat(width)).rounded(.up),
+            height: (fraction.height * CGFloat(height)).rounded(.up)
+        ).integral.intersection(full)
         guard visible.width >= 1, visible.height >= 1 else { return }
 
-        let density = max(1, min(8, Int(visible.width) / max(1, screenPixelWidth)))
+        var density = max(1, Int(visible.width) / max(1, screenPixelWidth))
+        density = max(
+            density,
+            (Int(width) + Self.maxTextureDimension - 1) / Self.maxTextureDimension,
+            (Int(height) + Self.maxTextureDimension - 1) / Self.maxTextureDimension
+        )
+        density = min(Self.maxSamplingScale, density)
         if displayScale != UInt16(density) {
             displayScale = UInt16(density)
             scaledWidth = (Int(width) + density - 1) / density
@@ -1007,7 +1026,13 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
             scaledHeight = 0
             return
         }
-        let scale = max(1, min(8, Int(width) / Self.displayTargetWidth))
+        var scale = max(1, min(8, Int(width) / Self.displayTargetWidth))
+        scale = max(
+            scale,
+            (Int(width) + Self.maxTextureDimension - 1) / Self.maxTextureDimension,
+            (Int(height) + Self.maxTextureDimension - 1) / Self.maxTextureDimension
+        )
+        scale = min(Self.maxSamplingScale, scale)
         displayScale = UInt16(scale)
         scaledWidth = (Int(width) + scale - 1) / scale
         scaledHeight = (Int(height) + scale - 1) / scale

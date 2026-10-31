@@ -19,8 +19,10 @@ final class RemoteCanvasMetalView: MTKView {
         colorPixelFormat = .bgra8Unorm
         framebufferOnly = true
         preferredFramesPerSecond = 30
-        isPaused = false
-        enableSetNeedsDisplay = false
+        // Draw only when a frame or placement changes; an idle session should
+        // not keep the GPU busy.
+        isPaused = true
+        enableSetNeedsDisplay = true
         autoResizeDrawable = true
         clearColor = MTLClearColor(red: 0.015, green: 0.017, blue: 0.022, alpha: 1)
         #if os(macOS)
@@ -29,7 +31,28 @@ final class RemoteCanvasMetalView: MTKView {
         isOpaque = true
         isMultipleTouchEnabled = false
         #endif
+        renderer.attach(self)
     }
+
+    func requestRedraw() {
+        #if os(macOS)
+        needsDisplay = true
+        #else
+        setNeedsDisplay()
+        #endif
+    }
+
+    #if os(macOS)
+    override func layout() {
+        super.layout()
+        needsDisplay = true
+    }
+    #else
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        setNeedsDisplay()
+    }
+    #endif
 
     @available(*, unavailable)
     required init(coder: NSCoder) {

@@ -529,7 +529,7 @@ public final class SessionViewModel {
     }
 
     private func updateViewport(in size: CGSize, screenPixelWidth: CGFloat) async {
-        guard let session, let serverSize,
+        guard let session,
               let displayed = displayedImageRect(in: size),
               displayed.width > 0, displayed.height > 0
         else { return }
@@ -537,17 +537,20 @@ public final class SessionViewModel {
         let visible = displayed.intersection(CGRect(origin: .zero, size: size))
         guard !visible.isNull, visible.width >= 1, visible.height >= 1 else { return }
 
-        let scaleX = serverSize.width / displayed.width
-        let scaleY = serverSize.height / displayed.height
-        let rect = CGRect(
-            x: ((visible.minX - displayed.minX) * scaleX).rounded(.down),
-            y: ((visible.minY - displayed.minY) * scaleY).rounded(.down),
-            width: (visible.width * scaleX).rounded(.up),
-            height: (visible.height * scaleY).rounded(.up)
+        let unit = CGRect(x: 0, y: 0, width: 1, height: 1)
+        let normalized = CGRect(
+            x: (visible.minX - displayed.minX) / displayed.width,
+            y: (visible.minY - displayed.minY) / displayed.height,
+            width: visible.width / displayed.width,
+            height: visible.height / displayed.height
+        ).intersection(unit)
+        guard normalized.width > 0, normalized.height > 0 else { return }
+        guard normalized != lastViewportRect else { return }
+        lastViewportRect = normalized
+        await session.setViewport(
+            normalized,
+            screenPixelWidth: Int(max(1, screenPixelWidth.rounded()))
         )
-        guard rect != lastViewportRect else { return }
-        lastViewportRect = rect
-        await session.setViewport(rect, screenPixelWidth: Int(max(1, screenPixelWidth.rounded())))
     }
 
     private func clampedPan(_ value: CGSize, in size: CGSize) -> CGSize {

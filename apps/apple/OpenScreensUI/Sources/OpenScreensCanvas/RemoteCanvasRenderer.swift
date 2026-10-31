@@ -16,6 +16,8 @@ import os
 @MainActor
 public final class RemoteCanvasRenderer {
     private static let logger = Logger(subsystem: "app.openscreens.canvas", category: "RemoteCanvas")
+    /// Conservative 2D texture limit (the simulator aborts above 8192).
+    private static let maxTextureDimension = 8192
 
     private let device: (any MTLDevice)?
     private let commandQueue: (any MTLCommandQueue)?
@@ -28,14 +30,31 @@ public final class RemoteCanvasRenderer {
     public private(set) var framePixelSize: CGSize?
 
     /// Letterboxing behaviour, applied by the hosting view on the next draw.
-    public var contentMode: RemoteContentMode = .fit
+    public var contentMode: RemoteContentMode = .fit {
+        didSet { requestRedraw() }
+    }
 
     /// Rect the framebuffer occupies in the hosting view, in points. When set,
     /// the renderer samples that visible portion at drawable resolution instead
     /// of magnifying a fitted layer, so zoomed content stays sharp.
-    public var imageRect: CGRect?
+    public var imageRect: CGRect? {
+        didSet { requestRedraw() }
+    }
     /// Size of the hosting view the rect is expressed in, in points.
-    public var containerSize: CGSize = .zero
+    public var containerSize: CGSize = .zero {
+        didSet { requestRedraw() }
+    }
+
+    /// View that presents this renderer, redrawn only when content changes.
+    private weak var hostView: RemoteCanvasMetalView?
+
+    func attach(_ view: RemoteCanvasMetalView) {
+        hostView = view
+    }
+
+    private func requestRedraw() {
+        hostView?.requestRedraw()
+    }
 
     /// Creates the Metal device, queue and pipeline. The renderer remains usable
     /// (uploads are accepted, draws are skipped) if Metal is unavailable.
@@ -84,6 +103,7 @@ public final class RemoteCanvasRenderer {
             guard let base = buffer.baseAddress else { return }
             texture.replace(region: region, mipmapLevel: 0, withBytes: base, bytesPerRow: bytesPerRow)
         }
+        requestRedraw()
     }
 
     /// Uploads a sub-region of the current frame. `width` and `height` are the
@@ -124,6 +144,7 @@ public final class RemoteCanvasRenderer {
             guard let base = buffer.baseAddress else { return }
             texture.replace(region: metalRegion, mipmapLevel: 0, withBytes: base, bytesPerRow: bytesPerRow)
         }
+        requestRedraw()
     }
 
     /// Discards the current frame, e.g. when a session disconnects.
@@ -132,6 +153,7 @@ public final class RemoteCanvasRenderer {
         frameWidth = 0
         frameHeight = 0
         framePixelSize = nil
+        requestRedraw()
     }
 
     /// Draws the latest frame into the supplied view.
@@ -193,6 +215,12 @@ public final class RemoteCanvasRenderer {
 
     private func makeTextureIfNeeded(width: Int, height: Int) -> (any MTLTexture)? {
         guard let device else { return nil }
+        guard width <= Self.maxTextureDimension, height <= Self.maxTextureDimension else {
+            Self.logger.error(
+                "Framebuffer \(width)x\(height) exceeds the \(Self.maxTextureDimension) texel limit"
+            )
+            return nil
+        }
         if let texture, frameWidth == width, frameHeight == height {
             return texture
         }

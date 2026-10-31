@@ -286,10 +286,10 @@ public protocol RemoteSessionProtocol: Sendable {
     /// Switches the host to one display, or shows every display when `id` is
     /// `nil`.
     func selectDisplay(_ id: Int?) async
-    /// Restricts framebuffer updates to `rect` (framebuffer pixels) and picks a
-    /// sampling density that keeps the visible crop at screen resolution.
-    /// `nil` restores full-frame updates.
-    func setViewport(_ rect: CGRect?, screenPixelWidth: Int) async
+    /// Restricts framebuffer updates to a normalized rect (0...1 in framebuffer
+    /// coordinates) and picks a sampling density that keeps the visible crop at
+    /// screen resolution. `nil` restores full-frame updates.
+    func setViewport(_ normalizedRect: CGRect?, screenPixelWidth: Int) async
     /// Sends local files to the remote desktop through Apple's drag-and-drop
     /// file transfer protocol. Progress and completion arrive as events.
     func uploadFiles(_ urls: [URL]) async
@@ -311,7 +311,7 @@ public extension RemoteSessionProtocol {
     /// Transports without display selection ignore the request.
     func selectDisplay(_ id: Int?) async {}
     /// Transports without viewport cropping ignore the request.
-    func setViewport(_ rect: CGRect?, screenPixelWidth: Int) async {}
+    func setViewport(_ normalizedRect: CGRect?, screenPixelWidth: Int) async {}
     /// Transports without file transfer support ignore the request.
     func uploadFiles(_ urls: [URL]) async {}
     /// Transports without file download support ignore the request.

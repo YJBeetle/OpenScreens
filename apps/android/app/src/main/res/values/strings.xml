@@ -48,6 +48,7 @@
     <string name="session_waiting_title">Waiting for the remote screen</string>
     <string name="session_waiting_body">Live frames from the Rust core appear here as soon as the first update arrives.</string>
     <string name="session_resolution">%1$d × %2$d</string>
+    <string name="session_zoom_level">%1$.1f×</string>
     <string name="session_keyboard">Send a keystroke</string>
     <string name="session_keyboard_hint">Key</string>
     <string name="session_keyboard_action">Send key</string>

@@ -1,11 +1,15 @@
 package com.openscreens.app.ui.session
 
+import android.os.SystemClock
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculateCentroid
+import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -51,6 +55,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -63,7 +68,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.FilterQuality
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
@@ -89,6 +96,7 @@ import com.openscreens.app.ui.common.label
 import com.openscreens.app.ui.theme.SystemBarIconAppearance
 import com.openscreens.app.ui.theme.findActivity
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.math.min
 import kotlin.math.roundToInt
 
@@ -119,6 +127,8 @@ fun SessionScreen(
     var remoteHeight by remember { mutableIntStateOf(1200) }
     var frame by remember { mutableStateOf<SessionEvent.Frame?>(null) }
     var lastAction by remember { mutableStateOf<String?>(null) }
+    var zoom by remember { mutableFloatStateOf(1f) }
+    var pan by remember { mutableStateOf(Offset.Zero) }
     var showKeyboardDialog by rememberSaveable { mutableStateOf(false) }
     var showClipboardDialog by rememberSaveable { mutableStateOf(false) }
     var qualityMenuExpanded by remember { mutableStateOf(false) }
@@ -197,6 +207,11 @@ fun SessionScreen(
         session.connect()
     }
 
+    LaunchedEffect(remoteWidth, remoteHeight) {
+        zoom = 1f
+        pan = Offset.Zero
+    }
+
     val statusText = stringResource(
         when (status) {
             SessionStatus.Connecting -> R.string.session_status_connecting
@@ -236,65 +251,114 @@ fun SessionScreen(
                 .background(FramebufferBackground)
                 .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(16.dp))
                 .pointerInput(session, remoteWidth, remoteHeight) {
-                    detectTapGestures(
-                        onTap = { offset ->
-                            val (x, y) = remotePoint(offset, size, remoteWidth, remoteHeight)
-                            session.sendPointer(x, y, 0)
-                            recordPointer(x, y)
-                        },
-                        onLongPress = { offset ->
-                            val (x, y) = remotePoint(offset, size, remoteWidth, remoteHeight)
-                            scope.launch {
-                                val regionWidth = min(192, remoteWidth - x).coerceAtLeast(1)
-                                val regionHeight = min(120, remoteHeight - y).coerceAtLeast(1)
-                                val bytes = session.copyRegion(x, y, regionWidth, regionHeight)
-                                val message = context.resources.getQuantityString(
-                                    R.plurals.session_region_copied,
-                                    bytes.size,
-                                    bytes.size,
-                                )
-                                lastAction = context.getString(
-                                    R.string.session_action_prefix,
-                                    message,
-                                )
-                                snackbarHostState.showSnackbar(message)
+                    val touchSlop = viewConfiguration.touchSlop
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        var mode = GestureMode.Pending
+                        var start = remotePoint(down.position, size, remoteWidth, remoteHeight, zoom, pan)
+                        var last = start
+                        var lastZoom = zoom
+                        var lastPan = pan
+                        var longPressSent = false
+                        val downTime = SystemClock.uptimeMillis()
+
+                        while (true) {
+                            val event = withTimeoutOrNull(50L) { awaitPointerEvent() }
+                            if (event == null) {
+                                if (mode == GestureMode.Pending && !longPressSent &&
+                                    SystemClock.uptimeMillis() - downTime >= LONG_PRESS_MS
+                                ) {
+                                    longPressSent = true
+                                    session.sendPointer(start.first, start.second, 2)
+                                    session.sendPointer(start.first, start.second, 0)
+                                }
+                                continue
                             }
-                        },
-                    )
-                }
-                .pointerInput(session, remoteWidth, remoteHeight) {
-                    var lastX = 0
-                    var lastY = 0
-                    detectDragGestures(
-                        onDragStart = { offset ->
-                            val (x, y) = remotePoint(offset, size, remoteWidth, remoteHeight)
-                            lastX = x
-                            lastY = y
-                            session.sendPointer(x, y, 1)
-                            recordPointer(x, y)
-                        },
-                        onDrag = { change, _ ->
-                            change.consume()
-                            val (x, y) = remotePoint(change.position, size, remoteWidth, remoteHeight)
-                            lastX = x
-                            lastY = y
-                            session.sendPointer(x, y, 1)
-                        },
-                        onDragEnd = { session.sendPointer(lastX, lastY, 0) },
-                        onDragCancel = { session.sendPointer(lastX, lastY, 0) },
-                    )
+
+                            val pressed = event.changes.filter { it.pressed }
+                            if (pressed.isEmpty()) break
+                            if (mode == GestureMode.Transform && pressed.size < 2) break
+
+                            if (pressed.size >= 2) {
+                                if (mode == GestureMode.Drag) {
+                                    session.sendPointer(last.first, last.second, 0)
+                                }
+                                if (mode != GestureMode.Transform) {
+                                    mode = GestureMode.Transform
+                                    lastZoom = zoom
+                                    lastPan = pan
+                                }
+
+                                val zoomChange = event.calculateZoom()
+                                val panChange = event.calculatePan()
+                                if (zoomChange != 1f || panChange != Offset.Zero) {
+                                    val newZoom = (lastZoom * zoomChange).coerceIn(1f, MAX_ZOOM)
+                                    val centroid = event.calculateCentroid(useCurrent = true)
+                                    val center = Offset(size.width / 2f, size.height / 2f)
+                                    val anchored = if (centroid == Offset.Unspecified) {
+                                        lastPan
+                                    } else {
+                                        centroid - (centroid - center - lastPan) * (newZoom / lastZoom)
+                                    }
+                                    val newPan = clampPan(anchored + panChange, newZoom, size)
+                                    zoom = newZoom
+                                    pan = newPan
+                                    lastZoom = newZoom
+                                    lastPan = newPan
+                                }
+                                event.changes.forEach { it.consume() }
+                                continue
+                            }
+
+                            if (mode == GestureMode.Transform) continue
+                            val change = pressed.first()
+                            if (mode == GestureMode.Pending && !longPressSent &&
+                                (change.position - down.position).getDistance() > touchSlop
+                            ) {
+                                mode = GestureMode.Drag
+                                session.sendPointer(start.first, start.second, 1)
+                                recordPointer(start.first, start.second)
+                            }
+                            if (mode == GestureMode.Drag) {
+                                last = remotePoint(change.position, size, remoteWidth, remoteHeight, zoom, pan)
+                                session.sendPointer(last.first, last.second, 1)
+                                change.consume()
+                            }
+                        }
+
+                        when (mode) {
+                            GestureMode.Drag -> session.sendPointer(last.first, last.second, 0)
+                            GestureMode.Pending -> if (!longPressSent) {
+                                session.sendPointer(start.first, start.second, 0)
+                                session.sendPointer(start.first, start.second, 1)
+                                session.sendPointer(start.first, start.second, 0)
+                                recordPointer(start.first, start.second)
+                            }
+                            GestureMode.Transform -> Unit
+                        }
+                    }
                 },
         ) {
             val live = frame
             if (live != null) {
-                Canvas(modifier = Modifier.fillMaxSize()) {
+                Canvas(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer {
+                            scaleX = zoom
+                            scaleY = zoom
+                            translationX = pan.x
+                            translationY = pan.y
+                            transformOrigin = TransformOrigin.Center
+                        },
+                ) {
                     drawImage(
                         image = live.bitmap.asImageBitmap(),
                         srcOffset = IntOffset.Zero,
                         srcSize = IntSize(live.bitmap.width, live.bitmap.height),
                         dstOffset = IntOffset.Zero,
                         dstSize = IntSize(size.width.roundToInt(), size.height.roundToInt()),
-                        filterQuality = FilterQuality.Low,
+                        filterQuality = if (zoom > 1.2f) FilterQuality.Medium else FilterQuality.Low,
                     )
                 }
             } else {
@@ -339,6 +403,28 @@ fun SessionScreen(
                 .windowInsetsPadding(WindowInsets.safeDrawing)
                 .padding(horizontal = 12.dp, vertical = 8.dp),
         )
+
+        if (zoom > 1.01f) {
+            Surface(
+                onClick = {
+                    zoom = 1f
+                    pan = Offset.Zero
+                },
+                shape = RoundedCornerShape(50),
+                color = Color.Black.copy(alpha = 0.55f),
+                contentColor = Color.White,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .windowInsetsPadding(WindowInsets.safeDrawing)
+                    .padding(top = 72.dp, end = 12.dp),
+            ) {
+                Text(
+                    text = stringResource(R.string.session_zoom_level, zoom),
+                    style = MaterialTheme.typography.labelMedium,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                )
+            }
+        }
 
         SnackbarHost(
             hostState = snackbarHostState,
@@ -672,15 +758,33 @@ private fun ClipboardDialog(
     )
 }
 
+private const val MAX_ZOOM = 6f
+private const val LONG_PRESS_MS = 500L
+
+private enum class GestureMode { Pending, Drag, Transform }
+
+private fun clampPan(value: Offset, zoom: Float, size: IntSize): Offset {
+    val maxX = size.width * (zoom - 1f) / 2f
+    val maxY = size.height * (zoom - 1f) / 2f
+    return Offset(
+        x = value.x.coerceIn(-maxX, maxX),
+        y = value.y.coerceIn(-maxY, maxY),
+    )
+}
+
 private fun remotePoint(
     offset: Offset,
     size: IntSize,
     remoteWidth: Int,
     remoteHeight: Int,
+    zoom: Float,
+    pan: Offset,
 ): Pair<Int, Int> {
     if (size.width == 0 || size.height == 0) return 0 to 0
-    val x = (offset.x / size.width * remoteWidth).roundToInt().coerceIn(0, remoteWidth - 1)
-    val y = (offset.y / size.height * remoteHeight).roundToInt().coerceIn(0, remoteHeight - 1)
+    val center = Offset(size.width / 2f, size.height / 2f)
+    val local = (offset - pan - center) / zoom + center
+    val x = (local.x / size.width * remoteWidth).roundToInt().coerceIn(0, remoteWidth - 1)
+    val y = (local.y / size.height * remoteHeight).roundToInt().coerceIn(0, remoteHeight - 1)
     return x to y
 }
 

@@ -114,6 +114,17 @@ jobs:
               -s -k actions "$KEYCHAIN" >/dev/null
             security list-keychains -d user -s "$KEYCHAIN" login.keychain-db
             rm -f "$RUNNER_TEMP/signing.p12"
+            SPARKLE="$APP/Contents/Frameworks/Sparkle.framework"
+            if [[ -d "$SPARKLE" ]]; then
+              for nested in \
+                "$SPARKLE/Versions/B/XPCServices/Downloader.xpc" \
+                "$SPARKLE/Versions/B/XPCServices/Installer.xpc" \
+                "$SPARKLE/Versions/B/Updater.app" \
+                "$SPARKLE/Versions/B/Autoupdate"; do
+                codesign --force --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" "$nested"
+              done
+              codesign --force --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" "$SPARKLE"
+            fi
             codesign --force --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" "$APP"
             codesign --verify --deep --strict --verbose=2 "$APP"
             ditto -c -k --keepParent "$APP" "$RUNNER_TEMP/OpenScreens-notarize.zip"

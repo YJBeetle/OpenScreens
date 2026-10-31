@@ -29,6 +29,17 @@ xcodebuild -project OpenScreens.xcodeproj -scheme OpenScreens -configuration Rel
   OPENSCREENS_BUILD_VERSION="$(git -C "$ROOT" describe --tags --always --dirty)" \
   CURRENT_PROJECT_VERSION="$(git -C "$ROOT" rev-list --count HEAD)" build
 
+SPARKLE="$APP/Contents/Frameworks/Sparkle.framework"
+if [[ -d "$SPARKLE" ]]; then
+  for nested in \
+    "$SPARKLE/Versions/B/XPCServices/Downloader.xpc" \
+    "$SPARKLE/Versions/B/XPCServices/Installer.xpc" \
+    "$SPARKLE/Versions/B/Updater.app" \
+    "$SPARKLE/Versions/B/Autoupdate"; do
+    codesign --force --options runtime --timestamp --sign "$IDENTITY" "$nested"
+  done
+  codesign --force --options runtime --timestamp --sign "$IDENTITY" "$SPARKLE"
+fi
 codesign --force --options runtime --timestamp --sign "$IDENTITY" "$APP"
 codesign --verify --deep --strict --verbose=2 "$APP"
 

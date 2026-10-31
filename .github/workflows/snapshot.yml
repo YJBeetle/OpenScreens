@@ -77,6 +77,7 @@ jobs:
           xcodegen generate
           xcodebuild -project OpenScreens.xcodeproj -scheme OpenScreens \
             -configuration Release -destination 'platform=macOS' \
+            ARCHS=arm64 ONLY_ACTIVE_ARCH=YES \
             CODE_SIGNING_ALLOWED=NO SYMROOT="$PWD/build" build
       - name: Sign, notarize and package
         working-directory: apps/macos

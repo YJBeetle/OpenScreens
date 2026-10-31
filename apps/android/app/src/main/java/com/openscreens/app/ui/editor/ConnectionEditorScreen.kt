@@ -8,7 +8,10 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -17,7 +20,10 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.text.KeyboardOptions
@@ -54,8 +60,12 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
@@ -67,6 +77,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.openscreens.app.R
 import com.openscreens.app.data.Connection
+import com.openscreens.app.data.ConnectionAccent
 import com.openscreens.app.data.QualityPreset
 import com.openscreens.app.data.SshAuthMode
 import com.openscreens.app.ui.common.label
@@ -74,11 +85,14 @@ import com.openscreens.app.ui.common.summary
 import com.openscreens.app.data.SshCredentials
 import com.openscreens.app.data.SshKey
 import com.openscreens.app.ui.theme.ThemedSystemBarIcons
+import com.openscreens.app.ui.theme.autoAccent
+import com.openscreens.app.ui.theme.gradient
+import com.openscreens.app.ui.theme.labelRes
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun ConnectionEditorScreen(
     connection: Connection?,
@@ -90,6 +104,7 @@ fun ConnectionEditorScreen(
 
     val editorKey = connection?.id
     var name by rememberSaveable(editorKey) { mutableStateOf(connection?.name.orEmpty()) }
+    var accent by rememberSaveable(editorKey) { mutableStateOf(connection?.accent) }
     var host by rememberSaveable(editorKey) { mutableStateOf(connection?.host.orEmpty()) }
     var port by rememberSaveable(editorKey) {
         mutableStateOf((connection?.port ?: Connection.DEFAULT_VNC_PORT).toString())
@@ -214,6 +229,7 @@ fun ConnectionEditorScreen(
             }
             val draft = (connection ?: Connection(name = "", host = "")).copy(
                 name = name.trim(),
+                accent = accent,
                 host = host.trim(),
                 port = portNumber ?: Connection.DEFAULT_VNC_PORT,
                 username = username.trim(),
@@ -348,6 +364,58 @@ fun ConnectionEditorScreen(
                     label = stringResource(R.string.editor_vnc_password),
                     supportingText = stringResource(R.string.editor_optional),
                 )
+
+                Text(
+                    text = stringResource(R.string.editor_color),
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                val effectiveAccent = accent ?: autoAccent(
+                    name.ifBlank { connection?.name.orEmpty() },
+                )
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    ConnectionAccent.entries.forEach { option ->
+                        val selected = option == effectiveAccent
+                        val gradient = option.gradient
+                        val label = stringResource(option.labelRes)
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(CircleShape)
+                                .then(
+                                    if (selected) {
+                                        Modifier.border(
+                                            2.dp,
+                                            MaterialTheme.colorScheme.onSurface,
+                                            CircleShape,
+                                        )
+                                    } else {
+                                        Modifier
+                                    },
+                                )
+                                .selectable(
+                                    selected = selected,
+                                    role = Role.RadioButton,
+                                    onClick = { accent = option },
+                                )
+                                .semantics { contentDescription = label },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(26.dp)
+                                    .clip(CircleShape)
+                                    .background(
+                                        Brush.linearGradient(
+                                            listOf(gradient.start, gradient.end),
+                                        ),
+                                    ),
+                            )
+                        }
+                    }
+                }
 
                 Text(
                     text = stringResource(R.string.settings_streaming),

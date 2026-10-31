@@ -87,6 +87,7 @@ class ConnectionStore(
                 .put("username", connection.username)
                 .put("vncPassword", connection.vncPassword)
                 .put("quality", connection.quality.name)
+            connection.accent?.let { item.put("accent", it.name) }
             connection.wireGuardConfig?.let { item.put("wireGuardConfig", it) }
             connection.ssh?.let { ssh ->
                 item.put(
@@ -132,6 +133,9 @@ class ConnectionStore(
                     Connection(
                         id = item.getString("id"),
                         name = item.getString("name"),
+                        accent = ConnectionAccent.entries.firstOrNull {
+                            it.name == item.optString("accent")
+                        },
                         host = item.getString("host"),
                         port = item.optInt("port", Connection.DEFAULT_VNC_PORT),
                         username = item.optString("username"),

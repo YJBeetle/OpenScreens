@@ -2,9 +2,22 @@ package com.openscreens.app.data
 
 import java.util.UUID
 
+/** Explicit card colours; `null` on a connection keeps the name-derived colour. */
+enum class ConnectionAccent {
+    Teal,
+    Rose,
+    Indigo,
+    Amber,
+    Slate,
+    Violet,
+    Emerald,
+    Sky,
+}
+
 data class Connection(
     val id: String = UUID.randomUUID().toString(),
     val name: String,
+    val accent: ConnectionAccent? = null,
     val host: String,
     val port: Int = DEFAULT_VNC_PORT,
     val username: String = "",

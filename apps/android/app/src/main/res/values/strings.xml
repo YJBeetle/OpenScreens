@@ -34,6 +34,15 @@
     <string name="editor_username_optional">Optional. Required by Apple Screen Sharing.</string>
     <string name="editor_vnc_password">VNC password</string>
     <string name="editor_optional">Optional</string>
+    <string name="editor_color">Color</string>
+    <string name="accent_teal">Teal</string>
+    <string name="accent_rose">Rose</string>
+    <string name="accent_indigo">Indigo</string>
+    <string name="accent_amber">Amber</string>
+    <string name="accent_slate">Slate</string>
+    <string name="accent_violet">Violet</string>
+    <string name="accent_emerald">Emerald</string>
+    <string name="accent_sky">Sky</string>
     <string name="editor_show_password">Show password</string>
     <string name="editor_hide_password">Hide password</string>
     <string name="editor_ssh_toggle">Tunnel through SSH</string>

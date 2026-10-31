@@ -34,6 +34,15 @@
     <string name="editor_username_optional">可选。Apple 屏幕共享需要填写。</string>
     <string name="editor_vnc_password">VNC 密码</string>
     <string name="editor_optional">可选</string>
+    <string name="editor_color">颜色</string>
+    <string name="accent_teal">青绿</string>
+    <string name="accent_rose">玫瑰</string>
+    <string name="accent_indigo">靛蓝</string>
+    <string name="accent_amber">琥珀</string>
+    <string name="accent_slate">石板</string>
+    <string name="accent_violet">紫罗兰</string>
+    <string name="accent_emerald">翡翠</string>
+    <string name="accent_sky">天蓝</string>
     <string name="editor_show_password">显示密码</string>
     <string name="editor_hide_password">隐藏密码</string>
     <string name="editor_ssh_toggle">通过 SSH 隧道连接</string>

@@ -67,28 +67,14 @@ import androidx.compose.ui.unit.dp
 import com.openscreens.app.R
 import com.openscreens.app.data.Connection
 import com.openscreens.app.ui.theme.ThemedSystemBarIcons
+import com.openscreens.app.ui.theme.autoAccent
+import com.openscreens.app.ui.theme.gradient
 
 private enum class LibrarySort(@StringRes val labelRes: Int) {
     Az(R.string.library_sort_az),
     Za(R.string.library_sort_za),
     Recent(R.string.library_sort_recent),
 }
-
-private data class ThumbnailGradient(val start: Color, val end: Color)
-
-/**
- * Fixed, saturated gradients so neighbouring cards stay distinguishable. They are
- * independent of the Material palette, whose containers collapse into near-identical
- * pale tints when dynamic color is on.
- */
-private val ThumbnailGradients = listOf(
-    ThumbnailGradient(Color(0xFF0F766E), Color(0xFF0D9488)), // teal
-    ThumbnailGradient(Color(0xFF9F1239), Color(0xFFE11D48)), // rose
-    ThumbnailGradient(Color(0xFF3730A3), Color(0xFF4F46E5)), // indigo
-    ThumbnailGradient(Color(0xFFB45309), Color(0xFFD97706)), // amber
-    ThumbnailGradient(Color(0xFF1E293B), Color(0xFF475569)), // slate
-    ThumbnailGradient(Color(0xFF5B21B6), Color(0xFF7C3AED)), // violet
-)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -315,9 +301,7 @@ private fun ConnectionCard(
     onClick: () -> Unit,
     onEdit: () -> Unit,
 ) {
-    val gradient = ThumbnailGradients[
-        Math.floorMod(connection.name.hashCode(), ThumbnailGradients.size)
-    ]
+    val gradient = (connection.accent ?: autoAccent(connection.name)).gradient
     val thumbnailDescription = stringResource(R.string.library_connection_thumbnail)
     val editDescription = stringResource(R.string.library_edit_connection)
 

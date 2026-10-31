@@ -417,7 +417,7 @@ impl Session {
             downloads.clone(),
         ));
 
-        Ok(Self {
+        let session = Self {
             commands: command_tx,
             events: AsyncMutex::new(event_rx),
             framebuffer,
@@ -432,7 +432,14 @@ impl Session {
             name,
             reader,
             writer,
-        })
+        };
+        if apple_session {
+            // Screens announces its Apple capabilities right after the
+            // handshake; the server then enables its vendor extensions
+            // (display layouts, input encryption, drag and drop).
+            let _ = session.ensure_apple_client_version().await;
+        }
+        Ok(session)
     }
 
     pub fn has_input_encryption(&self) -> bool {

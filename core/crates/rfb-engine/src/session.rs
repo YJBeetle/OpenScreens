@@ -564,6 +564,31 @@ impl Session {
         self.send(pointer_event(mask, x, y).to_vec()).await
     }
 
+    /// Sends wheel clicks at a framebuffer position. Positive Y scrolls down,
+    /// positive X scrolls right. Each click is a press/release of RFB buttons
+    /// 4–7, matching what Screen Sharing and common VNC servers accept.
+    pub async fn send_scroll(
+        &self,
+        x: u16,
+        y: u16,
+        steps_x: i32,
+        steps_y: i32,
+    ) -> Result<(), SessionError> {
+        let steps_x = steps_x.clamp(-32, 32);
+        let steps_y = steps_y.clamp(-32, 32);
+        for _ in 0..steps_y.unsigned_abs() {
+            let button = if steps_y > 0 { 1 << 4 } else { 1 << 3 };
+            self.send_pointer(button, x, y).await?;
+            self.send_pointer(0, x, y).await?;
+        }
+        for _ in 0..steps_x.unsigned_abs() {
+            let button = if steps_x > 0 { 1 << 6 } else { 1 << 5 };
+            self.send_pointer(button, x, y).await?;
+            self.send_pointer(0, x, y).await?;
+        }
+        Ok(())
+    }
+
     pub async fn send_key(&self, down: bool, keysym: u32) -> Result<(), SessionError> {
         if self.apple_session
             && let Some(key) = self.input_key

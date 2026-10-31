@@ -499,6 +499,19 @@ impl RemoteSession {
             .map_err(to_failure)
     }
 
+    pub async fn send_scroll(
+        &self,
+        x: u16,
+        y: u16,
+        steps_x: i32,
+        steps_y: i32,
+    ) -> Result<(), SessionFailure> {
+        self.session
+            .send_scroll(x, y, steps_x, steps_y)
+            .await
+            .map_err(to_failure)
+    }
+
     pub async fn send_key(&self, down: bool, keysym: u32) -> Result<(), SessionFailure> {
         self.session
             .send_key(down, keysym)

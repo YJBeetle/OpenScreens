@@ -58,7 +58,7 @@ jobs:
     runs-on: macos-15
     environment: Build
     env:
-      HAS_MAC_SIGNING: ${{ secrets.SIGNING_CERTIFICATE_P12_BASE64 != '' }}
+      HAS_MAC_SIGNING: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 != '' }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -82,8 +82,8 @@ jobs:
       - name: Sign, notarize and package
         working-directory: apps/macos
         env:
-          SIGNING_CERTIFICATE_P12_BASE64: ${{ secrets.SIGNING_CERTIFICATE_P12_BASE64 }}
-          SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.SIGNING_CERTIFICATE_PASSWORD }}
+          APPLE_CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           SIGNING_IDENTITY: ${{ vars.SIGNING_IDENTITY }}
           SIGNING_TEAM_ID: ${{ vars.SIGNING_TEAM_ID }}
           NOTARY_APPLE_ID: ${{ secrets.NOTARY_APPLE_ID }}
@@ -96,9 +96,9 @@ jobs:
             security create-keychain -p actions "$KEYCHAIN"
             security set-keychain-settings -lut 21600 "$KEYCHAIN"
             security unlock-keychain -p actions "$KEYCHAIN"
-            printf '%s' "$SIGNING_CERTIFICATE_P12_BASE64" | base64 --decode > "$RUNNER_TEMP/signing.p12"
+            printf '%s' "$APPLE_CERTIFICATE_P12_BASE64" | base64 --decode > "$RUNNER_TEMP/signing.p12"
             security import "$RUNNER_TEMP/signing.p12" -k "$KEYCHAIN" \
-              -P "$SIGNING_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+              -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
             security set-key-partition-list -S apple-tool:,apple:,codesign: \
               -s -k actions "$KEYCHAIN" >/dev/null
             security list-keychains -d user -s "$KEYCHAIN" login.keychain-db

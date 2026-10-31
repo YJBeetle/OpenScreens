@@ -99,4 +99,4 @@ Android 与 macOS 通过 GitHub Releases 检查更新，设置里可选三档通
 
 正式版本需附带文件名含 `android` 的 `.apk` 与含 `macos` 的 `.dmg`/`.zip`。Android 更新卡片的主操作打开 GitHub 发布页，同时保留应用内下载并交给系统安装；iOS 走 App Store，不使用该更新器。
 
-签名使用仓库机密 `ANDROID_KEYSTORE_BASE64`、`ANDROID_KEYSTORE_PASSWORD`、`ANDROID_KEY_ALIAS`、`ANDROID_KEY_PASSWORD`；`Build` 环境保存 macOS 公证机密（`NOTARY_APPLE_ID`、`NOTARY_APP_PASSWORD`）、变量 `SIGNING_IDENTITY` / `SIGNING_TEAM_ID`，以及导出后的 `SIGNING_CERTIFICATE_P12_BASE64` / `SIGNING_CERTIFICATE_PASSWORD`。缺少证书机密时 macOS 快照以未签名形式打包。
+签名使用仓库机密 `ANDROID_KEYSTORE_BASE64`、`ANDROID_KEYSTORE_PASSWORD`、`ANDROID_KEY_ALIAS`、`ANDROID_KEY_PASSWORD`；`Build` 环境保存 macOS 公证机密（`NOTARY_APPLE_ID`、`NOTARY_APP_PASSWORD`）、变量 `SIGNING_IDENTITY` / `SIGNING_TEAM_ID`，以及 `APPLE_CERTIFICATE_P12_BASE64` / `APPLE_CERTIFICATE_PASSWORD`。缺少证书机密时 macOS 快照以未签名形式打包。

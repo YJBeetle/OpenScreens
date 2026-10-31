@@ -401,6 +401,9 @@ public struct SessionScreen: View {
                     Spacer(minLength: 0)
                     SessionToolbar(
                         model: model,
+                        items: SessionToolbarItem.allCases.filter {
+                            settings.settings.toolbarItems.contains($0)
+                        },
                         onDownload: {
                             downloadPath = ""
                             showingDownloadDialog = true

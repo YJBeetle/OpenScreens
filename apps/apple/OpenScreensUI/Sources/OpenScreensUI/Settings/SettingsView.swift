@@ -9,6 +9,29 @@ public struct SettingsView: View {
     private let buildVersion: String?
     @State private var confirmingRestore = false
 
+    private var visibleToolbarItems: [SessionToolbarItem] {
+        #if os(macOS)
+        SessionToolbarItem.allCases.filter { $0 != .keyboard }
+        #else
+        SessionToolbarItem.allCases
+        #endif
+    }
+
+    private func toolbarBinding(_ item: SessionToolbarItem) -> Binding<Bool> {
+        Binding(
+            get: { settings.settings.toolbarItems.contains(item) },
+            set: { isOn in
+                var items = settings.settings.toolbarItems
+                if isOn {
+                    if !items.contains(item) { items.append(item) }
+                } else {
+                    items.removeAll { $0 == item }
+                }
+                settings.settings.toolbarItems = items
+            }
+        )
+    }
+
     public init(appVersion: String = "1.0", buildVersion: String? = nil) {
         self.appVersion = appVersion
         self.buildVersion = buildVersion
@@ -48,6 +71,18 @@ public struct SettingsView: View {
                 Text("Session Defaults")
             } footer: {
                 Text("Defaults apply to new connections. Existing connections keep their own settings.")
+            }
+
+            Section {
+                ForEach(visibleToolbarItems) { item in
+                    Toggle(isOn: toolbarBinding(item)) {
+                        Label(item.title, systemImage: item.systemImage)
+                    }
+                }
+            } header: {
+                Text("Toolbar")
+            } footer: {
+                Text("Choose the buttons shown in the session toolbar.")
             }
 
 

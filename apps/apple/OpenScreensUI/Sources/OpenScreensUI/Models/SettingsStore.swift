@@ -92,6 +92,7 @@ public struct AppSettings: Codable, Hashable, Sendable {
     public var autoReconnect: Bool
     public var confirmDisconnect: Bool
     public var updateChannel: UpdateChannel
+    public var toolbarItems: [SessionToolbarItem]
 
     public init(
         appearance: AppAppearance = .system,
@@ -100,7 +101,8 @@ public struct AppSettings: Codable, Hashable, Sendable {
         sharedClipboard: Bool = true,
         autoReconnect: Bool = true,
         confirmDisconnect: Bool = true,
-        updateChannel: UpdateChannel = .release
+        updateChannel: UpdateChannel = .release,
+        toolbarItems: [SessionToolbarItem] = SessionToolbarItem.allCases
     ) {
         self.appearance = appearance
         self.tileDensity = tileDensity
@@ -109,11 +111,12 @@ public struct AppSettings: Codable, Hashable, Sendable {
         self.autoReconnect = autoReconnect
         self.confirmDisconnect = confirmDisconnect
         self.updateChannel = updateChannel
+        self.toolbarItems = toolbarItems
     }
 
     private enum CodingKeys: String, CodingKey {
         case appearance, tileDensity, defaultCursorMode, sharedClipboard
-        case autoReconnect, confirmDisconnect, updateChannel
+        case autoReconnect, confirmDisconnect, updateChannel, toolbarItems
     }
 
     public init(from decoder: Decoder) throws {
@@ -125,6 +128,46 @@ public struct AppSettings: Codable, Hashable, Sendable {
         autoReconnect = try container.decode(Bool.self, forKey: .autoReconnect)
         confirmDisconnect = try container.decode(Bool.self, forKey: .confirmDisconnect)
         updateChannel = try container.decodeIfPresent(UpdateChannel.self, forKey: .updateChannel) ?? .release
+        toolbarItems = try container.decodeIfPresent([SessionToolbarItem].self, forKey: .toolbarItems)
+            ?? SessionToolbarItem.allCases
+    }
+}
+
+/// Buttons that can be shown in the session toolbar. The hide and disconnect
+/// controls are always present and intentionally not configurable.
+public enum SessionToolbarItem: String, Codable, CaseIterable, Identifiable, Sendable {
+    case pointer
+    case displays
+    case keyboard
+    case clipboard
+    case download
+    case display
+    case observe
+
+    public var id: String { rawValue }
+
+    public var title: String {
+        switch self {
+        case .pointer: NSLocalizedString("Pointer", comment: "Toolbar item")
+        case .displays: NSLocalizedString("Select Display", comment: "Toolbar item")
+        case .keyboard: NSLocalizedString("Keyboard", comment: "Toolbar item")
+        case .clipboard: NSLocalizedString("Clipboard", comment: "Toolbar item")
+        case .download: NSLocalizedString("Download", comment: "Toolbar item")
+        case .display: NSLocalizedString("Display options", comment: "Toolbar item")
+        case .observe: NSLocalizedString("Observe Mode", comment: "Toolbar item")
+        }
+    }
+
+    public var systemImage: String {
+        switch self {
+        case .pointer: "cursorarrow"
+        case .displays: "rectangle.on.rectangle"
+        case .keyboard: "keyboard"
+        case .clipboard: "doc.on.clipboard"
+        case .download: "arrow.down.doc"
+        case .display: "display"
+        case .observe: "eye"
+        }
     }
 }
 

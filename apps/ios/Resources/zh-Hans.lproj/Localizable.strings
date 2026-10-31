@@ -340,3 +340,10 @@
 "Opening Session…" = "正在打开会话…";
 "Connection Not Found" = "找不到该连接";
 "This connection was removed from the library." = "此连接已从连接库中移除。";
+
+/* MARK: - Session toolbar */
+"Toolbar" = "工具栏";
+"Choose the buttons shown in the session toolbar." = "选择会话工具栏中显示的按钮。";
+"Keyboard" = "键盘";
+"Select Display" = "选择显示器";
+"Observe Mode" = "查看模式";

@@ -4,44 +4,14 @@ import SwiftUI
 /// Floating/docked session controls.
 struct SessionToolbar: View {
     let model: SessionViewModel
+    let items: [SessionToolbarItem]
     let onDownload: () -> Void
     let onDisconnect: () -> Void
 
     var body: some View {
         FloatingBar {
-            cursorMenu
-
-            if model.displays.count > 1 {
-                displayPickerMenu
-            }
-
-            #if os(iOS)
-            FloatingIconButton(
-                systemImage: "keyboard",
-                title: model.isKeyboardActive ? "Hide Keyboard" : "Show Keyboard",
-                isSelected: model.isKeyboardActive
-            ) {
-                model.toggleKeyboard()
-            }
-            #endif
-
-            clipboardMenu
-
-            FloatingIconButton(
-                systemImage: "arrow.down.doc",
-                title: "Download Remote File"
-            ) {
-                onDownload()
-            }
-
-            displayMenu
-
-            FloatingIconButton(
-                systemImage: model.isObserving ? "eye.fill" : "eye",
-                title: model.isObserving ? "Observe Mode On" : "Observe Mode Off",
-                isSelected: model.isObserving
-            ) {
-                model.toggleObserveMode()
+            ForEach(items) { item in
+                toolbarItem(item)
             }
 
             FloatingIconButton(
@@ -56,6 +26,47 @@ struct SessionToolbar: View {
                 title: "Disconnect"
             ) {
                 onDisconnect()
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func toolbarItem(_ item: SessionToolbarItem) -> some View {
+        switch item {
+        case .pointer:
+            cursorMenu
+        case .displays:
+            if model.displays.count > 1 {
+                displayPickerMenu
+            }
+        case .keyboard:
+            #if os(iOS)
+            FloatingIconButton(
+                systemImage: "keyboard",
+                title: model.isKeyboardActive ? "Hide Keyboard" : "Show Keyboard",
+                isSelected: model.isKeyboardActive
+            ) {
+                model.toggleKeyboard()
+            }
+            #endif
+        case .clipboard:
+            clipboardMenu
+        case .download:
+            FloatingIconButton(
+                systemImage: "arrow.down.doc",
+                title: "Download Remote File"
+            ) {
+                onDownload()
+            }
+        case .display:
+            displayMenu
+        case .observe:
+            FloatingIconButton(
+                systemImage: model.isObserving ? "eye.fill" : "eye",
+                title: model.isObserving ? "Observe Mode On" : "Observe Mode Off",
+                isSelected: model.isObserving
+            ) {
+                model.toggleObserveMode()
             }
         }
     }

@@ -1,6 +1,6 @@
 package com.openscreens.app.ui.library
 
-import android.text.format.DateUtils
+import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -15,37 +15,48 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.ArrowDropDown
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Monitor
-import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -57,6 +68,28 @@ import com.openscreens.app.R
 import com.openscreens.app.data.Connection
 import com.openscreens.app.ui.theme.ThemedSystemBarIcons
 
+private enum class LibrarySort(@StringRes val labelRes: Int) {
+    Az(R.string.library_sort_az),
+    Za(R.string.library_sort_za),
+    Recent(R.string.library_sort_recent),
+}
+
+private data class ThumbnailGradient(val start: Color, val end: Color)
+
+/**
+ * Fixed, saturated gradients so neighbouring cards stay distinguishable. They are
+ * independent of the Material palette, whose containers collapse into near-identical
+ * pale tints when dynamic color is on.
+ */
+private val ThumbnailGradients = listOf(
+    ThumbnailGradient(Color(0xFF0F766E), Color(0xFF0D9488)), // teal
+    ThumbnailGradient(Color(0xFF9F1239), Color(0xFFE11D48)), // rose
+    ThumbnailGradient(Color(0xFF3730A3), Color(0xFF4F46E5)), // indigo
+    ThumbnailGradient(Color(0xFFB45309), Color(0xFFD97706)), // amber
+    ThumbnailGradient(Color(0xFF1E293B), Color(0xFF475569)), // slate
+    ThumbnailGradient(Color(0xFF5B21B6), Color(0xFF7C3AED)), // violet
+)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LibraryScreen(
@@ -67,52 +100,115 @@ fun LibraryScreen(
     onOpenSettings: () -> Unit,
 ) {
     ThemedSystemBarIcons()
-    var menuExpanded by remember { mutableStateOf(false) }
+    var searchActive by rememberSaveable { mutableStateOf(false) }
+    var query by rememberSaveable { mutableStateOf("") }
+    var sort by rememberSaveable { mutableStateOf(LibrarySort.Az) }
+    var sortMenuExpanded by remember { mutableStateOf(false) }
+    val focusRequester = remember { FocusRequester() }
+    val focusManager = LocalFocusManager.current
+
+    LaunchedEffect(searchActive) {
+        if (searchActive) {
+            focusRequester.requestFocus()
+        }
+    }
+
+    val visible = remember(connections, query, sort) {
+        val filtered = if (query.isBlank()) {
+            connections
+        } else {
+            connections.filter { connection ->
+                connection.name.contains(query, ignoreCase = true) ||
+                    connection.address.contains(query, ignoreCase = true)
+            }
+        }
+        when (sort) {
+            LibrarySort.Az -> filtered.sortedWith(
+                compareBy(String.CASE_INSENSITIVE_ORDER) { connection: Connection -> connection.name },
+            )
+            LibrarySort.Za -> filtered.sortedWith(
+                compareByDescending(String.CASE_INSENSITIVE_ORDER) { connection: Connection ->
+                    connection.name
+                },
+            )
+            LibrarySort.Recent -> filtered.sortedByDescending { it.lastConnectedAt ?: 0L }
+        }
+    }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = {
-                    Text(
-                        text = stringResource(R.string.app_name),
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                },
-                actions = {
-                    Box {
-                        IconButton(onClick = { menuExpanded = true }) {
-                            Icon(
-                                imageVector = Icons.Outlined.MoreVert,
-                                contentDescription = stringResource(R.string.library_more),
-                            )
-                        }
-                        DropdownMenu(
-                            expanded = menuExpanded,
-                            onDismissRequest = { menuExpanded = false },
+                navigationIcon = {
+                    if (searchActive) {
+                        IconButton(
+                            onClick = {
+                                searchActive = false
+                                query = ""
+                                focusManager.clearFocus()
+                            },
                         ) {
-                            DropdownMenuItem(
-                                text = { Text(stringResource(R.string.library_settings)) },
-                                onClick = {
-                                    menuExpanded = false
-                                    onOpenSettings()
-                                },
-                                leadingIcon = {
-                                    Icon(
-                                        imageVector = Icons.Outlined.Settings,
-                                        contentDescription = null,
-                                    )
-                                },
+                            Icon(
+                                imageVector = Icons.Outlined.Close,
+                                contentDescription = stringResource(R.string.library_close_search),
                             )
                         }
                     }
                 },
-            )
-        },
-        floatingActionButton = {
-            ExtendedFloatingActionButton(
-                onClick = onAddConnection,
-                icon = { Icon(Icons.Outlined.Add, contentDescription = null) },
-                text = { Text(stringResource(R.string.library_add_connection)) },
+                title = {
+                    if (searchActive) {
+                        BasicTextField(
+                            value = query,
+                            onValueChange = { query = it },
+                            singleLine = true,
+                            textStyle = MaterialTheme.typography.bodyLarge.copy(
+                                color = MaterialTheme.colorScheme.onSurface,
+                            ),
+                            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .focusRequester(focusRequester),
+                            decorationBox = { innerTextField ->
+                                Box(Modifier.fillMaxWidth()) {
+                                    if (query.isEmpty()) {
+                                        Text(
+                                            text = stringResource(R.string.library_search_placeholder),
+                                            style = MaterialTheme.typography.bodyLarge,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                    innerTextField()
+                                }
+                            },
+                        )
+                    } else {
+                        Text(
+                            text = stringResource(R.string.library_title),
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    }
+                },
+                actions = {
+                    if (!searchActive) {
+                        IconButton(onClick = { searchActive = true }) {
+                            Icon(
+                                imageVector = Icons.Outlined.Search,
+                                contentDescription = stringResource(R.string.library_search),
+                            )
+                        }
+                        IconButton(onClick = onAddConnection) {
+                            Icon(
+                                imageVector = Icons.Outlined.Add,
+                                contentDescription = stringResource(R.string.library_add_connection),
+                            )
+                        }
+                        IconButton(onClick = onOpenSettings) {
+                            Icon(
+                                imageVector = Icons.Outlined.Settings,
+                                contentDescription = stringResource(R.string.library_settings),
+                            )
+                        }
+                    }
+                },
             )
         },
     ) { innerPadding ->
@@ -124,24 +220,89 @@ fun LibraryScreen(
                     .padding(innerPadding),
             )
         } else {
-            LazyColumn(
+            Column(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(innerPadding),
-                contentPadding = PaddingValues(
-                    start = 16.dp,
-                    top = 8.dp,
-                    end = 16.dp,
-                    bottom = 96.dp,
-                ),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                items(connections, key = { it.id }) { connection ->
-                    ConnectionCard(
-                        connection = connection,
-                        onClick = { onOpenConnection(connection) },
-                        onEdit = { onEditConnection(connection) },
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 8.dp, end = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box {
+                        TextButton(
+                            onClick = { sortMenuExpanded = true },
+                            contentPadding = PaddingValues(horizontal = 8.dp),
+                        ) {
+                            Text(
+                                text = stringResource(sort.labelRes),
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                            Icon(
+                                imageVector = Icons.Outlined.ArrowDropDown,
+                                contentDescription = null,
+                            )
+                        }
+                        DropdownMenu(
+                            expanded = sortMenuExpanded,
+                            onDismissRequest = { sortMenuExpanded = false },
+                        ) {
+                            LibrarySort.entries.forEach { option ->
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(option.labelRes)) },
+                                    onClick = {
+                                        sort = option
+                                        sortMenuExpanded = false
+                                    },
+                                )
+                            }
+                        }
+                    }
+                    Spacer(Modifier.weight(1f))
+                    Text(
+                        text = stringResource(R.string.library_count, visible.size),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                }
+
+                if (visible.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(32.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = stringResource(R.string.library_no_results),
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                } else {
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(2),
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(top = 4.dp),
+                        contentPadding = PaddingValues(
+                            start = 16.dp,
+                            end = 16.dp,
+                            bottom = 24.dp,
+                        ),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        items(visible, key = { it.id }) { connection ->
+                            ConnectionCard(
+                                connection = connection,
+                                onClick = { onOpenConnection(connection) },
+                                onEdit = { onEditConnection(connection) },
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -154,28 +315,69 @@ private fun ConnectionCard(
     onClick: () -> Unit,
     onEdit: () -> Unit,
 ) {
+    val gradient = ThumbnailGradients[
+        Math.floorMod(connection.name.hashCode(), ThumbnailGradients.size)
+    ]
+    val thumbnailDescription = stringResource(R.string.library_connection_thumbnail)
+    val editDescription = stringResource(R.string.library_edit_connection)
+
     ElevatedCard(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(18.dp),
     ) {
-        Row(
-            modifier = Modifier.padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            ConnectionMonogram(
-                name = connection.name,
-                modifier = Modifier.size(56.dp),
-            )
-            Spacer(Modifier.width(16.dp))
+        Column {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(92.dp)
+                    .background(Brush.linearGradient(listOf(gradient.start, gradient.end)))
+                    .semantics { contentDescription = thumbnailDescription },
+            ) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(10.dp)
+                        .size(30.dp)
+                        .clip(RoundedCornerShape(9.dp))
+                        .background(Color.Black.copy(alpha = 0.18f)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Monitor,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(17.dp),
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(6.dp)
+                        .size(28.dp)
+                        .clip(CircleShape)
+                        .background(Color.Black.copy(alpha = 0.26f))
+                        .clickable(onClick = onEdit)
+                        .semantics { contentDescription = editDescription },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Edit,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(15.dp),
+                    )
+                }
+            }
             Column(
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
                 verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
                 Text(
                     text = connection.name,
-                    style = MaterialTheme.typography.titleMedium,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -187,50 +389,8 @@ private fun ConnectionCard(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                Text(
-                    text = lastConnectedText(connection),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            IconButton(onClick = onEdit) {
-                Icon(
-                    imageVector = Icons.Outlined.Edit,
-                    contentDescription = stringResource(R.string.library_edit_connection),
-                )
             }
         }
-    }
-}
-
-@Composable
-private fun ConnectionMonogram(name: String, modifier: Modifier = Modifier) {
-    val scheme = MaterialTheme.colorScheme
-    val palette = listOf(
-        scheme.primaryContainer to scheme.onPrimaryContainer,
-        scheme.secondaryContainer to scheme.onSecondaryContainer,
-        scheme.tertiaryContainer to scheme.onTertiaryContainer,
-    )
-    val (container, content) = palette[Math.floorMod(name.hashCode(), palette.size)]
-    val shape = RoundedCornerShape(18.dp)
-    val description = stringResource(R.string.library_connection_thumbnail)
-
-    Box(
-        modifier = modifier
-            .clip(shape)
-            .background(
-                Brush.linearGradient(listOf(container, container.copy(alpha = 0.75f))),
-                shape,
-            )
-            .semantics { contentDescription = description },
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            text = initials(name),
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.SemiBold,
-            color = content,
-        )
     }
 }
 
@@ -274,24 +434,3 @@ private fun EmptyLibrary(onAddConnection: () -> Unit, modifier: Modifier = Modif
         }
     }
 }
-
-@Composable
-private fun lastConnectedText(connection: Connection): String {
-    val lastConnectedAt = connection.lastConnectedAt
-        ?: return stringResource(R.string.library_never_connected)
-
-    val relative = DateUtils.getRelativeTimeSpanString(
-        lastConnectedAt,
-        System.currentTimeMillis(),
-        DateUtils.MINUTE_IN_MILLIS,
-    ).toString()
-    return stringResource(R.string.library_last_connected, relative)
-}
-
-private fun initials(name: String): String =
-    name.trim()
-        .split(Regex("\\s+"))
-        .filter { it.isNotEmpty() }
-        .take(2)
-        .joinToString(separator = "") { it.first().uppercase() }
-        .ifEmpty { "?" }

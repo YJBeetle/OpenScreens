@@ -1,5 +1,6 @@
 package com.openscreens.app.session
 
+import android.content.Context
 import android.graphics.Bitmap
 import com.openscreens.app.data.Connection
 import com.openscreens.app.data.QualityPreset
@@ -178,8 +179,9 @@ sealed interface SessionEvent {
  */
 object SessionProvider {
     fun create(
+        context: Context,
         connection: Connection,
         quality: QualityPreset,
         sshKey: SshKey? = null,
-    ): RemoteSession = UniFfiRemoteSession(connection, quality, sshKey)
+    ): RemoteSession = UniFfiRemoteSession(context.applicationContext, connection, quality, sshKey)
 }

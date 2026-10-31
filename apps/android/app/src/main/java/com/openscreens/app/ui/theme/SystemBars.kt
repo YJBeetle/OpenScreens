@@ -10,13 +10,17 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
-/** Keeps status/navigation bar icons legible for the current app theme. */
+/**
+ * Keeps status/navigation bar icons legible for the current app theme: a light
+ * background needs dark icons, a dark one needs light icons.
+ */
 @Composable
 fun ThemedSystemBarIcons() {
     val lightBackground = MaterialTheme.colorScheme.background.luminance() > 0.5f
-    SystemBarIconAppearance(darkIcons = !lightBackground)
+    SystemBarIconAppearance(darkIcons = lightBackground)
 }
 
+/** [darkIcons] is true on light surfaces (e.g. the library) and false on dark ones. */
 @Composable
 fun SystemBarIconAppearance(darkIcons: Boolean) {
     val view = LocalView.current

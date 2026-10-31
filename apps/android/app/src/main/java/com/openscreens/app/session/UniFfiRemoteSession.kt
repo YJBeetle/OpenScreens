@@ -1,9 +1,11 @@
 package com.openscreens.app.session
 
+import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.util.Log
+import com.openscreens.app.R
 import com.openscreens.app.data.Connection
 import com.openscreens.app.data.QualityPreset
 import com.openscreens.app.data.SshAuthMode
@@ -47,6 +49,7 @@ import uniffi.rfb_ffi.parseTransferProgress
  * UI can keep drawing one while the poller fills the other.
  */
 class UniFfiRemoteSession(
+    private val context: Context,
     private val connection: Connection,
     private var quality: QualityPreset,
     private val sshKey: SshKey?,
@@ -98,6 +101,14 @@ class UniFfiRemoteSession(
     // published together with the first frame that fills it.
     private var viewportEmitted = true
 
+    // Coverage of the pending viewport, in COVERAGE_CELL-sized cells. Apple's
+    // Adaptive DCT splits one update into many rectangles, so "first frame that
+    // fills the viewport" has to be judged by the union of painted rectangles.
+    private var coverage = ByteArray(0)
+    private var coverageCols = 0
+    private var coverageRows = 0
+    private var coverageRemaining = 0
+
     override suspend fun connect() = open()
 
     override suspend fun reconnect() {
@@ -116,7 +127,9 @@ class UniFfiRemoteSession(
             ssh.authMode == SshAuthMode.PrivateKey -> {
                 val key = sshKey
                 if (key == null) {
-                    _events.emit(SessionEvent.Failed("SSH key not found for this connection"))
+                    _events.emit(
+                        SessionEvent.Failed(context.getString(R.string.session_error_ssh_key_missing)),
+                    )
                     return
                 }
                 SshAuthConfig.PrivateKey(
@@ -161,7 +174,9 @@ class UniFfiRemoteSession(
         val size = connected.size()
         if (size == null) {
             connected.close()
-            _events.emit(SessionEvent.Failed("Session reported no framebuffer size"))
+            _events.emit(
+                SessionEvent.Failed(context.getString(R.string.session_error_no_framebuffer)),
+            )
             return
         }
 
@@ -171,7 +186,9 @@ class UniFfiRemoteSession(
         if (!installViewport(width, height, 0, 0, width, height, scale)) {
             connected.close()
             _events.emit(
-                SessionEvent.Failed("Not enough memory to display ${width}×$height."),
+                SessionEvent.Failed(
+                    context.getString(R.string.session_error_out_of_memory, width, height),
+                ),
             )
             return
         }
@@ -404,7 +421,9 @@ class UniFfiRemoteSession(
                     )
                 ) {
                     _events.emit(
-                        SessionEvent.Failed("Not enough memory for the visible screen area."),
+                        SessionEvent.Failed(
+                            context.getString(R.string.session_error_out_of_memory_viewport),
+                        ),
                     )
                     return
                 }
@@ -566,7 +585,9 @@ class UniFfiRemoteSession(
         val scale = initialDisplayScale(width, height)
         if (!installViewport(width, height, 0, 0, width, height, scale)) {
             _events.emit(
-                SessionEvent.Failed("Not enough memory to display ${width}×$height."),
+                SessionEvent.Failed(
+                    context.getString(R.string.session_error_out_of_memory, width, height),
+                ),
             )
             return
         }
@@ -600,7 +621,35 @@ class UniFfiRemoteSession(
         this.viewportWidth = width
         this.viewportHeight = height
         this.displayScale = scale
+        resetCoverage()
         return true
+    }
+
+    private fun resetCoverage() {
+        coverageCols = ceilDiv(viewportWidth, COVERAGE_CELL)
+        coverageRows = ceilDiv(viewportHeight, COVERAGE_CELL)
+        coverage = ByteArray(coverageCols * coverageRows)
+        coverageRemaining = coverageCols * coverageRows
+    }
+
+    private fun markCovered(left: Int, top: Int, right: Int, bottom: Int) {
+        if (coverageRemaining <= 0) return
+        val clippedRight = minOf(right, viewportX + viewportWidth)
+        val clippedBottom = minOf(bottom, viewportY + viewportHeight)
+        if (clippedRight <= left || clippedBottom <= top) return
+        val firstCol = ((left - viewportX) / COVERAGE_CELL).coerceIn(0, coverageCols - 1)
+        val lastCol = ((clippedRight - 1 - viewportX) / COVERAGE_CELL).coerceIn(0, coverageCols - 1)
+        val firstRow = ((top - viewportY) / COVERAGE_CELL).coerceIn(0, coverageRows - 1)
+        val lastRow = ((clippedBottom - 1 - viewportY) / COVERAGE_CELL).coerceIn(0, coverageRows - 1)
+        for (row in firstRow..lastRow) {
+            for (col in firstCol..lastCol) {
+                val index = row * coverageCols + col
+                if (coverage[index].toInt() == 0) {
+                    coverage[index] = 1
+                    coverageRemaining--
+                }
+            }
+        }
     }
 
     private suspend fun renderFrame(connected: NativeSession, event: NativeEvent.Frame) {
@@ -622,9 +671,6 @@ class UniFfiRemoteSession(
         // A freshly installed viewport starts black; keep showing the previous
         // complete frame until the server has painted the whole new region,
         // otherwise the UI briefly maps a partially filled crop.
-        if (!viewportEmitted && !coversViewport) {
-            return
-        }
         if (!coversViewport && viewportEmitted) {
             front?.let { copyInto(target, it) }
         }
@@ -647,6 +693,7 @@ class UniFfiRemoteSession(
             val rowsPerBand = maxOf(1, MAX_SCRATCH_PIXELS / destWidth)
             val bandSourceHeight = rowsPerBand * scale
             var bandTop = top
+            var painted = false
             while (bandTop < bottom) {
                 val bandBottom = minOf(bottom, bandTop + bandSourceHeight)
                 val destTop = bandTop / scale - viewportY / scale
@@ -681,20 +728,24 @@ class UniFfiRemoteSession(
                             destWidth,
                             destHeight,
                         )
+                        painted = true
                         wrote = true
                     }
                 }
                 bandTop = bandBottom
             }
+            if (painted && !viewportEmitted) {
+                markCovered(left, top, right, bottom)
+            }
         }
         if (!wrote) return
 
-        val firstPaint = !viewportEmitted
-        val previous = front
-        front = target
-        back = previous ?: target
-        if (firstPaint) {
+        if (!viewportEmitted) {
+            if (coverageRemaining > 0) return
             viewportEmitted = true
+            val previous = front
+            front = target
+            back = previous ?: target
             _events.emit(
                 SessionEvent.Viewport(
                     x = viewportX,
@@ -704,7 +755,13 @@ class UniFfiRemoteSession(
                     scale = scale,
                 ),
             )
+            _events.emit(SessionEvent.Frame(event.sequence.toLong(), target))
+            return
         }
+
+        val previous = front
+        front = target
+        back = previous ?: target
         _events.emit(SessionEvent.Frame(event.sequence.toLong(), target))
     }
 
@@ -762,5 +819,7 @@ class UniFfiRemoteSession(
         const val MAX_VIEWPORT_PIXELS = 6_000_000L
         const val MAX_DISPLAY_SCALE = 16
         const val MAX_SCRATCH_PIXELS = 1_000_000
+        // Cell size (source pixels) for the first-paint coverage grid.
+        const val COVERAGE_CELL = 64
     }
 }

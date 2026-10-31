@@ -59,6 +59,8 @@ import com.openscreens.app.ui.theme.ThemedSystemBarIcons
 import com.openscreens.app.update.ApkUpdater
 import com.openscreens.app.update.UpdateCheck
 import com.openscreens.app.update.UpdateChecker
+import com.openscreens.app.update.UpdateDownloadHttpException
+import com.openscreens.app.update.UpdateHttpException
 import com.openscreens.app.update.UpdateInfo
 import com.openscreens.app.update.UpdateStateStore
 import kotlinx.coroutines.launch
@@ -98,7 +100,7 @@ fun SettingsScreen(
                         UpdateCheck.NoReleases -> UpdateUiState.NoReleases
                     }
                 },
-                onFailure = { UpdateUiState.Failed(it.message ?: it.javaClass.simpleName) },
+                onFailure = { UpdateUiState.Failed(it) },
             )
         }
     }
@@ -116,7 +118,7 @@ fun SettingsScreen(
                 }
                 updateState = UpdateUiState.Available(info, installerOpened = true)
             }.onFailure {
-                updateState = UpdateUiState.Failed(it.message ?: it.javaClass.simpleName)
+                updateState = UpdateUiState.Failed(it, duringDownload = true)
             }
         }
     }
@@ -388,7 +390,10 @@ private sealed interface UpdateUiState {
         val downloading: Boolean = false,
         val installerOpened: Boolean = false,
     ) : UpdateUiState
-    data class Failed(val message: String) : UpdateUiState
+    data class Failed(
+        val error: Throwable,
+        val duringDownload: Boolean = false,
+    ) : UpdateUiState
 }
 
 @Composable
@@ -398,8 +403,26 @@ private fun updateStatusText(state: UpdateUiState): String = when (state) {
     UpdateUiState.UpToDate -> stringResource(R.string.settings_up_to_date)
     UpdateUiState.NoReleases -> stringResource(R.string.settings_no_releases)
     is UpdateUiState.Available -> stringResource(R.string.settings_updates_footer)
-    is UpdateUiState.Failed ->
-        stringResource(R.string.settings_update_failed, state.message)
+    is UpdateUiState.Failed -> failureText(state.error, state.duringDownload)
+}
+
+@Composable
+private fun failureText(error: Throwable, duringDownload: Boolean): String {
+    val httpError = error as? UpdateDownloadHttpException
+    if (duringDownload && httpError != null) {
+        return stringResource(R.string.settings_download_http_error, httpError.statusCode)
+    }
+    val detail = when (error) {
+        is UpdateHttpException ->
+            stringResource(R.string.settings_update_http_error, error.statusCode)
+        is UpdateDownloadHttpException ->
+            stringResource(R.string.settings_download_http_error, error.statusCode)
+        else -> error.message?.takeIf { it.isNotBlank() } ?: error.javaClass.simpleName
+    }
+    return stringResource(
+        if (duringDownload) R.string.settings_download_failed else R.string.settings_update_failed,
+        detail,
+    )
 }
 
 @Composable

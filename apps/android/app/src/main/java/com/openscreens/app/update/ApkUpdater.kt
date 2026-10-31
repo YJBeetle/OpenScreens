@@ -9,6 +9,10 @@ import java.net.URL
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
+/** A non-success response while downloading an update APK; localized by the UI. */
+class UpdateDownloadHttpException(val statusCode: Int) :
+    java.io.IOException("Download failed with HTTP $statusCode")
+
 /** Downloads a release APK and hands it to the system package installer. */
 class ApkUpdater(private val context: Context) {
     suspend fun download(url: String): File = withContext(Dispatchers.IO) {
@@ -23,7 +27,7 @@ class ApkUpdater(private val context: Context) {
         try {
             val code = connection.responseCode
             if (code !in 200..299) {
-                throw java.io.IOException("Download failed with HTTP $code")
+                throw UpdateDownloadHttpException(code)
             }
             connection.inputStream.use { input ->
                 target.outputStream().use { output -> input.copyTo(output) }

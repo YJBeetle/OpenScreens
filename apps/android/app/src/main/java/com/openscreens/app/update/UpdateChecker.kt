@@ -24,6 +24,9 @@ sealed interface UpdateCheck {
     data object NoReleases : UpdateCheck
 }
 
+/** A non-success response from the GitHub API; the UI localizes the status code. */
+class UpdateHttpException(val statusCode: Int) : IOException("GitHub returned HTTP $statusCode")
+
 /**
  * Reads the latest public GitHub release. The asset naming convention is
  * `<anything>-android.apk`; any `.apk` asset is accepted as a fallback.
@@ -57,7 +60,7 @@ object UpdateChecker {
             val code = connection.responseCode
             if (code == HttpURLConnection.HTTP_NOT_FOUND) return null
             if (code !in 200..299) {
-                throw IOException("GitHub returned HTTP $code")
+                throw UpdateHttpException(code)
             }
             return connection.inputStream.bufferedReader().use { it.readText() }
         } finally {

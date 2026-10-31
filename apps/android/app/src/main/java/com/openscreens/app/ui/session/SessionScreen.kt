@@ -173,7 +173,7 @@ fun SessionScreen(
     val snackbarHostState = remember { SnackbarHostState() }
 
     val session: RemoteSession = remember(connection.id) {
-        SessionProvider.create(connection, quality, sshKey)
+        SessionProvider.create(context, connection, quality, sshKey)
     }
 
     var status by remember { mutableStateOf(SessionStatus.Connecting) }
@@ -317,25 +317,40 @@ fun SessionScreen(
                     status = SessionStatus.Connecting
                     cursor = null
                     cursorPosition = null
+                    // A new session starts on a fresh transport: the old bitmap is
+                    // cropped to a viewport the new session knows nothing about.
+                    frame = null
                     viewport = null
                 }
                 is SessionEvent.Connected -> {
                     status = SessionStatus.Connected
                     remoteWidth = event.width
                     remoteHeight = event.height
+                    // The core publishes a whole-framebuffer viewport on connect and
+                    // emits the new crop with its first complete frame.
+                    frame = null
                     viewport = null
                     onConnected()
                 }
                 is SessionEvent.Resized -> {
                     remoteWidth = event.width
                     remoteHeight = event.height
-                    viewport = null
+                    // Frame and viewport stay paired: keep the previous crop so the
+                    // stale bitmap is drawn at its real geometry instead of being
+                    // stretched over the whole framebuffer.
+                    if (!viewportFits(viewport, event.width, event.height)) {
+                        frame = null
+                        viewport = null
+                    }
                 }
                 is SessionEvent.DesktopLayout -> {
                     remoteWidth = event.width
                     remoteHeight = event.height
                     desktopScreens = event.screens
-                    viewport = null
+                    if (!viewportFits(viewport, event.width, event.height)) {
+                        frame = null
+                        viewport = null
+                    }
                 }
                 is SessionEvent.Viewport -> viewport = event
                 is SessionEvent.Frame -> {
@@ -384,7 +399,12 @@ fun SessionScreen(
                 is SessionEvent.TransferComplete -> transferLabel = null
                 is SessionEvent.RemoteClipboard -> {
                     context.getSystemService(ClipboardManager::class.java)
-                        ?.setPrimaryClip(ClipData.newPlainText("OpenScreens", event.text))
+                        ?.setPrimaryClip(
+                            ClipData.newPlainText(
+                                context.getString(R.string.app_name),
+                                event.text,
+                            ),
+                        )
                     lastAction = context.getString(
                         R.string.session_action_prefix,
                         context.getString(R.string.session_clipboard_received),
@@ -392,7 +412,10 @@ fun SessionScreen(
                 }
                 is SessionEvent.DownloadProgress -> {
                     transferLabel = buildString {
-                        append(event.name ?: "download")
+                        append(
+                            event.name
+                                ?: context.getString(R.string.session_download_progress_fallback),
+                        )
                         if (event.total > 0) {
                             append(' ')
                             append(event.bytes * 100 / event.total)
@@ -1158,6 +1181,13 @@ fun SessionScreen(
             },
         )
     }
+}
+
+/** True when a stored crop still lies inside a framebuffer of [width] × [height]. */
+private fun viewportFits(viewport: SessionEvent.Viewport?, width: Int, height: Int): Boolean {
+    if (viewport == null) return false
+    if (viewport.width <= 0 || viewport.height <= 0) return false
+    return viewport.x + viewport.width <= width && viewport.y + viewport.height <= height
 }
 
 /** Framebuffer region visible under the current zoom/pan, in server pixels. */

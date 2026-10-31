@@ -53,6 +53,13 @@ xcodebuild -project OpenScreens.xcodeproj -scheme OpenScreens \
 
 The iOS app builds the same way; signing and installation are handled separately.
 
+For a signed and notarized macOS build (requires a Developer ID identity and a
+`notarytool` keychain profile):
+
+```sh
+DEVELOPER_ID_IDENTITY="Developer ID Application: ..." ./scripts/notarize-macos.sh <notarytool-profile>
+```
+
 Android:
 
 ```sh

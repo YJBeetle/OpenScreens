@@ -53,6 +53,12 @@ xcodebuild -project OpenScreens.xcodeproj -scheme OpenScreens \
 
 iOS 使用同样的工程结构；签名与装机单独处理。
 
+macOS 的签名与公证（需要 Developer ID 证书和 `notarytool` 凭据）：
+
+```sh
+DEVELOPER_ID_IDENTITY="Developer ID Application: ..." ./scripts/notarize-macos.sh <notarytool-profile>
+```
+
 Android：
 
 ```sh

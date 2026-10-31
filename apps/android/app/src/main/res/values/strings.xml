@@ -19,6 +19,17 @@
     <string name="library_empty_action">Add your first connection</string>
     <string name="library_edit_connection">Edit connection</string>
     <string name="library_connection_thumbnail">Server thumbnail</string>
+    <string name="library_quick_connect">Quick Connect</string>
+    <string name="library_quick_connect_subtitle">Enter a URL to start connecting.</string>
+    <string name="library_quick_connect_url">URL</string>
+    <string name="library_quick_connect_hint">Example: vnc://user@host:5900</string>
+    <string name="library_quick_connect_invalid">Enter a valid vnc:// address.</string>
+    <string name="library_quick_connect_action">Connect</string>
+    <string name="library_view_options">View options</string>
+    <string name="library_view_grid">Grid</string>
+    <string name="library_view_list">List</string>
+    <string name="library_more">More</string>
+    <string name="library_cancel">Cancel</string>
 
     <!-- Connection editor -->
     <string name="editor_new_title">New connection</string>
@@ -122,6 +133,19 @@
     <string name="session_error_no_framebuffer">The server did not report a framebuffer size.</string>
     <string name="session_error_out_of_memory">Not enough memory to display %1$d×%2$d.</string>
     <string name="session_error_out_of_memory_viewport">Not enough memory for the visible screen area.</string>
+    <string name="session_failure_network">A network error interrupted the connection.</string>
+    <string name="session_failure_connection_refused">The server refused the connection.</string>
+    <string name="session_failure_missing_username">The server requires Apple authentication, but no username is configured.</string>
+    <string name="session_failure_missing_password">The server requires authentication, but no password is configured.</string>
+    <string name="session_failure_authentication">Authentication failed. Check the username and password.</string>
+    <string name="session_failure_unsupported_version">The server\'s RFB version is not supported.</string>
+    <string name="session_failure_unsupported_security">The server requires an authentication method this app does not support.</string>
+    <string name="session_failure_protocol">The server sent data this app could not understand.</string>
+    <string name="session_failure_decode">The remote screen data could not be decoded.</string>
+    <string name="session_failure_tunnel">The tunnel connection failed.</string>
+    <string name="session_failure_ssh_tunnel">The SSH tunnel failed.</string>
+    <string name="session_failure_closed">The connection was closed.</string>
+    <string name="session_failure_invalid_input">The connection settings are invalid.</string>
     <string name="session_clipboard_received">Remote clipboard</string>
     <string name="session_pointer_trackpad">Trackpad</string>
     <string name="session_clipboard_hint">Text to send to the remote clipboard</string>

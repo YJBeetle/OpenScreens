@@ -98,62 +98,64 @@ import uniffi.rfb_ffi.validateOpenvpnProfile
 @Composable
 fun ConnectionEditorScreen(
     connection: Connection?,
+    initialDraft: Connection? = null,
     sshKeys: List<SshKey> = emptyList(),
     onSave: (Connection) -> Unit,
     onCancel: () -> Unit,
 ) {
     ThemedSystemBarIcons()
 
-    val editorKey = connection?.id
-    var name by rememberSaveable(editorKey) { mutableStateOf(connection?.name.orEmpty()) }
-    var accent by rememberSaveable(editorKey) { mutableStateOf(connection?.accent) }
-    var host by rememberSaveable(editorKey) { mutableStateOf(connection?.host.orEmpty()) }
+    val seed = connection ?: initialDraft
+    val editorKey = connection?.id ?: initialDraft?.id
+    var name by rememberSaveable(editorKey) { mutableStateOf(seed?.name.orEmpty()) }
+    var accent by rememberSaveable(editorKey) { mutableStateOf(seed?.accent) }
+    var host by rememberSaveable(editorKey) { mutableStateOf(seed?.host.orEmpty()) }
     var port by rememberSaveable(editorKey) {
-        mutableStateOf((connection?.port ?: Connection.DEFAULT_VNC_PORT).toString())
+        mutableStateOf((seed?.port ?: Connection.DEFAULT_VNC_PORT).toString())
     }
     var vncPassword by rememberSaveable(editorKey) {
-        mutableStateOf(connection?.vncPassword.orEmpty())
+        mutableStateOf(seed?.vncPassword.orEmpty())
     }
     var quality by rememberSaveable(editorKey) {
-        mutableStateOf(connection?.quality ?: QualityPreset.Balanced)
+        mutableStateOf(seed?.quality ?: QualityPreset.Balanced)
     }
     var zoomEnabled by rememberSaveable(editorKey) {
-        mutableStateOf(connection?.zoomEnabled ?: true)
+        mutableStateOf(seed?.zoomEnabled ?: true)
     }
     var username by rememberSaveable(editorKey) {
-        mutableStateOf(connection?.username.orEmpty())
+        mutableStateOf(seed?.username.orEmpty())
     }
-    var sshEnabled by rememberSaveable(editorKey) { mutableStateOf(connection?.ssh != null) }
+    var sshEnabled by rememberSaveable(editorKey) { mutableStateOf(seed?.ssh != null) }
     var sshHost by rememberSaveable(editorKey) {
-        mutableStateOf(connection?.ssh?.host.orEmpty())
+        mutableStateOf(seed?.ssh?.host.orEmpty())
     }
     var sshUsername by rememberSaveable(editorKey) {
-        mutableStateOf(connection?.ssh?.username.orEmpty())
+        mutableStateOf(seed?.ssh?.username.orEmpty())
     }
     var sshPassword by rememberSaveable(editorKey) {
-        mutableStateOf(connection?.ssh?.password.orEmpty())
+        mutableStateOf(seed?.ssh?.password.orEmpty())
     }
     var sshPort by rememberSaveable(editorKey) {
-        mutableStateOf((connection?.ssh?.port ?: SshCredentials.DEFAULT_SSH_PORT).toString())
+        mutableStateOf((seed?.ssh?.port ?: SshCredentials.DEFAULT_SSH_PORT).toString())
     }
     var sshFingerprint by rememberSaveable(editorKey) {
-        mutableStateOf(connection?.ssh?.hostKeyFingerprint.orEmpty())
+        mutableStateOf(seed?.ssh?.hostKeyFingerprint.orEmpty())
     }
     var sshAuthMode by rememberSaveable(editorKey) {
-        mutableStateOf(connection?.ssh?.authMode ?: SshAuthMode.Password)
+        mutableStateOf(seed?.ssh?.authMode ?: SshAuthMode.Password)
     }
     var sshKeyId by rememberSaveable(editorKey) {
-        mutableStateOf(connection?.ssh?.keyId.orEmpty())
+        mutableStateOf(seed?.ssh?.keyId.orEmpty())
     }
     var wireGuardConfig by rememberSaveable(editorKey) {
-        mutableStateOf<String?>(connection?.wireGuardConfig)
+        mutableStateOf<String?>(seed?.wireGuardConfig)
     }
     var wireGuardFileName by rememberSaveable(editorKey) {
         mutableStateOf<String?>(null)
     }
     var wireGuardImportFailed by remember { mutableStateOf(false) }
     var openVpnConfig by rememberSaveable(editorKey) {
-        mutableStateOf<String?>(connection?.openVpnConfig)
+        mutableStateOf<String?>(seed?.openVpnConfig)
     }
     var openVpnFileName by rememberSaveable(editorKey) {
         mutableStateOf<String?>(null)
@@ -289,7 +291,7 @@ fun ConnectionEditorScreen(
             } else {
                 null
             }
-            val draft = (connection ?: Connection(name = "", host = "")).copy(
+            val draft = (connection ?: initialDraft ?: Connection(name = "", host = "")).copy(
                 name = name.trim(),
                 accent = accent,
                 host = host.trim(),
@@ -434,7 +436,7 @@ fun ConnectionEditorScreen(
                     style = MaterialTheme.typography.titleMedium,
                 )
                 val effectiveAccent = accent ?: autoAccent(
-                    name.ifBlank { connection?.name.orEmpty() },
+                    name.ifBlank { seed?.name.orEmpty() },
                 )
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),

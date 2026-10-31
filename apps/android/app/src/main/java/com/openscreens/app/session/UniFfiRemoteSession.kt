@@ -31,6 +31,7 @@ import kotlinx.coroutines.withContext
 import uniffi.rfb_ffi.Rect
 import uniffi.rfb_ffi.SessionConfig
 import uniffi.rfb_ffi.SessionFailure
+import uniffi.rfb_ffi.SessionFailureKind
 import uniffi.rfb_ffi.SshAuthConfig
 import uniffi.rfb_ffi.DisplayScreen as NativeDisplayScreen
 import uniffi.rfb_ffi.SessionEvent as NativeEvent
@@ -209,7 +210,7 @@ class UniFfiRemoteSession(
         if (disposed.get()) return
         closed.set(true)
         detach()
-        _events.emit(SessionEvent.Disconnected)
+        _events.emit(SessionEvent.Disconnected())
         close()
     }
 
@@ -449,6 +450,7 @@ class UniFfiRemoteSession(
     }
 
     private suspend fun poll(connected: NativeSession) {
+        var disconnectMessage: String? = null
         try {
             while (true) {
                 val event = connected.nextEvent() ?: break
@@ -508,6 +510,7 @@ class UniFfiRemoteSession(
                         )
                     is NativeEvent.Disconnected -> {
                         Log.i(TAG, "remote closed the session: ${event.reason}")
+                        disconnectMessage = failureText(event.kind, event.reason)
                         break
                     }
                 }
@@ -519,7 +522,7 @@ class UniFfiRemoteSession(
             if (!closed.get()) _events.emit(SessionEvent.Failed(describe(error)))
             return
         }
-        if (!closed.get()) _events.emit(SessionEvent.Disconnected)
+        if (!closed.get()) _events.emit(SessionEvent.Disconnected(disconnectMessage))
     }
 
     private suspend fun handleFileTransfer(event: NativeEvent.FileTransfer) {
@@ -803,8 +806,32 @@ class UniFfiRemoteSession(
     )
 
     private fun describe(error: Exception): String = when (error) {
-        is SessionFailure.Session -> error.reason
+        is SessionFailure.Session -> failureText(error.kind, error.reason)
         else -> error.message?.takeIf { it.isNotBlank() } ?: error.javaClass.simpleName
+    }
+
+    private fun failureText(kind: SessionFailureKind, reason: String): String = when (kind) {
+        SessionFailureKind.UNKNOWN -> reason
+        SessionFailureKind.NETWORK -> context.getString(R.string.session_failure_network)
+        SessionFailureKind.CONNECTION_REFUSED ->
+            context.getString(R.string.session_failure_connection_refused)
+        SessionFailureKind.MISSING_USERNAME ->
+            context.getString(R.string.session_failure_missing_username)
+        SessionFailureKind.MISSING_PASSWORD ->
+            context.getString(R.string.session_failure_missing_password)
+        SessionFailureKind.AUTHENTICATION_FAILED ->
+            context.getString(R.string.session_failure_authentication)
+        SessionFailureKind.UNSUPPORTED_VERSION ->
+            context.getString(R.string.session_failure_unsupported_version)
+        SessionFailureKind.UNSUPPORTED_SECURITY_TYPE ->
+            context.getString(R.string.session_failure_unsupported_security)
+        SessionFailureKind.PROTOCOL -> context.getString(R.string.session_failure_protocol)
+        SessionFailureKind.DECODE -> context.getString(R.string.session_failure_decode)
+        SessionFailureKind.TUNNEL -> context.getString(R.string.session_failure_tunnel)
+        SessionFailureKind.SSH_TUNNEL -> context.getString(R.string.session_failure_ssh_tunnel)
+        SessionFailureKind.CLOSED -> context.getString(R.string.session_failure_closed)
+        SessionFailureKind.INVALID_INPUT ->
+            context.getString(R.string.session_failure_invalid_input)
     }
 
     private companion object {

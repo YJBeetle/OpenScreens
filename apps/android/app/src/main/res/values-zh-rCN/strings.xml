@@ -19,6 +19,17 @@
     <string name="library_empty_action">添加第一个连接</string>
     <string name="library_edit_connection">编辑连接</string>
     <string name="library_connection_thumbnail">服务器缩略图</string>
+    <string name="library_quick_connect">快速连接</string>
+    <string name="library_quick_connect_subtitle">输入 URL 以启动连接。</string>
+    <string name="library_quick_connect_url">连接地址</string>
+    <string name="library_quick_connect_hint">例如 vnc://user@host:5900</string>
+    <string name="library_quick_connect_invalid">请输入有效的 vnc:// 地址。</string>
+    <string name="library_quick_connect_action">连接</string>
+    <string name="library_view_options">视图选项</string>
+    <string name="library_view_grid">网格</string>
+    <string name="library_view_list">列表</string>
+    <string name="library_more">更多</string>
+    <string name="library_cancel">取消</string>
 
     <!-- 连接编辑器 -->
     <string name="editor_new_title">新建连接</string>
@@ -122,6 +133,19 @@
     <string name="session_error_no_framebuffer">服务器未报告帧缓冲区尺寸。</string>
     <string name="session_error_out_of_memory">内存不足，无法显示 %1$d×%2$d。</string>
     <string name="session_error_out_of_memory_viewport">内存不足，无法显示可见屏幕区域。</string>
+    <string name="session_failure_network">网络错误，连接已中断。</string>
+    <string name="session_failure_connection_refused">服务器拒绝了连接。</string>
+    <string name="session_failure_missing_username">服务器要求 Apple 账户认证，但尚未配置用户名。</string>
+    <string name="session_failure_missing_password">服务器要求身份验证，但尚未配置密码。</string>
+    <string name="session_failure_authentication">身份验证失败，请检查用户名和密码。</string>
+    <string name="session_failure_unsupported_version">不支持服务器的 RFB 版本。</string>
+    <string name="session_failure_unsupported_security">服务器要求的认证方式不受支持。</string>
+    <string name="session_failure_protocol">服务器返回了无法识别的数据。</string>
+    <string name="session_failure_decode">无法解码远程画面。</string>
+    <string name="session_failure_tunnel">隧道连接失败。</string>
+    <string name="session_failure_ssh_tunnel">SSH 隧道连接失败。</string>
+    <string name="session_failure_closed">连接已关闭。</string>
+    <string name="session_failure_invalid_input">连接设置无效。</string>
     <string name="session_clipboard_received">远端剪贴板</string>
     <string name="session_pointer_trackpad">触控板</string>
     <string name="session_clipboard_hint">要发送到远程剪贴板的文本</string>

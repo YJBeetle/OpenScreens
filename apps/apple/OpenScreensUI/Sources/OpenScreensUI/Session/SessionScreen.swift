@@ -11,6 +11,7 @@ public struct SessionScreen: View {
     @Environment(SettingsStore.self) private var settings
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.displayScale) private var displayScale
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
 
     private let model: SessionViewModel
     private let onClose: () -> Void
@@ -19,6 +20,7 @@ public struct SessionScreen: View {
     @State private var isDropTargeted = false
     @State private var showingDownloadDialog = false
     @State private var downloadPath = ""
+    @State private var appliedChromeDefault = false
     @State private var pinchStart: (zoom: CGFloat, pan: CGSize, focal: CGPoint)?
     @State private var pressIndicator: PressIndicator?
 
@@ -106,6 +108,10 @@ public struct SessionScreen: View {
         }
         #endif
         .onAppear {
+            if !appliedChromeDefault {
+                appliedChromeDefault = true
+                model.showsChrome = settings.settings.showToolbarOnLaunch
+            }
             model.start()
             focusHardwareKeyboard()
         }
@@ -390,27 +396,29 @@ public struct SessionScreen: View {
     @ViewBuilder
     private var chrome: some View {
         if model.showsChrome {
-            VStack(spacing: 0) {
-                HStack(alignment: .top) {
+            ZStack {
+                VStack(spacing: 0) {
+                    HStack(alignment: .top) {
+                        Spacer(minLength: 0)
+                        statusHeader
+                        Spacer(minLength: 0)
+                    }
                     Spacer(minLength: 0)
-                    statusHeader
-                    Spacer(minLength: 0)
+                    if !usesVerticalToolbar {
+                        HStack {
+                            Spacer(minLength: 0)
+                            sessionToolbar(orientation: .horizontal)
+                            Spacer(minLength: 0)
+                        }
+                    }
                 }
-                Spacer(minLength: 0)
-                HStack {
-                    Spacer(minLength: 0)
-                    SessionToolbar(
-                        model: model,
-                        items: settings.settings.toolbarItems.filter {
-                            SessionToolbarItem.allCases.contains($0)
-                        },
-                        onDownload: {
-                            downloadPath = ""
-                            showingDownloadDialog = true
-                        },
-                        onDisconnect: requestClose
-                    )
-                    Spacer(minLength: 0)
+
+                if usesVerticalToolbar {
+                    HStack {
+                        Spacer(minLength: 0)
+                        sessionToolbar(orientation: .vertical)
+                    }
+                    .padding(.trailing, 4)
                 }
             }
             .padding(.horizontal, 12)
@@ -435,6 +443,29 @@ public struct SessionScreen: View {
             .padding(12)
             .transition(.opacity)
         }
+    }
+
+    private var usesVerticalToolbar: Bool {
+        #if os(iOS)
+        verticalSizeClass == .compact
+        #else
+        false
+        #endif
+    }
+
+    private func sessionToolbar(orientation: FloatingBarOrientation) -> some View {
+        SessionToolbar(
+            model: model,
+            orientation: orientation,
+            items: settings.settings.toolbarItems.filter {
+                SessionToolbarItem.allCases.contains($0)
+            },
+            onDownload: {
+                downloadPath = ""
+                showingDownloadDialog = true
+            },
+            onDisconnect: requestClose
+        )
     }
 
     private var statusHeader: some View {

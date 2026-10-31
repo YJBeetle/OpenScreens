@@ -4,26 +4,39 @@ import SwiftUI
 /// Floating/docked session controls.
 struct SessionToolbar: View {
     let model: SessionViewModel
+    let orientation: FloatingBarOrientation
     let items: [SessionToolbarItem]
     let onDownload: () -> Void
     let onDisconnect: () -> Void
 
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
+    private var buttonSize: CGFloat {
+        #if os(iOS)
+        orientation == .vertical || horizontalSizeClass == .compact ? 34 : 40
+        #else
+        40
+        #endif
+    }
+
     var body: some View {
-        FloatingBar {
+        FloatingBar(orientation: orientation) {
             ForEach(items) { item in
                 toolbarItem(item)
             }
 
             FloatingIconButton(
                 systemImage: "chevron.down",
-                title: "Hide Toolbar"
+                title: "Hide Toolbar",
+                size: buttonSize
             ) {
                 model.toggleChrome()
             }
 
             FloatingIconButton(
                 systemImage: "rectangle.portrait.and.arrow.right",
-                title: "Disconnect"
+                title: "Disconnect",
+                size: buttonSize
             ) {
                 onDisconnect()
             }
@@ -44,7 +57,8 @@ struct SessionToolbar: View {
             FloatingIconButton(
                 systemImage: "keyboard",
                 title: model.isKeyboardActive ? "Hide Keyboard" : "Show Keyboard",
-                isSelected: model.isKeyboardActive
+                isSelected: model.isKeyboardActive,
+                size: buttonSize
             ) {
                 model.toggleKeyboard()
             }
@@ -54,7 +68,8 @@ struct SessionToolbar: View {
         case .download:
             FloatingIconButton(
                 systemImage: "arrow.down.doc",
-                title: "Download Remote File"
+                title: "Download Remote File",
+                size: buttonSize
             ) {
                 onDownload()
             }
@@ -64,7 +79,8 @@ struct SessionToolbar: View {
             FloatingIconButton(
                 systemImage: model.isObserving ? "eye.fill" : "eye",
                 title: model.isObserving ? "Observe Mode On" : "Observe Mode Off",
-                isSelected: model.isObserving
+                isSelected: model.isObserving,
+                size: buttonSize
             ) {
                 model.toggleObserveMode()
             }
@@ -187,7 +203,7 @@ struct SessionToolbar: View {
         Image(systemName: systemImage)
             .font(.system(size: 16, weight: .medium))
             .foregroundStyle(.primary)
-            .frame(width: 40, height: 40)
+            .frame(width: buttonSize, height: buttonSize)
             .contentShape(Rectangle())
     }
 }

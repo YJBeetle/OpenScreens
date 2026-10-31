@@ -96,6 +96,8 @@ public struct SettingsView: View {
             }
 
             Section {
+                Toggle("Show Toolbar on Launch", isOn: $settings.settings.showToolbarOnLaunch)
+
                 ForEach(orderedToolbarItems) { item in
                     HStack(spacing: 6) {
                         Toggle(isOn: toolbarBinding(item)) {

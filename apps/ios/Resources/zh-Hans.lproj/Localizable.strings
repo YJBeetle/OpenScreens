@@ -343,6 +343,7 @@
 
 /* MARK: - Session toolbar */
 "Toolbar" = "工具栏";
+"Show Toolbar on Launch" = "启动时显示工具栏";
 "Choose the buttons shown in the session toolbar." = "选择会话工具栏中显示的按钮。";
 "Keyboard" = "键盘";
 "Select Display" = "选择显示器";

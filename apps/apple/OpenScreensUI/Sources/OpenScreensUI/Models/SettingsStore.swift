@@ -92,6 +92,7 @@ public struct AppSettings: Codable, Hashable, Sendable {
     public var autoReconnect: Bool
     public var confirmDisconnect: Bool
     public var updateChannel: UpdateChannel
+    public var showToolbarOnLaunch: Bool
     public var toolbarItems: [SessionToolbarItem]
 
     public init(
@@ -102,6 +103,7 @@ public struct AppSettings: Codable, Hashable, Sendable {
         autoReconnect: Bool = true,
         confirmDisconnect: Bool = true,
         updateChannel: UpdateChannel = .release,
+        showToolbarOnLaunch: Bool = true,
         toolbarItems: [SessionToolbarItem] = SessionToolbarItem.allCases
     ) {
         self.appearance = appearance
@@ -111,12 +113,13 @@ public struct AppSettings: Codable, Hashable, Sendable {
         self.autoReconnect = autoReconnect
         self.confirmDisconnect = confirmDisconnect
         self.updateChannel = updateChannel
+        self.showToolbarOnLaunch = showToolbarOnLaunch
         self.toolbarItems = toolbarItems
     }
 
     private enum CodingKeys: String, CodingKey {
         case appearance, tileDensity, defaultCursorMode, sharedClipboard
-        case autoReconnect, confirmDisconnect, updateChannel, toolbarItems
+        case autoReconnect, confirmDisconnect, updateChannel, showToolbarOnLaunch, toolbarItems
     }
 
     public init(from decoder: Decoder) throws {
@@ -128,6 +131,7 @@ public struct AppSettings: Codable, Hashable, Sendable {
         autoReconnect = try container.decode(Bool.self, forKey: .autoReconnect)
         confirmDisconnect = try container.decode(Bool.self, forKey: .confirmDisconnect)
         updateChannel = try container.decodeIfPresent(UpdateChannel.self, forKey: .updateChannel) ?? .release
+        showToolbarOnLaunch = try container.decodeIfPresent(Bool.self, forKey: .showToolbarOnLaunch) ?? true
         toolbarItems = try container.decodeIfPresent([SessionToolbarItem].self, forKey: .toolbarItems)
             ?? SessionToolbarItem.allCases
     }

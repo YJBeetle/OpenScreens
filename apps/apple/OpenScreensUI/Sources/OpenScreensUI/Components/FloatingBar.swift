@@ -1,16 +1,35 @@
 import SwiftUI
 
+public enum FloatingBarOrientation: Sendable {
+    case horizontal
+    case vertical
+}
+
 /// Translucent capsule used for floating toolbars, tab bars and session controls.
 public struct FloatingBar<Content: View>: View {
+    private let orientation: FloatingBarOrientation
     private let content: Content
 
-    public init(@ViewBuilder content: () -> Content) {
+    public init(
+        orientation: FloatingBarOrientation = .horizontal,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.orientation = orientation
         self.content = content()
     }
 
     public var body: some View {
-        HStack(spacing: 2) {
-            content
+        Group {
+            switch orientation {
+            case .horizontal:
+                HStack(spacing: 2) {
+                    content
+                }
+            case .vertical:
+                VStack(spacing: 2) {
+                    content
+                }
+            }
         }
         .padding(6)
         .glassSurface(in: Capsule(style: .continuous))
@@ -23,17 +42,20 @@ public struct FloatingIconButton: View {
     private let systemImage: String
     private let title: String
     private let isSelected: Bool
+    private let size: CGFloat
     private let action: () -> Void
 
     public init(
         systemImage: String,
         title: String,
         isSelected: Bool = false,
+        size: CGFloat = 40,
         action: @escaping () -> Void
     ) {
         self.systemImage = systemImage
         self.title = title
         self.isSelected = isSelected
+        self.size = size
         self.action = action
     }
 
@@ -43,7 +65,7 @@ public struct FloatingIconButton: View {
                 .font(.system(size: 16, weight: .medium))
                 .symbolVariant(isSelected ? .fill : .none)
                 .foregroundStyle(isSelected ? Color.white : Color.primary)
-                .frame(width: 40, height: 40)
+                .frame(width: size, height: size)
                 .background {
                     if isSelected {
                         Circle().fill(Theme.Colors.accent)

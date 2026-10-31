@@ -1,6 +1,30 @@
 import XCTest
 @testable import OpenScreensUI
 
+final class VNCLinkTests: XCTestCase {
+    func testParsesHostPortAndUser() {
+        XCTAssertEqual(
+            VNCLink.parse(URL(string: "vnc://studio.local")!),
+            VNCLink(host: "studio.local")
+        )
+        XCTAssertEqual(
+            VNCLink.parse(URL(string: "vnc://10.0.0.2:5901")!),
+            VNCLink(host: "10.0.0.2", port: 5901)
+        )
+        XCTAssertEqual(
+            VNCLink.parse(URL(string: "vnc://designer@studio.local:5902")!),
+            VNCLink(host: "studio.local", port: 5902, username: "designer")
+        )
+    }
+
+    func testRejectsMalformedLinks() {
+        XCTAssertNil(VNCLink.parse(URL(string: "https://studio.local")!))
+        XCTAssertNil(VNCLink.parse(URL(string: "vnc://")!))
+        XCTAssertNil(VNCLink.parse(URL(string: "vnc://host:70000")!))
+        XCTAssertNil(VNCLink.parse(URL(string: "vnc://host:0")!))
+    }
+}
+
 final class ConnectionProfileTests: XCTestCase {
     func testValidationAndNormalization() {
         var profile = ConnectionProfile(name: "  Studio  ", host: "  studio.local  ", port: 70000)
@@ -149,6 +173,37 @@ final class ConnectionStoreTests: XCTestCase {
             store.profiles(in: .custom, sort: .manual).map(\.name),
             ["Alpha", "Bravo", "Charlie"]
         )
+    }
+
+    func testResolveLinkReusesAndCreatesProfiles() {
+        let url = temporaryFileURL()
+        defer { removeStore(at: url) }
+        let store = ConnectionStore(fileURL: url, seedDemoData: false)
+
+        let first = store.resolveLink(URL(string: "vnc://studio.local")!)
+        XCTAssertEqual(first?.host, "studio.local")
+        XCTAssertEqual(first?.port, 5900)
+        XCTAssertEqual(first?.section, .custom)
+        XCTAssertEqual(first?.authentication, .vncPassword)
+        XCTAssertEqual(store.connections.count, 1)
+
+        let again = store.resolveLink(URL(string: "vnc://STUDIO.local:5900")!)
+        XCTAssertEqual(again?.id, first?.id)
+        XCTAssertEqual(store.connections.count, 1)
+
+        let account = store.resolveLink(URL(string: "vnc://designer@build.local:5901")!)
+        XCTAssertEqual(account?.username, "designer")
+        XCTAssertEqual(account?.port, 5901)
+        XCTAssertEqual(account?.authentication, .macOSAccount)
+        XCTAssertEqual(store.connections.count, 2)
+
+        XCTAssertNil(store.resolveLink(URL(string: "vnc://host:70000")!))
+        XCTAssertNil(store.resolveLink(URL(string: "https://host")!))
+        XCTAssertEqual(store.connections.count, 2)
+
+        let reloaded = ConnectionStore(fileURL: url, seedDemoData: false)
+        XCTAssertEqual(reloaded.connections.count, 2)
+        XCTAssertTrue(reloaded.connections.contains { $0.username == "designer" })
     }
 
     func testSortOrdersCompareNamesAndLastConnected() {

@@ -48,6 +48,10 @@ struct MacLibraryView: View {
                 .frame(width: 720, height: 620)
         }
         .onAppear(perform: autoConnectForTesting)
+        .onOpenURL { url in
+            guard let profile = store.resolveLink(url) else { return }
+            connect(profile)
+        }
     }
 
     @ViewBuilder

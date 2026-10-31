@@ -4,12 +4,32 @@ import SwiftUI
 
 struct IOSRootView: View {
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(ConnectionStore.self) private var store
+    @Environment(\.openWindow) private var openWindow
+
+    @State private var linkProfile: ConnectionProfile?
 
     var body: some View {
+        Group {
+            if horizontalSizeClass == .regular {
+                IPadLibraryView()
+            } else {
+                PhoneLibraryView()
+            }
+        }
+        .fullScreenCover(item: $linkProfile) { profile in
+            IOSSessionPresenter(profile: profile)
+        }
+        .onOpenURL(perform: openLink)
+    }
+
+    private func openLink(_ url: URL) {
+        guard let profile = store.resolveLink(url) else { return }
+        store.markConnected(id: profile.id)
         if horizontalSizeClass == .regular {
-            IPadLibraryView()
+            openWindow(id: IOSSessionScene.id, value: profile.id)
         } else {
-            PhoneLibraryView()
+            linkProfile = profile
         }
     }
 }

@@ -3079,6 +3079,7 @@ sealed class SessionEvent {
     }
     
     data class Disconnected(
+        val `kind`: uniffi.rfb_ffi.SessionFailureKind, 
         val `reason`: kotlin.String) : SessionEvent()
         
     {
@@ -3164,6 +3165,7 @@ public object FfiConverterTypeSessionEvent : FfiConverterRustBuffer<SessionEvent
                 FfiConverterOptionalString.read(buf),
                 )
             15 -> SessionEvent.Disconnected(
+                FfiConverterTypeSessionFailureKind.read(buf),
                 FfiConverterString.read(buf),
                 )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
@@ -3293,6 +3295,7 @@ public object FfiConverterTypeSessionEvent : FfiConverterRustBuffer<SessionEvent
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
+                + FfiConverterTypeSessionFailureKind.allocationSize(value.`kind`)
                 + FfiConverterString.allocationSize(value.`reason`)
             )
         }
@@ -3392,6 +3395,7 @@ public object FfiConverterTypeSessionEvent : FfiConverterRustBuffer<SessionEvent
             }
             is SessionEvent.Disconnected -> {
                 buf.putInt(15)
+                FfiConverterTypeSessionFailureKind.write(value.`kind`, buf)
                 FfiConverterString.write(value.`reason`, buf)
                 Unit
             }
@@ -3409,10 +3413,12 @@ sealed class SessionFailure: kotlin.Exception() {
     
     class Session(
         
+        val `kind`: SessionFailureKind, 
+        
         val `reason`: kotlin.String
         ) : SessionFailure() {
         override val message
-            get() = "reason=${ `reason` }"
+            get() = "kind=${ `kind` }, reason=${ `reason` }"
     }
     
 
@@ -3435,6 +3441,7 @@ public object FfiConverterTypeSessionFailure : FfiConverterRustBuffer<SessionFai
 
         return when(buf.getInt()) {
             1 -> SessionFailure.Session(
+                FfiConverterTypeSessionFailureKind.read(buf),
                 FfiConverterString.read(buf),
                 )
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
@@ -3446,6 +3453,7 @@ public object FfiConverterTypeSessionFailure : FfiConverterRustBuffer<SessionFai
             is SessionFailure.Session -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
+                + FfiConverterTypeSessionFailureKind.allocationSize(value.`kind`)
                 + FfiConverterString.allocationSize(value.`reason`)
             )
         }
@@ -3455,6 +3463,7 @@ public object FfiConverterTypeSessionFailure : FfiConverterRustBuffer<SessionFai
         when(value) {
             is SessionFailure.Session -> {
                 buf.putInt(1)
+                FfiConverterTypeSessionFailureKind.write(value.`kind`, buf)
                 FfiConverterString.write(value.`reason`, buf)
                 Unit
             }
@@ -3462,6 +3471,56 @@ public object FfiConverterTypeSessionFailure : FfiConverterRustBuffer<SessionFai
     }
 
 }
+
+
+
+/**
+ * Machine-readable session failure code. Frontends localize on this value;
+ * `reason` carries the diagnostic text for logs and unknown codes.
+ */
+
+enum class SessionFailureKind {
+    
+    UNKNOWN,
+    NETWORK,
+    CONNECTION_REFUSED,
+    MISSING_USERNAME,
+    MISSING_PASSWORD,
+    AUTHENTICATION_FAILED,
+    UNSUPPORTED_VERSION,
+    UNSUPPORTED_SECURITY_TYPE,
+    PROTOCOL,
+    DECODE,
+    TUNNEL,
+    SSH_TUNNEL,
+    CLOSED,
+    INVALID_INPUT;
+
+    
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeSessionFailureKind: FfiConverterRustBuffer<SessionFailureKind> {
+    override fun read(buf: ByteBuffer) = try {
+        SessionFailureKind.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: SessionFailureKind) = 4UL
+
+    override fun write(value: SessionFailureKind, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
 
 
 

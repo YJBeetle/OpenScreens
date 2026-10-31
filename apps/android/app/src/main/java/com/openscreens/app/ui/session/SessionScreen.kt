@@ -448,12 +448,13 @@ fun SessionScreen(
                 is SessionEvent.DragInfo,
                 is SessionEvent.FileTransfer,
                 -> Unit
-                SessionEvent.Disconnected -> {
+                is SessionEvent.Disconnected -> {
                     status = SessionStatus.Disconnected
                     if (!isExiting) {
                         scope.launch {
                             snackbarHostState.showSnackbar(
-                                context.getString(R.string.session_status_disconnected),
+                                event.message
+                                    ?: context.getString(R.string.session_status_disconnected),
                             )
                         }
                     }

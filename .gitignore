@@ -14,3 +14,4 @@ apps/**/*.xcodeproj
 apps/apple/OpenScreensCore/OpenScreensCore.xcframework/
 apps/android/keystore/
 apps/android/keystore.properties
+apps/**/build-*/

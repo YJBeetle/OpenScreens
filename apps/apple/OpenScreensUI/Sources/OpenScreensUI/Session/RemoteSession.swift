@@ -3,12 +3,45 @@ import OpenScreensCanvas
 
 // MARK: - Session state
 
+/// Classification of a session failure reported by the core. Frontends
+/// localize on this value; the reason string is only a diagnostic fallback.
+public enum RemoteFailureKind: Equatable, Sendable {
+    case unknown
+    case network
+    case connectionRefused
+    case missingUsername
+    case missingPassword
+    case authenticationFailed
+    case unsupportedVersion
+    case unsupportedSecurityType
+    case protocolViolation
+    case decode
+    case tunnel
+    case sshTunnel
+    case closed
+    case invalidInput
+}
+
+/// A failure raised while opening a session, carrying the core's error code
+/// alongside its diagnostic text.
+public struct RemoteSessionFailure: Error, LocalizedError, Sendable {
+    public let kind: RemoteFailureKind
+    public let reason: String
+
+    public init(kind: RemoteFailureKind, reason: String) {
+        self.kind = kind
+        self.reason = reason
+    }
+
+    public var errorDescription: String? { reason }
+}
+
 public enum RemoteSessionState: Equatable, Sendable {
     case idle
     case connecting
     case connected
     case reconnecting(attempt: Int)
-    case disconnected(reason: String?)
+    case disconnected(reason: String?, kind: RemoteFailureKind = .unknown)
 
     public var isConnected: Bool {
         if case .connected = self { return true }

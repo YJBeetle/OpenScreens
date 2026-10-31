@@ -16,6 +16,27 @@ private struct SessionSetupError: LocalizedError {
     var errorDescription: String? { message }
 }
 
+private extension OpenScreensCore.SessionFailureKind {
+    var remoteKind: RemoteFailureKind {
+        switch self {
+        case .unknown: .unknown
+        case .network: .network
+        case .connectionRefused: .connectionRefused
+        case .missingUsername: .missingUsername
+        case .missingPassword: .missingPassword
+        case .authenticationFailed: .authenticationFailed
+        case .unsupportedVersion: .unsupportedVersion
+        case .unsupportedSecurityType: .unsupportedSecurityType
+        case .`protocol`: .protocolViolation
+        case .decode: .decode
+        case .tunnel: .tunnel
+        case .sshTunnel: .sshTunnel
+        case .closed: .closed
+        case .invalidInput: .invalidInput
+        }
+    }
+}
+
 public struct UniFfiSessionService: OpenScreensUI.RemoteSessionService {
     public init() {}
 
@@ -216,8 +237,8 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
             startInputPump(session)
         } catch {
             logger.error("connect failed: \(error.localizedDescription, privacy: .public)")
-            if case let OpenScreensCore.SessionFailure.Session(reason) = error {
-                throw SessionSetupError(reason)
+            if case let OpenScreensCore.SessionFailure.Session(kind, reason) = error {
+                throw RemoteSessionFailure(kind: kind.remoteKind, reason: reason)
             }
             throw error
         }
@@ -877,8 +898,8 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
                 continuation.yield(.downloadComplete(savedPath: root, error: nil))
             }
 
-        case .disconnected(let reason):
-            finish(reason: reason)
+        case .disconnected(let kind, let reason):
+            finish(reason: reason, kind: kind.remoteKind)
         }
     }
 
@@ -904,7 +925,7 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
         }
     }
 
-    private func finish(reason: String?) {
+    private func finish(reason: String?, kind: RemoteFailureKind = .unknown) {
         guard !finished else { return }
         finished = true
         pendingUploads.removeAll()
@@ -923,7 +944,7 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
         }
         downloadWaiters.removeAll()
         downloadNames.removeAll()
-        continuation.yield(.state(.disconnected(reason: reason)))
+        continuation.yield(.state(.disconnected(reason: reason, kind: kind)))
         continuation.finish()
         eventTask?.cancel()
         eventTask = nil

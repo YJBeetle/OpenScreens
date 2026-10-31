@@ -177,7 +177,7 @@ public final class SessionViewModel {
             } catch is CancellationError {
                 // The user stopped the session while it was connecting.
             } catch {
-                self?.handleTransportFailure(error.localizedDescription)
+                self?.handleTransportFailure(error)
             }
         }
     }
@@ -206,10 +206,10 @@ public final class SessionViewModel {
                 reconnectAttempts = 0
                 failureMessage = nil
             }
-            if case .disconnected(let reason) = newState {
+            if case .disconnected(let reason, let kind) = newState {
                 clearUploadState()
                 clearDownloadState()
-                handleRemoteClose(reason: reason)
+                handleRemoteClose(reason: reason, kind: kind)
             }
 
         case .displays(let list):
@@ -291,12 +291,12 @@ public final class SessionViewModel {
         }
     }
 
-    private func handleRemoteClose(reason: String?) {
+    private func handleRemoteClose(reason: String?, kind: RemoteFailureKind) {
         guard !isStopping else { return }
         eventTask = nil
         connectTask = nil
         if let reason, !reason.isEmpty {
-            failureMessage = reason
+            failureMessage = SessionFailureText.localized(kind, reason: reason)
         }
         guard profile.controls.autoReconnect, reconnectAttempts < 3 else { return }
         reconnectAttempts += 1
@@ -309,9 +309,13 @@ public final class SessionViewModel {
         }
     }
 
-    private func handleTransportFailure(_ message: String) {
-        failureMessage = message
-        state = .disconnected(reason: message)
+    private func handleTransportFailure(_ error: Error) {
+        let failure = error as? RemoteSessionFailure
+        let localized = failure.map {
+            SessionFailureText.localized($0.kind, reason: $0.reason)
+        } ?? error.localizedDescription
+        failureMessage = localized
+        state = .disconnected(reason: localized, kind: failure?.kind ?? .unknown)
         connectTask = nil
         eventTask?.cancel()
         eventTask = nil

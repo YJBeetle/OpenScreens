@@ -1940,7 +1940,7 @@ public enum SessionEvent: Equatable, Hashable {
     )
     case downloadComplete(handle: UInt32, files: UInt32, directories: UInt32, bytes: UInt64, error: String?
     )
-    case disconnected(reason: String
+    case disconnected(kind: SessionFailureKind, reason: String
     )
 
 
@@ -2003,7 +2003,7 @@ public struct FfiConverterTypeSessionEvent: FfiConverterRustBuffer {
         case 14: return .downloadComplete(handle: try FfiConverterUInt32.read(from: &buf), files: try FfiConverterUInt32.read(from: &buf), directories: try FfiConverterUInt32.read(from: &buf), bytes: try FfiConverterUInt64.read(from: &buf), error: try FfiConverterOptionString.read(from: &buf)
         )
         
-        case 15: return .disconnected(reason: try FfiConverterString.read(from: &buf)
+        case 15: return .disconnected(kind: try FfiConverterTypeSessionFailureKind.read(from: &buf), reason: try FfiConverterString.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -2104,8 +2104,9 @@ public struct FfiConverterTypeSessionEvent: FfiConverterRustBuffer {
             FfiConverterOptionString.write(error, into: &buf)
             
         
-        case let .disconnected(reason):
+        case let .disconnected(kind,reason):
             writeInt(&buf, Int32(15))
+            FfiConverterTypeSessionFailureKind.write(kind, into: &buf)
             FfiConverterString.write(reason, into: &buf)
             
         }
@@ -2134,7 +2135,7 @@ enum SessionFailure: Swift.Error, Equatable, Hashable, Foundation.LocalizedError
 
     
     
-    case Session(reason: String
+    case Session(kind: SessionFailureKind, reason: String
     )
 
     
@@ -2166,6 +2167,7 @@ public struct FfiConverterTypeSessionFailure: FfiConverterRustBuffer {
 
         
         case 1: return .Session(
+            kind: try FfiConverterTypeSessionFailureKind.read(from: &buf), 
             reason: try FfiConverterString.read(from: &buf)
             )
 
@@ -2180,8 +2182,9 @@ public struct FfiConverterTypeSessionFailure: FfiConverterRustBuffer {
 
         
         
-        case let .Session(reason):
+        case let .Session(kind,reason):
             writeInt(&buf, Int32(1))
+            FfiConverterTypeSessionFailureKind.write(kind, into: &buf)
             FfiConverterString.write(reason, into: &buf)
             
         }
@@ -2202,6 +2205,160 @@ public func FfiConverterTypeSessionFailure_lift(_ buf: RustBuffer) throws -> Ses
 public func FfiConverterTypeSessionFailure_lower(_ value: SessionFailure) -> RustBuffer {
     return FfiConverterTypeSessionFailure.lower(value)
 }
+
+
+/**
+ * Machine-readable session failure code. Frontends localize on this value;
+ * `reason` carries the diagnostic text for logs and unknown codes.
+ */
+
+public enum SessionFailureKind: Equatable, Hashable {
+    
+    case unknown
+    case network
+    case connectionRefused
+    case missingUsername
+    case missingPassword
+    case authenticationFailed
+    case unsupportedVersion
+    case unsupportedSecurityType
+    case `protocol`
+    case decode
+    case tunnel
+    case sshTunnel
+    case closed
+    case invalidInput
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension SessionFailureKind: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSessionFailureKind: FfiConverterRustBuffer {
+    typealias SwiftType = SessionFailureKind
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SessionFailureKind {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .unknown
+        
+        case 2: return .network
+        
+        case 3: return .connectionRefused
+        
+        case 4: return .missingUsername
+        
+        case 5: return .missingPassword
+        
+        case 6: return .authenticationFailed
+        
+        case 7: return .unsupportedVersion
+        
+        case 8: return .unsupportedSecurityType
+        
+        case 9: return .`protocol`
+        
+        case 10: return .decode
+        
+        case 11: return .tunnel
+        
+        case 12: return .sshTunnel
+        
+        case 13: return .closed
+        
+        case 14: return .invalidInput
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: SessionFailureKind, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .unknown:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .network:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .connectionRefused:
+            writeInt(&buf, Int32(3))
+        
+        
+        case .missingUsername:
+            writeInt(&buf, Int32(4))
+        
+        
+        case .missingPassword:
+            writeInt(&buf, Int32(5))
+        
+        
+        case .authenticationFailed:
+            writeInt(&buf, Int32(6))
+        
+        
+        case .unsupportedVersion:
+            writeInt(&buf, Int32(7))
+        
+        
+        case .unsupportedSecurityType:
+            writeInt(&buf, Int32(8))
+        
+        
+        case .`protocol`:
+            writeInt(&buf, Int32(9))
+        
+        
+        case .decode:
+            writeInt(&buf, Int32(10))
+        
+        
+        case .tunnel:
+            writeInt(&buf, Int32(11))
+        
+        
+        case .sshTunnel:
+            writeInt(&buf, Int32(12))
+        
+        
+        case .closed:
+            writeInt(&buf, Int32(13))
+        
+        
+        case .invalidInput:
+            writeInt(&buf, Int32(14))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSessionFailureKind_lift(_ buf: RustBuffer) throws -> SessionFailureKind {
+    return try FfiConverterTypeSessionFailureKind.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSessionFailureKind_lower(_ value: SessionFailureKind) -> RustBuffer {
+    return FfiConverterTypeSessionFailureKind.lower(value)
+}
+
 
 
 

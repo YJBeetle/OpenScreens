@@ -49,6 +49,7 @@ public struct ConnectionEditorView: View {
     @State private var openVpnSummary: String?
     @State private var selectedSection: EditorSection = .connection
     @State private var appliedSettingsDefaults = false
+    @State private var saveError: String?
 
     private static let wireGuardByteLimit = 64 * 1024
     private static let openVpnByteLimit = 256 * 1024
@@ -96,6 +97,17 @@ public struct ConnectionEditorView: View {
             #if os(macOS)
             sshKeyFiles = SSHKeyCatalog.available()
             #endif
+        }
+        .alert(
+            "Cannot Save Connection",
+            isPresented: Binding(
+                get: { saveError != nil },
+                set: { presented in if !presented { saveError = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(saveError ?? "")
         }
     }
 
@@ -311,6 +323,11 @@ public struct ConnectionEditorView: View {
             if draft.authentication != .none {
                 SecureField("Password", text: $password, prompt: Text("Connection password"))
                     .modifier(PlainInputStyle())
+                if let passwordRequiredError {
+                    Label(passwordRequiredError, systemImage: "exclamationmark.circle.fill")
+                        .font(.footnote)
+                        .foregroundStyle(Theme.Colors.danger)
+                }
             }
         } header: {
             Text("Authentication")
@@ -749,8 +766,16 @@ public struct ConnectionEditorView: View {
         return nil
     }
 
+    private var passwordRequiredError: String? {
+        guard draft.authentication != .none, password.isEmpty else { return nil }
+        return NSLocalizedString("Enter a password to continue.", comment: "Missing password")
+    }
+
     private var canSave: Bool {
-        draft.isValid && sshValidationError == nil && !tunnelConflict
+        draft.isValid
+            && sshValidationError == nil
+            && passwordRequiredError == nil
+            && !tunnelConflict
     }
 
     // MARK: - Actions
@@ -782,28 +807,62 @@ public struct ConnectionEditorView: View {
 
         let profile = draft.normalized()
         guard profile.isValid else { return }
-        if isCreating {
-            store.add(profile)
-        } else {
-            store.update(profile)
-        }
-        if profile.authentication == .none || password.isEmpty {
+
+        // Write credentials before touching the library so a rejected Keychain
+        // write keeps the editor open instead of leaving a connection that
+        // silently lacks its password.
+        if profile.authentication == .none {
             OpenScreensCredentials.deletePassword(for: profile.id)
-        } else {
-            OpenScreensCredentials.setPassword(password, for: profile.id)
+        } else if !OpenScreensCredentials.setPassword(password, for: profile.id) {
+            saveError = NSLocalizedString(
+                "The password could not be saved to the Keychain.",
+                comment: "Keychain write failure"
+            )
+            return
         }
+
         if let ssh = profile.ssh, ssh.enabled {
             switch ssh.authMethod {
             case .password:
-                OpenScreensCredentials.setSecret(sshPassword, kind: "ssh-password", for: profile.id)
+                if sshPassword.isEmpty {
+                    OpenScreensCredentials.deleteSecret(kind: "ssh-password", for: profile.id)
+                } else if !OpenScreensCredentials.setSecret(
+                    sshPassword,
+                    kind: "ssh-password",
+                    for: profile.id
+                ) {
+                    saveError = NSLocalizedString(
+                        "The password could not be saved to the Keychain.",
+                        comment: "Keychain write failure"
+                    )
+                    return
+                }
                 OpenScreensCredentials.deleteSecret(kind: "ssh-passphrase", for: profile.id)
             case .privateKey:
                 OpenScreensCredentials.deleteSecret(kind: "ssh-password", for: profile.id)
-                OpenScreensCredentials.setSecret(sshKeyPassphrase, kind: "ssh-passphrase", for: profile.id)
+                if sshKeyPassphrase.isEmpty {
+                    OpenScreensCredentials.deleteSecret(kind: "ssh-passphrase", for: profile.id)
+                } else if !OpenScreensCredentials.setSecret(
+                    sshKeyPassphrase,
+                    kind: "ssh-passphrase",
+                    for: profile.id
+                ) {
+                    saveError = NSLocalizedString(
+                        "The password could not be saved to the Keychain.",
+                        comment: "Keychain write failure"
+                    )
+                    return
+                }
             }
         } else {
             OpenScreensCredentials.deleteSecret(kind: "ssh-password", for: profile.id)
             OpenScreensCredentials.deleteSecret(kind: "ssh-passphrase", for: profile.id)
+        }
+
+        if isCreating {
+            store.add(profile)
+        } else {
+            store.update(profile)
         }
         onSaved?(profile)
         dismiss()

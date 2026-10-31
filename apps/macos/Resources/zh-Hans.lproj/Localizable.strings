@@ -258,6 +258,9 @@
 "The SSH tunnel failed." = "SSH 隧道连接失败。";
 "The connection was closed." = "连接已关闭。";
 "The connection settings are invalid." = "连接设置无效。";
+"Enter a password to continue." = "请输入密码后再继续。";
+"The password could not be saved to the Keychain." = "密码无法保存到系统钥匙串。";
+"Cannot Save Connection" = "无法保存连接";
 "Disconnect from “%@”?" = "断开与“%@”的连接？";
 "The remote session ends. You can reconnect from the library at any time." = "远程会话将结束。你可以随时从连接库重新连接。";
 "%@, %@ cursor mode" = "%@，%@ 指针模式";

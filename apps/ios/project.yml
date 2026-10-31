@@ -47,6 +47,7 @@ targets:
       base:
         PRODUCT_NAME: OpenScreens
         PRODUCT_BUNDLE_IDENTIFIER: app.openscreens.ios
+        CODE_SIGN_ENTITLEMENTS: OpenScreens.entitlements
         IPHONEOS_DEPLOYMENT_TARGET: "18.0"
         TARGETED_DEVICE_FAMILY: "1,2"
         GENERATE_INFOPLIST_FILE: YES

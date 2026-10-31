@@ -54,10 +54,19 @@ pub struct SshSettings {
     pub host: String,
     pub port: u16,
     pub username: String,
-    pub password: String,
+    pub auth: SshAuthSettings,
     /// Optional SHA-256 host-key fingerprint; when empty the first key is
     /// accepted (TOFU pinning is surfaced by the frontend later).
     pub host_key_fingerprint: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SshAuthSettings {
+    Password(String),
+    PrivateKey {
+        pem: String,
+        passphrase: Option<String>,
+    },
 }
 
 impl SessionConfig {
@@ -166,11 +175,18 @@ impl Session {
                 }
                 _ => HostKeyPolicy::AcceptAny,
             };
+            let auth = match &ssh.auth {
+                SshAuthSettings::Password(password) => SshAuth::Password(password.clone()),
+                SshAuthSettings::PrivateKey { pem, passphrase } => SshAuth::PrivateKeyData {
+                    pem: pem.clone(),
+                    passphrase: passphrase.clone(),
+                },
+            };
             let ssh_config = IoSshConfig {
                 host: ssh.host.clone(),
                 port: ssh.port,
                 username: ssh.username.clone(),
-                auth: SshAuth::Password(ssh.password.clone()),
+                auth,
                 host_key,
                 target_host: config.host.clone(),
                 target_port: config.port,

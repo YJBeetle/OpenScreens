@@ -8,13 +8,15 @@ import UniformTypeIdentifiers
 /// promises; each promise downloads its file through the session engine only
 /// when the drop is accepted.
 public struct RemoteDragOutHandle: NSViewRepresentable {
+    public typealias NSViewType = NSView
+
     private let model: SessionViewModel
 
     public init(model: SessionViewModel) {
         self.model = model
     }
 
-    public func makeNSView(context: Context) -> RemoteDragOutSourceView {
+    public func makeNSView(context: Context) -> NSView {
         let view = RemoteDragOutSourceView()
         view.onRequestFiles = { @MainActor [weak model] in
             guard let model else { return [] }
@@ -27,7 +29,7 @@ public struct RemoteDragOutHandle: NSViewRepresentable {
         return view
     }
 
-    public func updateNSView(_ nsView: RemoteDragOutSourceView, context: Context) {}
+    public func updateNSView(_ nsView: NSView, context: Context) {}
 }
 
 /// The AppKit drag source. A mouse-down asks the server for its drag

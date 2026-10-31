@@ -706,32 +706,40 @@ fn read_ycc20_bgra(reader: &mut BitReader<'_>) -> Result<[u8; 4], DecodeError> {
     Ok(ycbcr_to_bgra(y, cb, cr))
 }
 
-/// Two-colour tile fill (`_fill_2_colour`). The flag is a full byte; only its
-/// top bit is inspected, the other seven are discarded by VNCKit.
+/// Two-colour tile fill (`_fill_2_colour`).
+///
+/// The payload starts with an 8-bit row map. For each of the eight rows the
+/// current top bit is inspected: 1 fills the whole row with `color_a` and
+/// consumes nothing else, 0 reads an 8-bit row mask (MSB = leftmost pixel,
+/// 1 = `color_a`) and chooses per pixel. The row map is shifted left by one
+/// after every row, so one byte covers all eight rows. VNCKit does not treat
+/// the byte as a single "fill whole tile" flag.
 fn read_two_colour_tile(
     reader: &mut BitReader<'_>,
     color_a: [u8; 4],
     color_b: [u8; 4],
 ) -> Result<[u8; TILE_BYTES], DecodeError> {
-    let flag = reader.read(8)?;
+    let mut row_map = reader.read(8)? as u8;
     let mut tile = [0u8; TILE_BYTES];
-    if flag & 0x80 != 0 {
-        for pixel in tile.as_chunks_mut::<4>().0 {
-            *pixel = color_a;
-        }
-        return Ok(tile);
-    }
     for row in 0..TILE {
-        let bits = reader.read(8)?;
-        for column in 0..TILE {
-            let color = if bits & (0x80 >> column) != 0 {
-                color_a
-            } else {
-                color_b
-            };
-            let offset = (row * TILE + column) * 4;
-            tile[offset..offset + 4].copy_from_slice(&color);
+        if row_map & 0x80 != 0 {
+            for column in 0..TILE {
+                let offset = (row * TILE + column) * 4;
+                tile[offset..offset + 4].copy_from_slice(&color_a);
+            }
+        } else {
+            let bits = reader.read(8)?;
+            for column in 0..TILE {
+                let color = if bits & (0x80 >> column) != 0 {
+                    color_a
+                } else {
+                    color_b
+                };
+                let offset = (row * TILE + column) * 4;
+                tile[offset..offset + 4].copy_from_slice(&color);
+            }
         }
+        row_map <<= 1;
     }
     Ok(tile)
 }
@@ -1186,6 +1194,93 @@ mod tests {
     }
 
     #[test]
+    fn two_colour_row_map_skips_masks_for_solid_rows() {
+        // Command 3 uses colour A = white and colour B = black. The row map
+        // 0x3F means rows 0 and 1 carry row masks, rows 2..7 are solid white;
+        // only 16 mask bits follow the row map, not 64.
+        let mut commands = Bits::new();
+        push_skip_bit(&mut commands);
+        push_command(&mut commands, 3, 1);
+        let mut coefficients = Bits::new();
+        coefficients.push(0x3F, 8);
+        coefficients.push(0x00, 8); // row 0: all black
+        coefficients.push(0x81, 8); // row 1: white at columns 0 and 7
+        let message = make_type0(&commands, &coefficients);
+        let pixels = decode_apple_dct_message(&message, 8, 8, &PixelFormat::bgra8888()).unwrap();
+        for column in 0..8 {
+            assert_eq!(&pixels[column * 4..column * 4 + 4], [0, 0, 0, 255]);
+        }
+        for column in 0..8 {
+            let offset = 8 * 4 + column * 4;
+            let expected = if column == 0 || column == 7 {
+                [255, 255, 255, 255]
+            } else {
+                [0, 0, 0, 255]
+            };
+            assert_eq!(&pixels[offset..offset + 4], expected);
+        }
+        for row in 2..8 {
+            for column in 0..8 {
+                let offset = (row * 8 + column) * 4;
+                assert_eq!(&pixels[offset..offset + 4], [255, 255, 255, 255]);
+            }
+        }
+    }
+
+    #[test]
+    fn two_colour_row_map_reads_masks_after_the_first_row() {
+        // 0x80 fills only row 0 with colour A; rows 1..7 still read masks.
+        let mut commands = Bits::new();
+        push_skip_bit(&mut commands);
+        push_command(&mut commands, 3, 1);
+        let mut coefficients = Bits::new();
+        coefficients.push(0x80, 8);
+        for _ in 1..8 {
+            coefficients.push(0x00, 8); // rows 1..7: all black
+        }
+        let message = make_type0(&commands, &coefficients);
+        let pixels = decode_apple_dct_message(&message, 8, 8, &PixelFormat::bgra8888()).unwrap();
+        for column in 0..8 {
+            assert_eq!(&pixels[column * 4..column * 4 + 4], [255, 255, 255, 255]);
+        }
+        for row in 1..8 {
+            for column in 0..8 {
+                let offset = (row * 8 + column) * 4;
+                assert_eq!(&pixels[offset..offset + 4], [0, 0, 0, 255]);
+            }
+        }
+    }
+
+    #[test]
+    fn two_colour_command_reads_the_row_map_after_the_colours() {
+        let mut commands = Bits::new();
+        push_skip_bit(&mut commands);
+        push_command(&mut commands, 4, 1);
+        let mut coefficients = Bits::new();
+        coefficients.push(2, 2); // subtype 2: read colours A and B
+        coefficients.push(128, 8); // A: Y
+        coefficients.push(32, 6); // A: Cb
+        coefficients.push(32, 6); // A: Cr
+        coefficients.push(64, 8); // B: Y
+        coefficients.push(32, 6); // B: Cb
+        coefficients.push(32, 6); // B: Cr
+        coefficients.push(0x3F, 8); // rows 0..1 masked, rows 2..7 solid A
+        coefficients.push(0x00, 8); // row 0: B
+        coefficients.push(0xFF, 8); // row 1: A
+        let message = make_type0(&commands, &coefficients);
+        let pixels = decode_apple_dct_message(&message, 8, 8, &PixelFormat::bgra8888()).unwrap();
+        for column in 0..8 {
+            assert_eq!(&pixels[column * 4..column * 4 + 4], [64, 64, 64, 255]);
+        }
+        for row in 1..8 {
+            for column in 0..8 {
+                let offset = (row * 8 + column) * 4;
+                assert_eq!(&pixels[offset..offset + 4], [128, 128, 128, 255]);
+            }
+        }
+    }
+
+    #[test]
     fn copies_the_previous_tile_in_raster_order() {
         let mut commands = Bits::new();
         push_skip_bit(&mut commands);
@@ -1330,16 +1425,59 @@ mod tests {
 
         let pixels = decoder.framebuffer();
         assert_eq!(pixels.len(), 144 * 144 * 4);
-        // The sample covers all 324 tiles (177 new, 138 duplicates, 9 fills /
-        // copies); a wrong command or coefficient layout fails before this
-        // point. The checksum is a regression lock for this implementation's
-        // integer IDCT rounding, not a byte-exact Apple reference.
+        // The sample covers all 324 tiles (315 new coefficient tiles, 7
+        // two-colour fills, 1 repeat and 1 copy); a wrong command or
+        // coefficient layout fails before this point. The checksum matches
+        // VNCKit's own decode of this sample byte for byte, so it also locks
+        // the fill row-map semantics.
         let mut hash = 0xcbf2_9ce4_8422_2325u64;
         for byte in pixels {
             hash ^= u64::from(*byte);
             hash = hash.wrapping_mul(0x100_0000_01b3);
         }
-        assert_eq!(hash, 0x320a_e507_302d_75d1);
+        assert_eq!(hash, 0x366e_5ff4_4c07_f4f6);
         assert_eq!(&pixels[..4], &[95, 55, 83, 255]);
+    }
+
+    #[test]
+    #[ignore = "requires the captured 4192x2624 stream sample; set ADAPTIVE_DCT_FAIL_SAMPLE"]
+    fn decodes_captured_large_type0_sample() {
+        let path = std::env::var("ADAPTIVE_DCT_FAIL_SAMPLE")
+            .unwrap_or_else(|_| "/tmp/dct-fail.bin".into());
+        let data = match std::fs::read(&path) {
+            Ok(data) => data,
+            Err(_) => {
+                eprintln!("sample not found at {path}, skipping");
+                return;
+            }
+        };
+        // The rect is 4192x2624 at +6320+336; the minimal framebuffer is
+        // 10512x2960. The message has 171,872 tiles and must consume the whole
+        // length-prefixed payload.
+        let mut decoder = AdaptiveDctDecoder::new(10_512, 2_960, PixelFormat::bgra8888());
+        let consumed = decoder
+            .decode_rect(
+                &data,
+                Rect {
+                    x: 6320,
+                    y: 336,
+                    width: 4192,
+                    height: 2624,
+                },
+            )
+            .expect("large type 0 sample");
+        assert_eq!(consumed, data.len());
+
+        let stride = 10_512 * 4;
+        let mut hash = 0xcbf2_9ce4_8422_2325u64;
+        for row in 0..2624usize {
+            let start = (336 + row) * stride + 6320 * 4;
+            for byte in &decoder.framebuffer()[start..start + 4192 * 4] {
+                hash ^= u64::from(*byte);
+                hash = hash.wrapping_mul(0x100_0000_01b3);
+            }
+        }
+        // Byte-exact match with VNCKit's decoder output for the same sample.
+        assert_eq!(hash, 0x83ae_a03d_e560_9a22);
     }
 }

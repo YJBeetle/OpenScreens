@@ -81,6 +81,7 @@ impl From<SessionConfig> for EngineConfig {
             // Apple servers are detected during the handshake; non-Apple
             // servers keep the standard 3.8 flow.
             apple_session: true,
+            adaptive_dct: true,
             wireguard: config
                 .wireguard_config
                 .filter(|text| !text.trim().is_empty())

@@ -849,3 +849,85 @@ async fn apple_desktop_info_populates_displays() {
     assert_eq!(screens[0].id, 7);
     assert_eq!((screens[0].width, screens[0].height), (1920, 1080));
 }
+
+async fn perform_apple_handshake(server: &mut DuplexStream) {
+    server.write_all(b"RFB 003.889\n").await.unwrap();
+    let mut version = [0u8; 12];
+    server.read_exact(&mut version).await.unwrap();
+    assert_eq!(&version, b"RFB 003.889\n");
+
+    server.write_all(&[1, 1]).await.unwrap();
+    let mut security = [0u8; 1];
+    server.read_exact(&mut security).await.unwrap();
+    assert_eq!(security[0], 1);
+
+    server.write_all(&0u32.to_be_bytes()).await.unwrap();
+    let mut client_init = [0u8; 1];
+    server.read_exact(&mut client_init).await.unwrap();
+    assert_eq!(client_init[0], 0xc1);
+
+    server.write_all(&server_init()).await.unwrap();
+    let mut apple = [0u8; 66];
+    server.read_exact(&mut apple).await.unwrap();
+    assert_eq!(apple[0], 0x21);
+}
+
+#[tokio::test]
+async fn adaptive_dct_type1_falls_back_to_standard_encodings() {
+    let (client, mut server) = duplex(64 * 1024);
+
+    let task = tokio::spawn(async move {
+        perform_apple_handshake(&mut server).await;
+        let encodings = read_setup(&mut server).await;
+        assert!(encodings.contains(&1011));
+
+        let mut update = vec![0, 0];
+        update.extend_from_slice(&1u16.to_be_bytes());
+        update.extend_from_slice(&0u16.to_be_bytes());
+        update.extend_from_slice(&0u16.to_be_bytes());
+        update.extend_from_slice(&WIDTH.to_be_bytes());
+        update.extend_from_slice(&HEIGHT.to_be_bytes());
+        update.extend_from_slice(&1011i32.to_be_bytes());
+        update.extend_from_slice(&4u32.to_be_bytes());
+        update.extend_from_slice(&[1, 16, 16, 0]);
+        server.write_all(&update).await.unwrap();
+
+        let mut header = [0u8; 4];
+        server.read_exact(&mut header).await.unwrap();
+        assert_eq!(header[0], 2);
+        let count = usize::from(u16::from_be_bytes([header[2], header[3]]));
+        let mut raw = vec![0u8; count * 4];
+        server.read_exact(&mut raw).await.unwrap();
+        let ids: Vec<i32> = raw
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|id| i32::from_be_bytes([id[0], id[1], id[2], id[3]]))
+            .collect();
+        assert!(!ids.contains(&1011));
+
+        let mut request = [0u8; 10];
+        server.read_exact(&mut request).await.unwrap();
+        assert_eq!(request[0], 3);
+        assert_eq!(request[1], 0);
+
+        server.write_all(&raw_update()).await.unwrap();
+    });
+
+    let mut config = SessionConfig::new("mock", 5900);
+    config.apple_session = true;
+    config.adaptive_dct = true;
+    let session = Session::connect_stream(client, config).await.unwrap();
+    let connected = timeout(Duration::from_secs(2), session.next_event())
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(matches!(connected, Event::Connected { .. }));
+
+    let frame = timeout(Duration::from_secs(2), session.next_event())
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(matches!(frame, Event::Frame { .. }), "got {frame:?}");
+    task.await.unwrap();
+}

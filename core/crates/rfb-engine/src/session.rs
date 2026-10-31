@@ -69,7 +69,7 @@ fn tight_quality_id(quality: u8) -> i32 {
     -23 - i32::from(9u8.saturating_sub(quality.min(9)))
 }
 
-fn encodings(local_cursor: bool, quality: u8, apple: bool) -> Vec<i32> {
+fn encodings(local_cursor: bool, quality: u8, apple: bool, adaptive_dct: bool) -> Vec<i32> {
     let mut ids = BASE_ENCODINGS.to_vec();
     ids.push(tight_quality_id(quality));
     if local_cursor {
@@ -81,6 +81,11 @@ fn encodings(local_cursor: bool, quality: u8, apple: bool) -> Vec<i32> {
         // display records only when they are advertised.
         ids.push(Encoding::AppleDesktopInfo.to_id());
         ids.push(Encoding::AppleDesktopInfo2.to_id());
+    }
+    if adaptive_dct {
+        // Put DCT first so the server actually selects it; otherwise Tight is
+        // preferred and the decoder above is never exercised.
+        ids.insert(0, Encoding::AppleAdaptiveDct.to_id());
     }
     ids
 }
@@ -101,6 +106,8 @@ pub struct SessionConfig {
     pub frame_interval_ms: u16,
     /// Negotiate Apple's RFB 3.889 extension handshake when available.
     pub apple_session: bool,
+    /// Advertise and decode Apple Adaptive DCT (encoding 1011).
+    pub adaptive_dct: bool,
     /// Route the target connection through a userspace WireGuard tunnel.
     /// Mutually exclusive with `ssh`.
     pub wireguard: Option<WireGuardSettings>,
@@ -150,6 +157,7 @@ impl SessionConfig {
             quality: 9,
             frame_interval_ms: 16,
             apple_session: false,
+            adaptive_dct: false,
             wireguard: None,
             ssh: None,
         }
@@ -394,11 +402,17 @@ impl Session {
         let writer = tokio::spawn(writer_task(write_half, command_rx));
 
         let mut initial = Vec::new();
+        if apple_session {
+            // Screens sends its Apple capability message before SetEncodings;
+            // the server uses it to decide whether Apple codecs are allowed.
+            initial.extend_from_slice(&APPLE_CLIENT_VERSION);
+        }
         initial.extend_from_slice(&set_pixel_format(&PixelFormat::bgra8888()));
         initial.extend_from_slice(&set_encodings(&encodings(
             config.local_cursor,
             config.quality,
             apple_session,
+            config.adaptive_dct && apple_session,
         )));
         initial.extend_from_slice(&framebuffer_update_request(false, 0, 0, width, height));
         command_tx
@@ -422,6 +436,7 @@ impl Session {
             config.local_cursor,
             config.quality,
             apple_session,
+            config.adaptive_dct && apple_session,
             bytes_read.clone(),
             downloads.clone(),
         ));
@@ -433,7 +448,7 @@ impl Session {
             viewport,
             input_key,
             apple_session,
-            apple_client_version_sent: AtomicBool::new(false),
+            apple_client_version_sent: AtomicBool::new(apple_session),
             input_clock: std::time::Instant::now(),
             last_input_us: AtomicU64::new(0),
             transfer_handle: AtomicU32::new(1),
@@ -752,6 +767,10 @@ struct ReaderState {
     decoder: Decoder,
     framebuffer: Arc<Mutex<Framebuffer>>,
     pixel_format: PixelFormat,
+    dct: Option<rfb_codec::apple_dct::AdaptiveDctDecoder>,
+    dct_active: bool,
+    dct_failed: bool,
+    dct_full_refresh: bool,
     downloads: Arc<Mutex<HashMap<u32, DownloadTransfer>>>,
 }
 
@@ -769,6 +788,7 @@ async fn reader_task<R>(
     local_cursor: bool,
     quality: u8,
     apple_session: bool,
+    adaptive_dct: bool,
     bytes_read: Arc<AtomicU64>,
     downloads: Arc<Mutex<HashMap<u32, DownloadTransfer>>>,
 ) where
@@ -791,32 +811,55 @@ async fn reader_task<R>(
         decoder: Decoder::new(),
         framebuffer,
         pixel_format: PixelFormat::bgra8888(),
+        dct: None,
+        dct_active: adaptive_dct,
+        dct_failed: false,
+        dct_full_refresh: false,
         downloads,
     };
     let mut sequence = 0u64;
     let mut last_request: Option<std::time::Instant> = None;
     let mut adaptive = AdaptiveQuality::new(quality, std::time::Instant::now());
+    let mut level = quality;
     let mut last_bytes = bytes_read.load(Ordering::Relaxed);
 
     loop {
         match read_message(&mut read, &mut state, &events, &mut sequence).await {
             Ok(needs_request) => {
                 if needs_request {
-                    let now = std::time::Instant::now();
-                    let total_bytes = bytes_read.load(Ordering::Relaxed);
-                    let update_bytes = total_bytes.saturating_sub(last_bytes);
-                    last_bytes = total_bytes;
-                    if let Some(level) = adaptive.observe(now, update_bytes)
-                        && commands
+                    if state.dct_failed {
+                        state.dct_failed = false;
+                        if commands
                             .send(set_encodings(&encodings(
                                 local_cursor,
                                 level,
                                 apple_session,
+                                false,
                             )))
                             .await
                             .is_err()
-                    {
-                        break;
+                        {
+                            break;
+                        }
+                    }
+                    let now = std::time::Instant::now();
+                    let total_bytes = bytes_read.load(Ordering::Relaxed);
+                    let update_bytes = total_bytes.saturating_sub(last_bytes);
+                    last_bytes = total_bytes;
+                    if let Some(observed) = adaptive.observe(now, update_bytes) {
+                        level = observed;
+                        if commands
+                            .send(set_encodings(&encodings(
+                                local_cursor,
+                                level,
+                                apple_session,
+                                state.dct_active,
+                            )))
+                            .await
+                            .is_err()
+                        {
+                            break;
+                        }
                     }
                     if !frame_interval.is_zero()
                         && let Some(last) = last_request
@@ -836,7 +879,8 @@ async fn reader_task<R>(
                                 (0, 0, width, height)
                             }
                         };
-                    let request = framebuffer_update_request(true, x, y, width, height);
+                    let incremental = !std::mem::take(&mut state.dct_full_refresh);
+                    let request = framebuffer_update_request(incremental, x, y, width, height);
                     if commands.send(request.to_vec()).await.is_err() {
                         break;
                     }
@@ -1166,6 +1210,7 @@ where
                     .map_err(|_| SessionError::Protocol("framebuffer lock poisoned"))?;
                 framebuffer.resize(width, height);
             }
+            state.dct = None;
             resized = Some((width, height));
             continue;
         }
@@ -1189,6 +1234,7 @@ where
                     .map_err(|_| SessionError::Protocol("framebuffer lock poisoned"))?;
                 framebuffer.resize(new_width, new_height);
             }
+            state.dct = None;
             layout = Some((new_width, new_height, screens));
             continue;
         }
@@ -1208,6 +1254,7 @@ where
                         .map_err(|_| SessionError::Protocol("framebuffer lock poisoned"))?;
                     framebuffer.resize(info.width, info.height);
                 }
+                state.dct = None;
                 layout = Some((
                     info.width,
                     info.height,
@@ -1242,6 +1289,7 @@ where
                         .map_err(|_| SessionError::Protocol("framebuffer lock poisoned"))?;
                     framebuffer.resize(info.width, info.height);
                 }
+                state.dct = None;
                 layout = Some((
                     info.width,
                     info.height,
@@ -1257,6 +1305,91 @@ where
                         })
                         .collect(),
                 ));
+            }
+            continue;
+        }
+
+        if encoding == Encoding::AppleAdaptiveDct {
+            fill_buffer(read, &mut state.buffer, 4).await?;
+            let length = u32::from_be_bytes([
+                state.buffer[0],
+                state.buffer[1],
+                state.buffer[2],
+                state.buffer[3],
+            ]) as usize;
+            if length > MAX_TRANSFER_PAYLOAD {
+                return Err(SessionError::Protocol("adaptive DCT payload too large"));
+            }
+            let mut data = Vec::with_capacity(4 + length);
+            data.extend_from_slice(&state.buffer[..4]);
+            state.buffer.advance(4);
+            fill_buffer(read, &mut state.buffer, length).await?;
+            data.extend_from_slice(&state.buffer[..length]);
+            state.buffer.advance(length);
+            if !state.dct_active {
+                continue;
+            }
+
+            let Some((frame_width, frame_height)) = state.size() else {
+                return Err(SessionError::Protocol("adaptive DCT without framebuffer"));
+            };
+            let needs_decoder = state
+                .dct
+                .as_ref()
+                .map(|decoder| decoder.width() != frame_width || decoder.height() != frame_height)
+                .unwrap_or(true);
+            if needs_decoder {
+                state.dct = Some(rfb_codec::apple_dct::AdaptiveDctDecoder::new(
+                    frame_width,
+                    frame_height,
+                    state.pixel_format,
+                ));
+            }
+            let framebuffer = state.framebuffer.clone();
+            let mut failed = false;
+            if let Some(decoder) = state.dct.as_mut() {
+                match decoder.decode_rect(
+                    &data,
+                    Rect {
+                        x,
+                        y,
+                        width,
+                        height,
+                    },
+                ) {
+                    Ok(_) => {
+                        let stride = usize::from(frame_width) * 4;
+                        let row_bytes = usize::from(width) * 4;
+                        let source = decoder.framebuffer();
+                        if let Ok(mut framebuffer) = framebuffer.lock() {
+                            let pixels = framebuffer.pixels_mut();
+                            for row in 0..usize::from(height) {
+                                let offset = (usize::from(y) + row) * stride + usize::from(x) * 4;
+                                if offset + row_bytes <= source.len()
+                                    && offset + row_bytes <= pixels.len()
+                                {
+                                    pixels[offset..offset + row_bytes]
+                                        .copy_from_slice(&source[offset..offset + row_bytes]);
+                                }
+                            }
+                        }
+                        damaged.push(Rect {
+                            x,
+                            y,
+                            width,
+                            height,
+                        });
+                    }
+                    Err(_) => {
+                        failed = true;
+                    }
+                }
+            }
+            if failed {
+                state.dct = None;
+                state.dct_active = false;
+                state.dct_failed = true;
+                state.dct_full_refresh = true;
             }
             continue;
         }
@@ -1606,18 +1739,18 @@ mod tests {
 
     #[test]
     fn advertises_quality_and_cursor_encodings() {
-        let ids = encodings(false, 6, false);
+        let ids = encodings(false, 6, false, false);
         assert_eq!(ids.len(), 10);
         assert_eq!(*ids.last().unwrap(), -26);
         assert!(ids.contains(&Encoding::ExtendedDesktopSize.to_id()));
 
-        let ids = encodings(true, 3, false);
+        let ids = encodings(true, 3, false, false);
         assert_eq!(ids.len(), 12);
         assert_eq!(ids[ids.len() - 3], -29);
         assert!(ids.contains(&Encoding::Cursor.to_id()));
         assert!(ids.contains(&Encoding::PointerPos.to_id()));
 
-        let ids = encodings(false, 6, true);
+        let ids = encodings(false, 6, true, false);
         assert_eq!(ids.len(), 12);
         assert!(ids.contains(&Encoding::AppleDesktopInfo.to_id()));
         assert!(ids.contains(&Encoding::AppleDesktopInfo2.to_id()));

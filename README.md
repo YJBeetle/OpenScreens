@@ -18,7 +18,7 @@ Implemented:
 - File transfer: Android upload picker and remote-path download with progress; drag-and-drop upload on the Apple apps
 - Android direct-touch and trackpad pointer modes, view-centre pinch zoom, and two-finger pan
 - Userspace WireGuard transport (`rfb-tunnel` + `TunnelDialer`) with Android wg-quick config import; OpenVPN and WireGuard runtime acceptance are pending
-- Apple Adaptive DCT decoding is implemented but not advertised until the type-0 parser is validated against live streams
+- Apple Adaptive DCT (1011): type-0/type-2 decoding validated against live 3.889 streams and negotiated first; unsupported type-1 refinements fall back to standard encodings with a full refresh
 
 ## Layout
 

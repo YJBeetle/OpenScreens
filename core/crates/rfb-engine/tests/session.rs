@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use rfb_codec::Rect;
-use rfb_engine::session::{Event, Session, SessionConfig};
+use rfb_engine::session::{DisplayScreen, Event, Session, SessionConfig};
 use tokio::io::{AsyncReadExt, AsyncWriteExt, DuplexStream, duplex};
 use tokio::time::timeout;
 
@@ -79,6 +79,35 @@ fn raw_update() -> Vec<u8> {
     update
 }
 
+fn desktop_layout_message(
+    declared_screens: u8,
+    width: u16,
+    height: u16,
+    screens: &[(u32, u16, u16, u16, u16, u32)],
+) -> Vec<u8> {
+    let mut update = Vec::new();
+    update.push(0);
+    update.push(0);
+    update.extend_from_slice(&1u16.to_be_bytes());
+    // For -308 the rect header x and y fields carry the new framebuffer size.
+    update.extend_from_slice(&width.to_be_bytes());
+    update.extend_from_slice(&height.to_be_bytes());
+    update.extend_from_slice(&0u16.to_be_bytes());
+    update.extend_from_slice(&0u16.to_be_bytes());
+    update.extend_from_slice(&(-308i32).to_be_bytes());
+    update.push(declared_screens);
+    update.push(0); // server-side resize reason
+    for &(id, x, y, w, h, flags) in screens {
+        update.extend_from_slice(&id.to_be_bytes());
+        update.extend_from_slice(&x.to_be_bytes());
+        update.extend_from_slice(&y.to_be_bytes());
+        update.extend_from_slice(&w.to_be_bytes());
+        update.extend_from_slice(&h.to_be_bytes());
+        update.extend_from_slice(&flags.to_be_bytes());
+    }
+    update
+}
+
 fn cursor_update() -> Vec<u8> {
     let mut update = Vec::new();
     update.push(0);
@@ -116,7 +145,7 @@ async fn local_cursor_events() {
     let server_task = tokio::spawn(async move {
         perform_handshake(&mut server).await;
         let encodings = read_setup(&mut server).await;
-        assert_eq!(encodings.len(), 11);
+        assert_eq!(encodings.len(), 12);
         assert!(encodings.contains(&(-239)));
 
         server.write_all(&cursor_update()).await.unwrap();
@@ -164,6 +193,122 @@ async fn local_cursor_events() {
         .unwrap();
     assert!(matches!(disconnected, Event::Disconnected { .. }));
 
+    server_task.await.unwrap();
+}
+
+#[tokio::test]
+async fn extended_desktop_size_resizes_framebuffer() {
+    let (client, mut server) = duplex(64 * 1024);
+
+    let server_task = tokio::spawn(async move {
+        perform_handshake(&mut server).await;
+        let encodings = read_setup(&mut server).await;
+        assert!(
+            encodings.contains(&(-308)),
+            "ExtendedDesktopSize not advertised: {encodings:?}"
+        );
+
+        server
+            .write_all(&desktop_layout_message(
+                2,
+                4,
+                3,
+                &[(7, 0, 0, 3, 3, 0), (9, 3, 0, 1, 3, 1)],
+            ))
+            .await
+            .unwrap();
+
+        // The next incremental request covers the new framebuffer size.
+        let mut request = [0u8; 10];
+        server.read_exact(&mut request).await.unwrap();
+        assert_eq!(request, [3, 1, 0, 0, 0, 0, 0, 4, 0, 3]);
+    });
+
+    let session = Session::connect_stream(client, SessionConfig::new("mock", 5900))
+        .await
+        .unwrap();
+
+    let connected = timeout(Duration::from_secs(2), session.next_event())
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(matches!(connected, Event::Connected { .. }));
+
+    let layout = timeout(Duration::from_secs(2), session.next_event())
+        .await
+        .unwrap()
+        .unwrap();
+    match layout {
+        Event::DesktopLayout {
+            width,
+            height,
+            screens,
+        } => {
+            assert_eq!((width, height), (4, 3));
+            assert_eq!(
+                screens,
+                vec![
+                    DisplayScreen {
+                        id: 7,
+                        x: 0,
+                        y: 0,
+                        width: 3,
+                        height: 3,
+                        flags: 0
+                    },
+                    DisplayScreen {
+                        id: 9,
+                        x: 3,
+                        y: 0,
+                        width: 1,
+                        height: 3,
+                        flags: 1
+                    },
+                ]
+            );
+        }
+        other => panic!("expected desktop layout, got {other:?}"),
+    }
+
+    assert_eq!(session.size(), Some((4, 3)));
+    server_task.await.unwrap();
+}
+
+#[tokio::test]
+async fn truncated_desktop_layout_payload_disconnects() {
+    let (client, mut server) = duplex(64 * 1024);
+
+    let server_task = tokio::spawn(async move {
+        perform_handshake(&mut server).await;
+        read_setup(&mut server).await;
+
+        // Declares two screens but only one 16-byte entry follows; closing the
+        // server half then truncates the payload mid-message.
+        let update = desktop_layout_message(2, 4, 3, &[(7, 0, 0, 3, 3, 0)]);
+        server.write_all(&update).await.unwrap();
+    });
+
+    let session = Session::connect_stream(client, SessionConfig::new("mock", 5900))
+        .await
+        .unwrap();
+
+    let connected = timeout(Duration::from_secs(2), session.next_event())
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(matches!(connected, Event::Connected { .. }));
+
+    let disconnected = timeout(Duration::from_secs(2), session.next_event())
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(
+        matches!(disconnected, Event::Disconnected { .. }),
+        "expected disconnect, got {disconnected:?}"
+    );
+
+    // A malformed payload must not resize the framebuffer.
+    assert_eq!(session.size(), Some((WIDTH, HEIGHT)));
     server_task.await.unwrap();
 }
 

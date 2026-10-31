@@ -166,6 +166,9 @@ impl From<EngineEvent> for SessionEvent {
                 rects: rects.into_iter().map(Rect::from).collect(),
             },
             EngineEvent::Resized { width, height } => Self::Resized { width, height },
+            // Multi-monitor layouts are not exposed by the FFI surface yet;
+            // frontends still need the new framebuffer size.
+            EngineEvent::DesktopLayout { width, height, .. } => Self::Resized { width, height },
             EngineEvent::Clipboard { text } => Self::Clipboard { text },
             EngineEvent::Bell => Self::Bell,
             EngineEvent::Cursor(shape) => Self::Cursor {

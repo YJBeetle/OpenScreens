@@ -32,7 +32,7 @@ const MAX_CUT_TEXT_LEN: usize = 16 * 1024 * 1024;
 /// Encodings advertised to the server, most preferred first. The TightVNC
 /// JPEG quality pseudo-encoding is inserted per session, before these move
 /// on to pseudo-encodings.
-const BASE_ENCODINGS: [i32; 8] = [
+const BASE_ENCODINGS: [i32; 9] = [
     Encoding::Tight.to_id(),
     Encoding::Zrle.to_id(),
     Encoding::Hextile.to_id(),
@@ -40,8 +40,12 @@ const BASE_ENCODINGS: [i32; 8] = [
     Encoding::Raw.to_id(),
     Encoding::Zlib.to_id(),
     Encoding::DesktopSize.to_id(),
+    Encoding::ExtendedDesktopSize.to_id(),
     Encoding::LastRect.to_id(),
 ];
+
+/// Wire size of one screen entry in an ExtendedDesktopSize payload.
+const DESKTOP_SCREEN_LEN: usize = 16;
 
 /// TightVNC quality levels are advertised as -23 (best) through -32 (worst).
 fn tight_quality_id(quality: u8) -> i32 {
@@ -111,6 +115,18 @@ impl SessionConfig {
     }
 }
 
+/// One screen of a server desktop layout, as reported by the
+/// ExtendedDesktopSize pseudo-encoding.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DisplayScreen {
+    pub id: u32,
+    pub x: u16,
+    pub y: u16,
+    pub width: u16,
+    pub height: u16,
+    pub flags: u32,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Event {
     Connected {
@@ -125,6 +141,13 @@ pub enum Event {
     Resized {
         width: u16,
         height: u16,
+    },
+    /// The server described a new desktop layout (ExtendedDesktopSize
+    /// pseudo-encoding). The framebuffer has already been resized.
+    DesktopLayout {
+        width: u16,
+        height: u16,
+        screens: Vec<DisplayScreen>,
     },
     Clipboard {
         text: String,
@@ -588,6 +611,7 @@ where
 
     let mut damaged = Vec::with_capacity(usize::from(rect_count));
     let mut resized = None;
+    let mut layout = None;
 
     for _ in 0..rect_count {
         fill_buffer(read, &mut state.buffer, 12).await?;
@@ -617,6 +641,29 @@ where
                 framebuffer.resize(width, height);
             }
             resized = Some((width, height));
+            continue;
+        }
+
+        if encoding == Encoding::ExtendedDesktopSize {
+            // Unlike pixel rects, the header carries the new framebuffer size
+            // in its x and y fields (x is the width, y the height).
+            let (new_width, new_height) = (x, y);
+            fill_buffer(read, &mut state.buffer, 2).await?;
+            let screen_count = state.buffer[0];
+            // state.buffer[1] is the resize reason; it does not affect layout.
+            state.buffer.advance(2);
+            let payload_len = usize::from(screen_count) * DESKTOP_SCREEN_LEN;
+            fill_buffer(read, &mut state.buffer, payload_len).await?;
+            let screens = parse_desktop_screens(&state.buffer[..payload_len], screen_count)?;
+            state.buffer.advance(payload_len);
+            {
+                let mut framebuffer = state
+                    .framebuffer
+                    .lock()
+                    .map_err(|_| SessionError::Protocol("framebuffer lock poisoned"))?;
+                framebuffer.resize(new_width, new_height);
+            }
+            layout = Some((new_width, new_height, screens));
             continue;
         }
 
@@ -668,6 +715,17 @@ where
             .map_err(|_| SessionError::Closed)?;
     }
 
+    if let Some((width, height, screens)) = layout {
+        events
+            .send(Event::DesktopLayout {
+                width,
+                height,
+                screens,
+            })
+            .await
+            .map_err(|_| SessionError::Closed)?;
+    }
+
     if !damaged.is_empty() {
         *sequence = sequence.wrapping_add(1);
         events
@@ -680,6 +738,38 @@ where
     }
 
     Ok(())
+}
+
+/// Parses the screen entries of an ExtendedDesktopSize payload (the bytes
+/// following the screen count and resize reason). Payloads that are shorter or
+/// longer than `screen_count * 16` bytes are rejected as protocol errors.
+fn parse_desktop_screens(
+    payload: &[u8],
+    screen_count: u8,
+) -> Result<Vec<DisplayScreen>, SessionError> {
+    let expected = usize::from(screen_count) * DESKTOP_SCREEN_LEN;
+    if payload.len() < expected {
+        return Err(SessionError::Protocol(
+            "truncated extended desktop size payload",
+        ));
+    }
+    if payload.len() > expected {
+        return Err(SessionError::Protocol(
+            "trailing bytes in extended desktop size payload",
+        ));
+    }
+
+    Ok(payload
+        .chunks_exact(DESKTOP_SCREEN_LEN)
+        .map(|screen| DisplayScreen {
+            id: u32::from_be_bytes([screen[0], screen[1], screen[2], screen[3]]),
+            x: u16::from_be_bytes([screen[4], screen[5]]),
+            y: u16::from_be_bytes([screen[6], screen[7]]),
+            width: u16::from_be_bytes([screen[8], screen[9]]),
+            height: u16::from_be_bytes([screen[10], screen[11]]),
+            flags: u32::from_be_bytes([screen[12], screen[13], screen[14], screen[15]]),
+        })
+        .collect())
 }
 
 async fn decode_rect<R>(
@@ -921,14 +1011,75 @@ mod tests {
     #[test]
     fn advertises_quality_and_cursor_encodings() {
         let ids = encodings(false, 6);
-        assert_eq!(ids.len(), 9);
+        assert_eq!(ids.len(), 10);
         assert_eq!(*ids.last().unwrap(), -26);
+        assert!(ids.contains(&Encoding::ExtendedDesktopSize.to_id()));
 
         let ids = encodings(true, 3);
-        assert_eq!(ids.len(), 11);
+        assert_eq!(ids.len(), 12);
         assert_eq!(ids[ids.len() - 3], -29);
         assert!(ids.contains(&Encoding::Cursor.to_id()));
         assert!(ids.contains(&Encoding::PointerPos.to_id()));
+    }
+
+    fn screen_bytes(screens: &[(u32, u16, u16, u16, u16, u32)]) -> Vec<u8> {
+        let mut out = Vec::new();
+        for &(id, x, y, width, height, flags) in screens {
+            out.extend_from_slice(&id.to_be_bytes());
+            out.extend_from_slice(&x.to_be_bytes());
+            out.extend_from_slice(&y.to_be_bytes());
+            out.extend_from_slice(&width.to_be_bytes());
+            out.extend_from_slice(&height.to_be_bytes());
+            out.extend_from_slice(&flags.to_be_bytes());
+        }
+        out
+    }
+
+    #[test]
+    fn parses_extended_desktop_screen_entries() {
+        let payload = screen_bytes(&[(7, 0, 0, 1920, 1080, 1), (9, 1920, 0, 1280, 1024, 0)]);
+        let screens = parse_desktop_screens(&payload, 2).unwrap();
+        assert_eq!(
+            screens,
+            vec![
+                DisplayScreen {
+                    id: 7,
+                    x: 0,
+                    y: 0,
+                    width: 1920,
+                    height: 1080,
+                    flags: 1
+                },
+                DisplayScreen {
+                    id: 9,
+                    x: 1920,
+                    y: 0,
+                    width: 1280,
+                    height: 1024,
+                    flags: 0
+                },
+            ]
+        );
+        assert!(parse_desktop_screens(&[], 0).unwrap().is_empty());
+    }
+
+    #[test]
+    fn rejects_malformed_extended_desktop_payloads() {
+        let payload = screen_bytes(&[(1, 0, 0, 800, 600, 0)]);
+        assert!(matches!(
+            parse_desktop_screens(&payload[..payload.len() - 1], 1),
+            Err(SessionError::Protocol(_))
+        ));
+        assert!(matches!(
+            parse_desktop_screens(&payload, 2),
+            Err(SessionError::Protocol(_))
+        ));
+        let mut trailing = payload.clone();
+        trailing.push(0);
+        assert!(matches!(
+            parse_desktop_screens(&trailing, 1),
+            Err(SessionError::Protocol(_))
+        ));
     }
 
     #[test]

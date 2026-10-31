@@ -60,6 +60,17 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
     private var buttonMask: UInt8 = 0
     private var observing = false
     private var finished = false
+    private var sharedClipboard = true
+    /// Guards against echoing the remote clipboard straight back to the server.
+    private var lastRemoteClipboard: String?
+    private var lastSentClipboard: String?
+
+    /// Callers waiting for the 0x20 drag info that answers a 0x0E drag-out.
+    private var dragOutWaiters: [UInt32: CheckedContinuation<[OpenScreensUI.RemoteFile], Never>] = [:]
+    private var dragOutTimeouts: [UInt32: Task<Void, Never>] = [:]
+    /// File-promise downloads wait for the engine's DownloadComplete event.
+    private var downloadWaiters: [UInt32: CheckedContinuation<URL, Error>] = [:]
+    private var downloadNames: [UInt32: String] = [:]
 
     /// Files announced to the server, keyed by their transfer handle. The
     /// server answers a drag-in with `.uploadRequest(handle:path:)`.
@@ -94,6 +105,7 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
     public func connect(profile: ConnectionProfile) async throws {
         guard session == nil, !finished else { return }
         observing = profile.controls.startInObserveMode
+        sharedClipboard = profile.controls.sharedClipboard
         cursor = CGPoint(x: 0.5, y: 0.5)
         buttonMask = 0
         continuation.yield(.state(.connecting))
@@ -261,10 +273,34 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
     }
 
     public func sendClipboard(_ text: String) async {
+        guard !text.isEmpty else { return }
+        lastSentClipboard = text
         inputContinuation.yield(.clipboard(text))
     }
 
     public func requestClipboard() async {}
+
+    /// Answers Apple message 0x14 subtype 2. The engine deduplicates the wire
+    /// payload; reading the platform pasteboard is gated by the per-connection
+    /// shared clipboard setting.
+    private func handleClipboardRequest() {
+        guard sharedClipboard, session != nil, !finished else { return }
+        Task { @MainActor [weak self] in
+            guard let self, let text = PlatformClipboard.string, !text.isEmpty else { return }
+            await self.respondToClipboardRequest(text)
+        }
+    }
+
+    private func respondToClipboardRequest(_ text: String) async {
+        guard let session, !finished, sharedClipboard else { return }
+        guard text != lastRemoteClipboard, text != lastSentClipboard else { return }
+        do {
+            try await session.sendClipboard(text: text)
+            lastSentClipboard = text
+        } catch {
+            logger.error("clipboard reply failed: \(error.localizedDescription, privacy: .public)")
+        }
+    }
 
     public func setObserveMode(_ observing: Bool) async {
         self.observing = observing
@@ -495,6 +531,115 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
         }
     }
 
+    // MARK: - Drag out
+
+    /// Sends Apple message 0x0E and waits for the 0x20 drag info. The server
+    /// answers with the file URLs on its current drag pasteboard.
+    public func beginDragOut() async -> [OpenScreensUI.RemoteFile] {
+        guard let session, !finished else { return [] }
+        do {
+            let handle = try await session.beginDragOut(handle: nil)
+            return await withCheckedContinuation { continuation in
+                dragOutWaiters[handle] = continuation
+                dragOutTimeouts[handle]?.cancel()
+                dragOutTimeouts[handle] = Task { [weak self] in
+                    try? await Task.sleep(for: .seconds(2))
+                    guard !Task.isCancelled else { return }
+                    await self?.resolveDragOut(handle: handle, files: [])
+                }
+            }
+        } catch {
+            logger.error("drag-out start failed: \(error.localizedDescription, privacy: .public)")
+            return []
+        }
+    }
+
+    private func resolveDragOut(handle: UInt32, files: [OpenScreensUI.RemoteFile]) {
+        dragOutTimeouts.removeValue(forKey: handle)?.cancel()
+        dragOutWaiters.removeValue(forKey: handle)?.resume(returning: files)
+    }
+
+    /// Downloads one remote drag item into a private temporary folder and
+    /// returns the local item. File promises call this only after a drop.
+    public func download(remotePath: String, toDirectory directory: URL) async throws -> URL {
+        guard let session, !finished else {
+            throw RemoteTransferError.notConnected
+        }
+        let path = remotePath.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !path.isEmpty else {
+            throw RemoteTransferError.missingDownloadedFile(remotePath)
+        }
+
+        let handle = session.nextTransferHandle()
+        let name = Self.fileName(inRemotePath: path)
+        let root = directory.appendingPathComponent(
+            ".openscreens-\(handle)-\(UUID().uuidString)",
+            isDirectory: true
+        )
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        downloadNames[handle] = name
+        downloadRoots[handle] = root.path
+        return try await withCheckedThrowingContinuation { continuation in
+            downloadWaiters[handle] = continuation
+            Task {
+                do {
+                    try await session.startDownload(handle: handle, path: path, root: root.path)
+                } catch {
+                    await self.failDownload(handle: handle, error: error)
+                }
+            }
+        }
+    }
+
+    private func failDownload(handle: UInt32, error: Error) {
+        guard let waiter = downloadWaiters.removeValue(forKey: handle) else { return }
+        if let root = downloadRoots.removeValue(forKey: handle) {
+            try? FileManager.default.removeItem(atPath: root)
+        }
+        downloadNames.removeValue(forKey: handle)
+        waiter.resume(throwing: error)
+    }
+
+    /// Resolves a file-promise download from the engine's completion event.
+    private func resolveDownload(handle: UInt32, error: String?) {
+        guard let waiter = downloadWaiters.removeValue(forKey: handle) else { return }
+        let rootPath = downloadRoots.removeValue(forKey: handle)
+        let name = downloadNames.removeValue(forKey: handle)
+        if let error {
+            if let rootPath {
+                try? FileManager.default.removeItem(atPath: rootPath)
+            }
+            waiter.resume(throwing: NSError(
+                domain: "app.openscreens",
+                code: 1,
+                userInfo: [NSLocalizedDescriptionKey: error]
+            ))
+            return
+        }
+        guard let rootPath else {
+            waiter.resume(throwing: RemoteTransferError.missingDownloadedFile(name ?? ""))
+            return
+        }
+        let root = URL(fileURLWithPath: rootPath, isDirectory: true)
+        let expected = name.map { root.appendingPathComponent($0) }
+        let local = expected.flatMap {
+            FileManager.default.fileExists(atPath: $0.path) ? $0 : nil
+        } ?? Self.firstItem(in: root)
+        if let local {
+            waiter.resume(returning: local)
+        } else {
+            waiter.resume(throwing: RemoteTransferError.missingDownloadedFile(name ?? ""))
+        }
+    }
+
+    private static func firstItem(in directory: URL) -> URL? {
+        let contents = (try? FileManager.default.contentsOfDirectory(
+            at: directory,
+            includingPropertiesForKeys: nil
+        )) ?? []
+        return contents.first { !$0.lastPathComponent.hasPrefix(".") }
+    }
+
     /// Reports a download that could not start and clears any UI progress.
     private func yieldDownloadFailure(_ message: String) {
         continuation.yield(.failure(message))
@@ -636,7 +781,11 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
             }))
 
         case .clipboard(let text):
+            lastRemoteClipboard = text
             continuation.yield(.clipboard(text))
+
+        case .clipboardRequest:
+            handleClipboardRequest()
 
         case .bell:
             continuation.yield(.bell)
@@ -669,9 +818,13 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
                 )
             }
 
-        case .dragInfo:
-            // Drags out of the remote desktop are not exposed by the UI yet.
-            break
+        case .dragOutInfo(let handle, let files):
+            resolveDragOut(
+                handle: handle,
+                files: files.map {
+                    OpenScreensUI.RemoteFile(url: $0.url, path: $0.path, name: $0.name)
+                }
+            )
 
         case .fileTransfer(let subtype, let handle, let payload):
             handleFileTransfer(subtype: subtype, handle: handle, payload: payload)
@@ -685,6 +838,12 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
             ))
 
         case .downloadComplete(let handle, let files, let directories, let bytes, let error):
+            // A file promise consumes the result directly instead of showing
+            // the "saved to Downloads" completion alert.
+            if downloadWaiters[handle] != nil {
+                resolveDownload(handle: handle, error: error)
+                return
+            }
             guard let root = downloadRoots.removeValue(forKey: handle) else { return }
             if let error {
                 logger.error("download \(handle) failed: \(error, privacy: .public)")
@@ -731,6 +890,19 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
         pendingUploads.removeAll()
         uploadFileNames.removeAll()
         downloadRoots.removeAll()
+        for task in dragOutTimeouts.values {
+            task.cancel()
+        }
+        dragOutTimeouts.removeAll()
+        for (_, waiter) in dragOutWaiters {
+            waiter.resume(returning: [])
+        }
+        dragOutWaiters.removeAll()
+        for (_, waiter) in downloadWaiters {
+            waiter.resume(throwing: RemoteTransferError.notConnected)
+        }
+        downloadWaiters.removeAll()
+        downloadNames.removeAll()
         continuation.yield(.state(.disconnected(reason: reason)))
         continuation.finish()
         eventTask?.cancel()

@@ -89,6 +89,42 @@ public struct RemoteCursorShape: Sendable, Equatable {
     public var isEmpty: Bool { width <= 0 || height <= 0 || bgraPixels.isEmpty }
 }
 
+/// One remote item offered by an Apple drag-out (message `0x20`).
+public struct RemoteFile: Sendable, Hashable {
+    /// Original `file://` URL from the remote pasteboard.
+    public var url: String
+    /// Absolute POSIX path on the remote computer.
+    public var path: String
+    /// Last path component, suitable as a local file name.
+    public var name: String
+
+    public init(url: String, path: String, name: String) {
+        self.url = url
+        self.path = path
+        self.name = name
+    }
+}
+
+public enum RemoteTransferError: LocalizedError, Sendable {
+    case unsupported
+    case notConnected
+    case missingDownloadedFile(String)
+
+    public var errorDescription: String? {
+        switch self {
+        case .unsupported:
+            NSLocalizedString("This connection does not support file transfer.", comment: "Transfer error")
+        case .notConnected:
+            NSLocalizedString("The session is not connected.", comment: "Transfer error")
+        case .missingDownloadedFile(let name):
+            String(
+                format: NSLocalizedString("The downloaded file “%@” is missing.", comment: "Transfer error"),
+                name
+            )
+        }
+    }
+}
+
 public enum RemoteSessionEvent: Sendable {
     case state(RemoteSessionState)
     case displays([RemoteDisplay])
@@ -220,6 +256,13 @@ public protocol RemoteSessionProtocol: Sendable {
     /// Downloads a remote POSIX path to the local Downloads folder. Progress
     /// and completion arrive as events.
     func download(remotePath: String) async
+    /// Asks the Apple server for its drag pasteboard (message 0x0E) and
+    /// returns the remote files it currently offers. Empty when the server has
+    /// no file drag in progress or the session is not an Apple session.
+    func beginDragOut() async -> [RemoteFile]
+    /// Downloads one remote file into `directory` and returns the local URL.
+    /// Used by file promises, which write the item only when it is dropped.
+    func download(remotePath: String, toDirectory directory: URL) async throws -> URL
 }
 
 public extension RemoteSessionProtocol {
@@ -229,6 +272,12 @@ public extension RemoteSessionProtocol {
     func uploadFiles(_ urls: [URL]) async {}
     /// Transports without file download support ignore the request.
     func download(remotePath: String) async {}
+    /// Transports without drag-out support offer no files.
+    func beginDragOut() async -> [RemoteFile] { [] }
+    /// Transports without drag-out support cannot materialise remote files.
+    func download(remotePath: String, toDirectory directory: URL) async throws -> URL {
+        throw RemoteTransferError.unsupported
+    }
 }
 
 public protocol RemoteSessionService: Sendable {

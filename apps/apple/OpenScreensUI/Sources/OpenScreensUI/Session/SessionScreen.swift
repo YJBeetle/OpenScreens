@@ -52,6 +52,15 @@ public struct SessionScreen: View {
 
             cursorOverlay
             pointerSurface
+            #if os(macOS)
+            if model.state.isConnected {
+                RemoteDragOutHandle(model: model)
+                    .frame(width: 112, height: 38)
+                    .padding(.leading, 14)
+                    .padding(.bottom, 16)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+            }
+            #endif
             hardwareKeyboardLayer
 
             if model.state.isTerminal {

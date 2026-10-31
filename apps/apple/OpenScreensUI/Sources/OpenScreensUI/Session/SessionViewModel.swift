@@ -559,6 +559,30 @@ public final class SessionViewModel {
         downloadSavedPath = nil
     }
 
+    // MARK: - Drag out
+
+    /// Asks the remote server for the files on its drag pasteboard. The caller
+    /// (macOS drag source) turns them into file promises.
+    public func beginDragOut() async -> [RemoteFile] {
+        guard state.isConnected, let session else { return [] }
+        return await session.beginDragOut()
+    }
+
+    /// Materialises one remote drag item in `directory` for a file promise.
+    /// The transfer reports progress through the normal download status.
+    public func downloadRemoteFile(
+        _ file: RemoteFile,
+        toDirectory directory: URL
+    ) async throws -> URL {
+        guard state.isConnected, let session else {
+            throw RemoteTransferError.notConnected
+        }
+        downloadFileName = file.name
+        downloadFraction = nil
+        defer { clearDownloadState() }
+        return try await session.download(remotePath: file.path, toDirectory: directory)
+    }
+
     /// Dismisses the download completion alert.
     public func clearDownloadResult() {
         downloadSavedPath = nil

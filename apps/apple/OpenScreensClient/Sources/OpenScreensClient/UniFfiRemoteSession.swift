@@ -161,6 +161,8 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
             localCursor: localCursor,
             quality: 9,
             frameIntervalMs: 16,
+            wireguardConfig: nil,
+            wireguardDnsFallback: true,
             sshHost: sshHost,
             sshPort: sshPort,
             sshUsername: sshUsername,
@@ -498,6 +500,19 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
                 RemoteDisplay(id: 0, name: "Display", width: Int(width), height: Int(height)),
             ]))
 
+        case .desktopLayout(let width, let height, let screens):
+            self.width = width
+            self.height = height
+            updateDisplayScale()
+            continuation.yield(.displays(screens.map { screen in
+                RemoteDisplay(
+                    id: Int(screen.id),
+                    name: "Display \(screen.id)",
+                    width: Int(screen.width),
+                    height: Int(screen.height)
+                )
+            }))
+
         case .clipboard(let text):
             continuation.yield(.clipboard(text))
 
@@ -538,6 +553,10 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
 
         case .fileTransfer(let subtype, let handle, let payload):
             handleFileTransfer(subtype: subtype, handle: handle, payload: payload)
+
+        case .downloadProgress, .downloadComplete:
+            // Download UI is not wired into the Apple apps yet.
+            break
 
         case .disconnected(let reason):
             finish(reason: reason)

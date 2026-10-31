@@ -661,6 +661,11 @@ public protocol RemoteSessionProtocol: AnyObject, Sendable {
     
     func requestRefresh() async throws 
     
+    /**
+     * Selects an Apple display by id; `None` shows all displays.
+     */
+    func selectDisplay(displayId: UInt32?) async throws 
+    
     func sendClipboard(text: String) async throws 
     
     func sendKey(down: Bool, keysym: UInt32) async throws 
@@ -676,6 +681,12 @@ public protocol RemoteSessionProtocol: AnyObject, Sendable {
     func setViewport(x: UInt16, y: UInt16, width: UInt16, height: UInt16) async throws 
     
     func size()  -> SessionSize?
+    
+    /**
+     * Requests `path` and materialises it below `root`; progress arrives as
+     * `SessionEvent.DownloadProgress` / `DownloadComplete`.
+     */
+    func startDownload(handle: UInt32, path: String, root: String) async throws 
     
     func startDragOut(handle: UInt32) async throws 
     
@@ -879,6 +890,25 @@ open func requestRefresh()async throws   {
         )
 }
     
+    /**
+     * Selects an Apple display by id; `None` shows all displays.
+     */
+open func selectDisplay(displayId: UInt32?)async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_rfb_ffi_fn_method_remotesession_select_display(
+                        self.uniffiCloneHandle(),FfiConverterOptionUInt32.lower(displayId)
+                )
+            },
+            pollFunc: ffi_rfb_ffi_rust_future_poll_void,
+            completeFunc: ffi_rfb_ffi_rust_future_complete_void,
+            freeFunc: ffi_rfb_ffi_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeSessionFailure_lift
+        )
+}
+    
 open func sendClipboard(text: String)async throws   {
     return
         try  await uniffiRustCallAsync(
@@ -963,6 +993,26 @@ open func size() -> SessionSize?  {
             self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
+}
+    
+    /**
+     * Requests `path` and materialises it below `root`; progress arrives as
+     * `SessionEvent.DownloadProgress` / `DownloadComplete`.
+     */
+open func startDownload(handle: UInt32, path: String, root: String)async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_rfb_ffi_fn_method_remotesession_start_download(
+                        self.uniffiCloneHandle(),FfiConverterUInt32.lower(handle),FfiConverterString.lower(path),FfiConverterString.lower(root)
+                )
+            },
+            pollFunc: ffi_rfb_ffi_rust_future_poll_void,
+            completeFunc: ffi_rfb_ffi_rust_future_complete_void,
+            freeFunc: ffi_rfb_ffi_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeSessionFailure_lift
+        )
 }
     
 open func startDragOut(handle: UInt32)async throws   {
@@ -1109,6 +1159,76 @@ public func FfiConverterTypeRemoteSession_lower(_ value: RemoteSession) -> UInt6
 
 
 
+public struct DisplayScreen: Equatable, Hashable {
+    public var id: UInt32
+    public var x: UInt16
+    public var y: UInt16
+    public var width: UInt16
+    public var height: UInt16
+    public var flags: UInt32
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(id: UInt32, x: UInt16, y: UInt16, width: UInt16, height: UInt16, flags: UInt32) {
+        self.id = id
+        self.x = x
+        self.y = y
+        self.width = width
+        self.height = height
+        self.flags = flags
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension DisplayScreen: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeDisplayScreen: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DisplayScreen {
+        return
+            try DisplayScreen(
+                id: FfiConverterUInt32.read(from: &buf), 
+                x: FfiConverterUInt16.read(from: &buf), 
+                y: FfiConverterUInt16.read(from: &buf), 
+                width: FfiConverterUInt16.read(from: &buf), 
+                height: FfiConverterUInt16.read(from: &buf), 
+                flags: FfiConverterUInt32.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: DisplayScreen, into buf: inout [UInt8]) {
+        FfiConverterUInt32.write(value.id, into: &buf)
+        FfiConverterUInt16.write(value.x, into: &buf)
+        FfiConverterUInt16.write(value.y, into: &buf)
+        FfiConverterUInt16.write(value.width, into: &buf)
+        FfiConverterUInt16.write(value.height, into: &buf)
+        FfiConverterUInt32.write(value.flags, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDisplayScreen_lift(_ buf: RustBuffer) throws -> DisplayScreen {
+    return try FfiConverterTypeDisplayScreen.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDisplayScreen_lower(_ value: DisplayScreen) -> RustBuffer {
+    return FfiConverterTypeDisplayScreen.lower(value)
+}
+
+
 /**
  * A key pair generated by the core for the app's key manager.
  */
@@ -1241,6 +1361,12 @@ public struct SessionConfig: Equatable, Hashable {
     public var localCursor: Bool
     public var quality: UInt8
     public var frameIntervalMs: UInt16
+    /**
+     * Full wg-quick text; when set the target is dialled through a userspace
+     * WireGuard tunnel (mutually exclusive with SSH).
+     */
+    public var wireguardConfig: String?
+    public var wireguardDnsFallback: Bool
     public var sshHost: String?
     public var sshPort: UInt16?
     public var sshUsername: String?
@@ -1249,7 +1375,11 @@ public struct SessionConfig: Equatable, Hashable {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(host: String, port: UInt16, username: String?, password: String?, shared: Bool, localCursor: Bool, quality: UInt8, frameIntervalMs: UInt16, sshHost: String?, sshPort: UInt16?, sshUsername: String?, sshAuth: SshAuthConfig?, sshHostKeyFingerprint: String?) {
+    public init(host: String, port: UInt16, username: String?, password: String?, shared: Bool, localCursor: Bool, quality: UInt8, frameIntervalMs: UInt16, 
+        /**
+         * Full wg-quick text; when set the target is dialled through a userspace
+         * WireGuard tunnel (mutually exclusive with SSH).
+         */wireguardConfig: String?, wireguardDnsFallback: Bool, sshHost: String?, sshPort: UInt16?, sshUsername: String?, sshAuth: SshAuthConfig?, sshHostKeyFingerprint: String?) {
         self.host = host
         self.port = port
         self.username = username
@@ -1258,6 +1388,8 @@ public struct SessionConfig: Equatable, Hashable {
         self.localCursor = localCursor
         self.quality = quality
         self.frameIntervalMs = frameIntervalMs
+        self.wireguardConfig = wireguardConfig
+        self.wireguardDnsFallback = wireguardDnsFallback
         self.sshHost = sshHost
         self.sshPort = sshPort
         self.sshUsername = sshUsername
@@ -1289,6 +1421,8 @@ public struct FfiConverterTypeSessionConfig: FfiConverterRustBuffer {
                 localCursor: FfiConverterBool.read(from: &buf), 
                 quality: FfiConverterUInt8.read(from: &buf), 
                 frameIntervalMs: FfiConverterUInt16.read(from: &buf), 
+                wireguardConfig: FfiConverterOptionString.read(from: &buf), 
+                wireguardDnsFallback: FfiConverterBool.read(from: &buf), 
                 sshHost: FfiConverterOptionString.read(from: &buf), 
                 sshPort: FfiConverterOptionUInt16.read(from: &buf), 
                 sshUsername: FfiConverterOptionString.read(from: &buf), 
@@ -1306,6 +1440,8 @@ public struct FfiConverterTypeSessionConfig: FfiConverterRustBuffer {
         FfiConverterBool.write(value.localCursor, into: &buf)
         FfiConverterUInt8.write(value.quality, into: &buf)
         FfiConverterUInt16.write(value.frameIntervalMs, into: &buf)
+        FfiConverterOptionString.write(value.wireguardConfig, into: &buf)
+        FfiConverterBool.write(value.wireguardDnsFallback, into: &buf)
         FfiConverterOptionString.write(value.sshHost, into: &buf)
         FfiConverterOptionUInt16.write(value.sshPort, into: &buf)
         FfiConverterOptionString.write(value.sshUsername, into: &buf)
@@ -1487,6 +1623,8 @@ public enum SessionEvent: Equatable, Hashable {
     )
     case resized(width: UInt16, height: UInt16
     )
+    case desktopLayout(width: UInt16, height: UInt16, screens: [DisplayScreen]
+    )
     case clipboard(text: String
     )
     case bell
@@ -1499,6 +1637,10 @@ public enum SessionEvent: Equatable, Hashable {
     case dragInfo(handle: UInt32, pasteboard: Data
     )
     case fileTransfer(subtype: UInt16, handle: UInt32, payload: Data
+    )
+    case downloadProgress(handle: UInt32, name: String?, bytes: UInt64, total: UInt64
+    )
+    case downloadComplete(handle: UInt32, files: UInt32, directories: UInt32, bytes: UInt64, error: String?
     )
     case disconnected(reason: String
     )
@@ -1532,27 +1674,36 @@ public struct FfiConverterTypeSessionEvent: FfiConverterRustBuffer {
         case 3: return .resized(width: try FfiConverterUInt16.read(from: &buf), height: try FfiConverterUInt16.read(from: &buf)
         )
         
-        case 4: return .clipboard(text: try FfiConverterString.read(from: &buf)
+        case 4: return .desktopLayout(width: try FfiConverterUInt16.read(from: &buf), height: try FfiConverterUInt16.read(from: &buf), screens: try FfiConverterSequenceTypeDisplayScreen.read(from: &buf)
         )
         
-        case 5: return .bell
-        
-        case 6: return .cursor(hotspotX: try FfiConverterUInt16.read(from: &buf), hotspotY: try FfiConverterUInt16.read(from: &buf), width: try FfiConverterUInt16.read(from: &buf), height: try FfiConverterUInt16.read(from: &buf), pixels: try FfiConverterData.read(from: &buf)
+        case 5: return .clipboard(text: try FfiConverterString.read(from: &buf)
         )
         
-        case 7: return .pointerPosition(x: try FfiConverterUInt16.read(from: &buf), y: try FfiConverterUInt16.read(from: &buf)
+        case 6: return .bell
+        
+        case 7: return .cursor(hotspotX: try FfiConverterUInt16.read(from: &buf), hotspotY: try FfiConverterUInt16.read(from: &buf), width: try FfiConverterUInt16.read(from: &buf), height: try FfiConverterUInt16.read(from: &buf), pixels: try FfiConverterData.read(from: &buf)
         )
         
-        case 8: return .uploadRequest(handle: try FfiConverterUInt32.read(from: &buf), path: try FfiConverterString.read(from: &buf)
+        case 8: return .pointerPosition(x: try FfiConverterUInt16.read(from: &buf), y: try FfiConverterUInt16.read(from: &buf)
         )
         
-        case 9: return .dragInfo(handle: try FfiConverterUInt32.read(from: &buf), pasteboard: try FfiConverterData.read(from: &buf)
+        case 9: return .uploadRequest(handle: try FfiConverterUInt32.read(from: &buf), path: try FfiConverterString.read(from: &buf)
         )
         
-        case 10: return .fileTransfer(subtype: try FfiConverterUInt16.read(from: &buf), handle: try FfiConverterUInt32.read(from: &buf), payload: try FfiConverterData.read(from: &buf)
+        case 10: return .dragInfo(handle: try FfiConverterUInt32.read(from: &buf), pasteboard: try FfiConverterData.read(from: &buf)
         )
         
-        case 11: return .disconnected(reason: try FfiConverterString.read(from: &buf)
+        case 11: return .fileTransfer(subtype: try FfiConverterUInt16.read(from: &buf), handle: try FfiConverterUInt32.read(from: &buf), payload: try FfiConverterData.read(from: &buf)
+        )
+        
+        case 12: return .downloadProgress(handle: try FfiConverterUInt32.read(from: &buf), name: try FfiConverterOptionString.read(from: &buf), bytes: try FfiConverterUInt64.read(from: &buf), total: try FfiConverterUInt64.read(from: &buf)
+        )
+        
+        case 13: return .downloadComplete(handle: try FfiConverterUInt32.read(from: &buf), files: try FfiConverterUInt32.read(from: &buf), directories: try FfiConverterUInt32.read(from: &buf), bytes: try FfiConverterUInt64.read(from: &buf), error: try FfiConverterOptionString.read(from: &buf)
+        )
+        
+        case 14: return .disconnected(reason: try FfiConverterString.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -1582,17 +1733,24 @@ public struct FfiConverterTypeSessionEvent: FfiConverterRustBuffer {
             FfiConverterUInt16.write(height, into: &buf)
             
         
-        case let .clipboard(text):
+        case let .desktopLayout(width,height,screens):
             writeInt(&buf, Int32(4))
+            FfiConverterUInt16.write(width, into: &buf)
+            FfiConverterUInt16.write(height, into: &buf)
+            FfiConverterSequenceTypeDisplayScreen.write(screens, into: &buf)
+            
+        
+        case let .clipboard(text):
+            writeInt(&buf, Int32(5))
             FfiConverterString.write(text, into: &buf)
             
         
         case .bell:
-            writeInt(&buf, Int32(5))
+            writeInt(&buf, Int32(6))
         
         
         case let .cursor(hotspotX,hotspotY,width,height,pixels):
-            writeInt(&buf, Int32(6))
+            writeInt(&buf, Int32(7))
             FfiConverterUInt16.write(hotspotX, into: &buf)
             FfiConverterUInt16.write(hotspotY, into: &buf)
             FfiConverterUInt16.write(width, into: &buf)
@@ -1601,32 +1759,49 @@ public struct FfiConverterTypeSessionEvent: FfiConverterRustBuffer {
             
         
         case let .pointerPosition(x,y):
-            writeInt(&buf, Int32(7))
+            writeInt(&buf, Int32(8))
             FfiConverterUInt16.write(x, into: &buf)
             FfiConverterUInt16.write(y, into: &buf)
             
         
         case let .uploadRequest(handle,path):
-            writeInt(&buf, Int32(8))
+            writeInt(&buf, Int32(9))
             FfiConverterUInt32.write(handle, into: &buf)
             FfiConverterString.write(path, into: &buf)
             
         
         case let .dragInfo(handle,pasteboard):
-            writeInt(&buf, Int32(9))
+            writeInt(&buf, Int32(10))
             FfiConverterUInt32.write(handle, into: &buf)
             FfiConverterData.write(pasteboard, into: &buf)
             
         
         case let .fileTransfer(subtype,handle,payload):
-            writeInt(&buf, Int32(10))
+            writeInt(&buf, Int32(11))
             FfiConverterUInt16.write(subtype, into: &buf)
             FfiConverterUInt32.write(handle, into: &buf)
             FfiConverterData.write(payload, into: &buf)
             
         
+        case let .downloadProgress(handle,name,bytes,total):
+            writeInt(&buf, Int32(12))
+            FfiConverterUInt32.write(handle, into: &buf)
+            FfiConverterOptionString.write(name, into: &buf)
+            FfiConverterUInt64.write(bytes, into: &buf)
+            FfiConverterUInt64.write(total, into: &buf)
+            
+        
+        case let .downloadComplete(handle,files,directories,bytes,error):
+            writeInt(&buf, Int32(13))
+            FfiConverterUInt32.write(handle, into: &buf)
+            FfiConverterUInt32.write(files, into: &buf)
+            FfiConverterUInt32.write(directories, into: &buf)
+            FfiConverterUInt64.write(bytes, into: &buf)
+            FfiConverterOptionString.write(error, into: &buf)
+            
+        
         case let .disconnected(reason):
-            writeInt(&buf, Int32(11))
+            writeInt(&buf, Int32(14))
             FfiConverterString.write(reason, into: &buf)
             
         }
@@ -1969,6 +2144,30 @@ fileprivate struct FfiConverterOptionUInt16: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionUInt32: FfiConverterRustBuffer {
+    typealias SwiftType = UInt32?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterUInt32.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterUInt32.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionString: FfiConverterRustBuffer {
     typealias SwiftType = String?
 
@@ -2130,6 +2329,31 @@ fileprivate struct FfiConverterSequenceString: FfiConverterRustBuffer {
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterString.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeDisplayScreen: FfiConverterRustBuffer {
+    typealias SwiftType = [DisplayScreen]
+
+    public static func write(_ value: [DisplayScreen], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeDisplayScreen.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [DisplayScreen] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [DisplayScreen]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeDisplayScreen.read(from: &buf))
         }
         return seq
     }
@@ -2334,6 +2558,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_rfb_ffi_checksum_method_remotesession_request_refresh() != 18496) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_rfb_ffi_checksum_method_remotesession_select_display() != 55335) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_rfb_ffi_checksum_method_remotesession_send_clipboard() != 53268) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -2350,6 +2577,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_rfb_ffi_checksum_method_remotesession_size() != 45230) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_rfb_ffi_checksum_method_remotesession_start_download() != 54632) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_rfb_ffi_checksum_method_remotesession_start_drag_out() != 1458) {

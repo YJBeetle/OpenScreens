@@ -712,6 +712,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Int
     external fun uniffi_rfb_ffi_checksum_method_remotesession_request_refresh(
     ): Int
+    external fun uniffi_rfb_ffi_checksum_method_remotesession_select_display(
+    ): Int
     external fun uniffi_rfb_ffi_checksum_method_remotesession_send_clipboard(
     ): Int
     external fun uniffi_rfb_ffi_checksum_method_remotesession_send_key(
@@ -723,6 +725,8 @@ internal object IntegrityCheckingUniffiLib {
     external fun uniffi_rfb_ffi_checksum_method_remotesession_set_viewport(
     ): Int
     external fun uniffi_rfb_ffi_checksum_method_remotesession_size(
+    ): Int
+    external fun uniffi_rfb_ffi_checksum_method_remotesession_start_download(
     ): Int
     external fun uniffi_rfb_ffi_checksum_method_remotesession_start_drag_out(
     ): Int
@@ -780,6 +784,8 @@ internal object UniffiLib {
     ): Long
     external fun uniffi_rfb_ffi_fn_method_remotesession_request_refresh(`ptr`: Long,
     ): Long
+    external fun uniffi_rfb_ffi_fn_method_remotesession_select_display(`ptr`: Long,`displayId`: RustBuffer.ByValue,
+    ): Long
     external fun uniffi_rfb_ffi_fn_method_remotesession_send_clipboard(`ptr`: Long,`text`: RustBuffer.ByValue,
     ): Long
     external fun uniffi_rfb_ffi_fn_method_remotesession_send_key(`ptr`: Long,`down`: Byte,`keysym`: Int,
@@ -792,6 +798,8 @@ internal object UniffiLib {
     ): Long
     external fun uniffi_rfb_ffi_fn_method_remotesession_size(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
+    external fun uniffi_rfb_ffi_fn_method_remotesession_start_download(`ptr`: Long,`handle`: Int,`path`: RustBuffer.ByValue,`root`: RustBuffer.ByValue,
+    ): Long
     external fun uniffi_rfb_ffi_fn_method_remotesession_start_drag_out(`ptr`: Long,`handle`: Int,
     ): Long
     external fun uniffi_rfb_ffi_fn_method_remotesession_upload_complete(`ptr`: Long,`handle`: Int,
@@ -982,6 +990,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if ((lib.uniffi_rfb_ffi_checksum_method_remotesession_request_refresh() and 0xFFFF) != 18496) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if ((lib.uniffi_rfb_ffi_checksum_method_remotesession_select_display() and 0xFFFF) != 55335) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if ((lib.uniffi_rfb_ffi_checksum_method_remotesession_send_clipboard() and 0xFFFF) != 53268) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -998,6 +1009,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_rfb_ffi_checksum_method_remotesession_size() and 0xFFFF) != 45230) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_rfb_ffi_checksum_method_remotesession_start_download() and 0xFFFF) != 54632) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_rfb_ffi_checksum_method_remotesession_start_drag_out() and 0xFFFF) != 1458) {
@@ -1564,6 +1578,11 @@ public interface RemoteSessionInterface {
     
     suspend fun `requestRefresh`()
     
+    /**
+     * Selects an Apple display by id; `None` shows all displays.
+     */
+    suspend fun `selectDisplay`(`displayId`: kotlin.UInt?)
+    
     suspend fun `sendClipboard`(`text`: kotlin.String)
     
     suspend fun `sendKey`(`down`: kotlin.Boolean, `keysym`: kotlin.UInt)
@@ -1579,6 +1598,12 @@ public interface RemoteSessionInterface {
     suspend fun `setViewport`(`x`: kotlin.UShort, `y`: kotlin.UShort, `width`: kotlin.UShort, `height`: kotlin.UShort)
     
     fun `size`(): SessionSize?
+    
+    /**
+     * Requests `path` and materialises it below `root`; progress arrives as
+     * `SessionEvent.DownloadProgress` / `DownloadComplete`.
+     */
+    suspend fun `startDownload`(`handle`: kotlin.UInt, `path`: kotlin.String, `root`: kotlin.String)
     
     suspend fun `startDragOut`(`handle`: kotlin.UInt)
     
@@ -1862,6 +1887,32 @@ open class RemoteSession: Disposable, AutoCloseable, RemoteSessionInterface
     }
 
     
+    /**
+     * Selects an Apple display by id; `None` shows all displays.
+     */
+    @Throws(SessionFailure::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `selectDisplay`(`displayId`: kotlin.UInt?) {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_rfb_ffi_fn_method_remotesession_select_display(
+                uniffiHandle,
+                
+        FfiConverterOptionalUInt.lower(`displayId`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_rfb_ffi_rust_future_poll_void(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_rfb_ffi_rust_future_complete_void(future, continuation) },
+        { future -> UniffiLib.ffi_rfb_ffi_rust_future_free_void(future) },
+        // lift function
+        { },
+        
+        // Error FFI converter
+        SessionFailure.ErrorHandler,
+    )
+    }
+
+    
     @Throws(SessionFailure::class)
     @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
     override suspend fun `sendClipboard`(`text`: kotlin.String) {
@@ -1988,6 +2039,35 @@ open class RemoteSession: Disposable, AutoCloseable, RemoteSessionInterface
     )
     }
     
+
+    
+    /**
+     * Requests `path` and materialises it below `root`; progress arrives as
+     * `SessionEvent.DownloadProgress` / `DownloadComplete`.
+     */
+    @Throws(SessionFailure::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `startDownload`(`handle`: kotlin.UInt, `path`: kotlin.String, `root`: kotlin.String) {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_rfb_ffi_fn_method_remotesession_start_download(
+                uniffiHandle,
+                
+        FfiConverterUInt.lower(`handle`),
+        FfiConverterString.lower(`path`),
+        FfiConverterString.lower(`root`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_rfb_ffi_rust_future_poll_void(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_rfb_ffi_rust_future_complete_void(future, continuation) },
+        { future -> UniffiLib.ffi_rfb_ffi_rust_future_free_void(future) },
+        // lift function
+        { },
+        
+        // Error FFI converter
+        SessionFailure.ErrorHandler,
+    )
+    }
 
     
     @Throws(SessionFailure::class)
@@ -2188,6 +2268,64 @@ public object FfiConverterTypeRemoteSession: FfiConverter<RemoteSession, Long> {
 
 
 
+data class DisplayScreen (
+    var `id`: kotlin.UInt
+    , 
+    var `x`: kotlin.UShort
+    , 
+    var `y`: kotlin.UShort
+    , 
+    var `width`: kotlin.UShort
+    , 
+    var `height`: kotlin.UShort
+    , 
+    var `flags`: kotlin.UInt
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeDisplayScreen: FfiConverterRustBuffer<DisplayScreen> {
+    override fun read(buf: ByteBuffer): DisplayScreen {
+        return DisplayScreen(
+            FfiConverterUInt.read(buf),
+            FfiConverterUShort.read(buf),
+            FfiConverterUShort.read(buf),
+            FfiConverterUShort.read(buf),
+            FfiConverterUShort.read(buf),
+            FfiConverterUInt.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: DisplayScreen) = (
+            FfiConverterUInt.allocationSize(value.`id`) +
+            FfiConverterUShort.allocationSize(value.`x`) +
+            FfiConverterUShort.allocationSize(value.`y`) +
+            FfiConverterUShort.allocationSize(value.`width`) +
+            FfiConverterUShort.allocationSize(value.`height`) +
+            FfiConverterUInt.allocationSize(value.`flags`)
+    )
+
+    override fun write(value: DisplayScreen, buf: ByteBuffer) {
+            FfiConverterUInt.write(value.`id`, buf)
+            FfiConverterUShort.write(value.`x`, buf)
+            FfiConverterUShort.write(value.`y`, buf)
+            FfiConverterUShort.write(value.`width`, buf)
+            FfiConverterUShort.write(value.`height`, buf)
+            FfiConverterUInt.write(value.`flags`, buf)
+    }
+}
+
+
+
 /**
  * A key pair generated by the core for the app's key manager.
  */
@@ -2299,6 +2437,14 @@ data class SessionConfig (
     , 
     var `frameIntervalMs`: kotlin.UShort
     , 
+    /**
+     * Full wg-quick text; when set the target is dialled through a userspace
+     * WireGuard tunnel (mutually exclusive with SSH).
+     */
+    var `wireguardConfig`: kotlin.String?
+    , 
+    var `wireguardDnsFallback`: kotlin.Boolean
+    , 
     var `sshHost`: kotlin.String?
     , 
     var `sshPort`: kotlin.UShort?
@@ -2333,6 +2479,8 @@ public object FfiConverterTypeSessionConfig: FfiConverterRustBuffer<SessionConfi
             FfiConverterUByte.read(buf),
             FfiConverterUShort.read(buf),
             FfiConverterOptionalString.read(buf),
+            FfiConverterBoolean.read(buf),
+            FfiConverterOptionalString.read(buf),
             FfiConverterOptionalUShort.read(buf),
             FfiConverterOptionalString.read(buf),
             FfiConverterOptionalTypeSshAuthConfig.read(buf),
@@ -2349,6 +2497,8 @@ public object FfiConverterTypeSessionConfig: FfiConverterRustBuffer<SessionConfi
             FfiConverterBoolean.allocationSize(value.`localCursor`) +
             FfiConverterUByte.allocationSize(value.`quality`) +
             FfiConverterUShort.allocationSize(value.`frameIntervalMs`) +
+            FfiConverterOptionalString.allocationSize(value.`wireguardConfig`) +
+            FfiConverterBoolean.allocationSize(value.`wireguardDnsFallback`) +
             FfiConverterOptionalString.allocationSize(value.`sshHost`) +
             FfiConverterOptionalUShort.allocationSize(value.`sshPort`) +
             FfiConverterOptionalString.allocationSize(value.`sshUsername`) +
@@ -2365,6 +2515,8 @@ public object FfiConverterTypeSessionConfig: FfiConverterRustBuffer<SessionConfi
             FfiConverterBoolean.write(value.`localCursor`, buf)
             FfiConverterUByte.write(value.`quality`, buf)
             FfiConverterUShort.write(value.`frameIntervalMs`, buf)
+            FfiConverterOptionalString.write(value.`wireguardConfig`, buf)
+            FfiConverterBoolean.write(value.`wireguardDnsFallback`, buf)
             FfiConverterOptionalString.write(value.`sshHost`, buf)
             FfiConverterOptionalUShort.write(value.`sshPort`, buf)
             FfiConverterOptionalString.write(value.`sshUsername`, buf)
@@ -2534,6 +2686,17 @@ sealed class SessionEvent {
         companion object
     }
     
+    data class DesktopLayout(
+        val `width`: kotlin.UShort, 
+        val `height`: kotlin.UShort, 
+        val `screens`: List<uniffi.rfb_ffi.DisplayScreen>) : SessionEvent()
+        
+    {
+        
+
+        companion object
+    }
+    
     data class Clipboard(
         val `text`: kotlin.String) : SessionEvent()
         
@@ -2600,6 +2763,31 @@ sealed class SessionEvent {
         companion object
     }
     
+    data class DownloadProgress(
+        val `handle`: kotlin.UInt, 
+        val `name`: kotlin.String?, 
+        val `bytes`: kotlin.ULong, 
+        val `total`: kotlin.ULong) : SessionEvent()
+        
+    {
+        
+
+        companion object
+    }
+    
+    data class DownloadComplete(
+        val `handle`: kotlin.UInt, 
+        val `files`: kotlin.UInt, 
+        val `directories`: kotlin.UInt, 
+        val `bytes`: kotlin.ULong, 
+        val `error`: kotlin.String?) : SessionEvent()
+        
+    {
+        
+
+        companion object
+    }
+    
     data class Disconnected(
         val `reason`: kotlin.String) : SessionEvent()
         
@@ -2638,35 +2826,53 @@ public object FfiConverterTypeSessionEvent : FfiConverterRustBuffer<SessionEvent
                 FfiConverterUShort.read(buf),
                 FfiConverterUShort.read(buf),
                 )
-            4 -> SessionEvent.Clipboard(
+            4 -> SessionEvent.DesktopLayout(
+                FfiConverterUShort.read(buf),
+                FfiConverterUShort.read(buf),
+                FfiConverterSequenceTypeDisplayScreen.read(buf),
+                )
+            5 -> SessionEvent.Clipboard(
                 FfiConverterString.read(buf),
                 )
-            5 -> SessionEvent.Bell
-            6 -> SessionEvent.Cursor(
+            6 -> SessionEvent.Bell
+            7 -> SessionEvent.Cursor(
                 FfiConverterUShort.read(buf),
                 FfiConverterUShort.read(buf),
                 FfiConverterUShort.read(buf),
                 FfiConverterUShort.read(buf),
                 FfiConverterByteArray.read(buf),
                 )
-            7 -> SessionEvent.PointerPosition(
+            8 -> SessionEvent.PointerPosition(
                 FfiConverterUShort.read(buf),
                 FfiConverterUShort.read(buf),
                 )
-            8 -> SessionEvent.UploadRequest(
+            9 -> SessionEvent.UploadRequest(
                 FfiConverterUInt.read(buf),
                 FfiConverterString.read(buf),
                 )
-            9 -> SessionEvent.DragInfo(
+            10 -> SessionEvent.DragInfo(
                 FfiConverterUInt.read(buf),
                 FfiConverterByteArray.read(buf),
                 )
-            10 -> SessionEvent.FileTransfer(
+            11 -> SessionEvent.FileTransfer(
                 FfiConverterUShort.read(buf),
                 FfiConverterUInt.read(buf),
                 FfiConverterByteArray.read(buf),
                 )
-            11 -> SessionEvent.Disconnected(
+            12 -> SessionEvent.DownloadProgress(
+                FfiConverterUInt.read(buf),
+                FfiConverterOptionalString.read(buf),
+                FfiConverterULong.read(buf),
+                FfiConverterULong.read(buf),
+                )
+            13 -> SessionEvent.DownloadComplete(
+                FfiConverterUInt.read(buf),
+                FfiConverterUInt.read(buf),
+                FfiConverterUInt.read(buf),
+                FfiConverterULong.read(buf),
+                FfiConverterOptionalString.read(buf),
+                )
+            14 -> SessionEvent.Disconnected(
                 FfiConverterString.read(buf),
                 )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
@@ -2697,6 +2903,15 @@ public object FfiConverterTypeSessionEvent : FfiConverterRustBuffer<SessionEvent
                 4UL
                 + FfiConverterUShort.allocationSize(value.`width`)
                 + FfiConverterUShort.allocationSize(value.`height`)
+            )
+        }
+        is SessionEvent.DesktopLayout -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterUShort.allocationSize(value.`width`)
+                + FfiConverterUShort.allocationSize(value.`height`)
+                + FfiConverterSequenceTypeDisplayScreen.allocationSize(value.`screens`)
             )
         }
         is SessionEvent.Clipboard -> {
@@ -2756,6 +2971,27 @@ public object FfiConverterTypeSessionEvent : FfiConverterRustBuffer<SessionEvent
                 + FfiConverterByteArray.allocationSize(value.`payload`)
             )
         }
+        is SessionEvent.DownloadProgress -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterUInt.allocationSize(value.`handle`)
+                + FfiConverterOptionalString.allocationSize(value.`name`)
+                + FfiConverterULong.allocationSize(value.`bytes`)
+                + FfiConverterULong.allocationSize(value.`total`)
+            )
+        }
+        is SessionEvent.DownloadComplete -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterUInt.allocationSize(value.`handle`)
+                + FfiConverterUInt.allocationSize(value.`files`)
+                + FfiConverterUInt.allocationSize(value.`directories`)
+                + FfiConverterULong.allocationSize(value.`bytes`)
+                + FfiConverterOptionalString.allocationSize(value.`error`)
+            )
+        }
         is SessionEvent.Disconnected -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
@@ -2786,17 +3022,24 @@ public object FfiConverterTypeSessionEvent : FfiConverterRustBuffer<SessionEvent
                 FfiConverterUShort.write(value.`height`, buf)
                 Unit
             }
-            is SessionEvent.Clipboard -> {
+            is SessionEvent.DesktopLayout -> {
                 buf.putInt(4)
+                FfiConverterUShort.write(value.`width`, buf)
+                FfiConverterUShort.write(value.`height`, buf)
+                FfiConverterSequenceTypeDisplayScreen.write(value.`screens`, buf)
+                Unit
+            }
+            is SessionEvent.Clipboard -> {
+                buf.putInt(5)
                 FfiConverterString.write(value.`text`, buf)
                 Unit
             }
             is SessionEvent.Bell -> {
-                buf.putInt(5)
+                buf.putInt(6)
                 Unit
             }
             is SessionEvent.Cursor -> {
-                buf.putInt(6)
+                buf.putInt(7)
                 FfiConverterUShort.write(value.`hotspotX`, buf)
                 FfiConverterUShort.write(value.`hotspotY`, buf)
                 FfiConverterUShort.write(value.`width`, buf)
@@ -2805,32 +3048,49 @@ public object FfiConverterTypeSessionEvent : FfiConverterRustBuffer<SessionEvent
                 Unit
             }
             is SessionEvent.PointerPosition -> {
-                buf.putInt(7)
+                buf.putInt(8)
                 FfiConverterUShort.write(value.`x`, buf)
                 FfiConverterUShort.write(value.`y`, buf)
                 Unit
             }
             is SessionEvent.UploadRequest -> {
-                buf.putInt(8)
+                buf.putInt(9)
                 FfiConverterUInt.write(value.`handle`, buf)
                 FfiConverterString.write(value.`path`, buf)
                 Unit
             }
             is SessionEvent.DragInfo -> {
-                buf.putInt(9)
+                buf.putInt(10)
                 FfiConverterUInt.write(value.`handle`, buf)
                 FfiConverterByteArray.write(value.`pasteboard`, buf)
                 Unit
             }
             is SessionEvent.FileTransfer -> {
-                buf.putInt(10)
+                buf.putInt(11)
                 FfiConverterUShort.write(value.`subtype`, buf)
                 FfiConverterUInt.write(value.`handle`, buf)
                 FfiConverterByteArray.write(value.`payload`, buf)
                 Unit
             }
+            is SessionEvent.DownloadProgress -> {
+                buf.putInt(12)
+                FfiConverterUInt.write(value.`handle`, buf)
+                FfiConverterOptionalString.write(value.`name`, buf)
+                FfiConverterULong.write(value.`bytes`, buf)
+                FfiConverterULong.write(value.`total`, buf)
+                Unit
+            }
+            is SessionEvent.DownloadComplete -> {
+                buf.putInt(13)
+                FfiConverterUInt.write(value.`handle`, buf)
+                FfiConverterUInt.write(value.`files`, buf)
+                FfiConverterUInt.write(value.`directories`, buf)
+                FfiConverterULong.write(value.`bytes`, buf)
+                FfiConverterOptionalString.write(value.`error`, buf)
+                Unit
+            }
             is SessionEvent.Disconnected -> {
-                buf.putInt(11)
+                buf.putInt(14)
                 FfiConverterString.write(value.`reason`, buf)
                 Unit
             }
@@ -3145,6 +3405,38 @@ public object FfiConverterOptionalUShort: FfiConverterRustBuffer<kotlin.UShort?>
 /**
  * @suppress
  */
+public object FfiConverterOptionalUInt: FfiConverterRustBuffer<kotlin.UInt?> {
+    override fun read(buf: ByteBuffer): kotlin.UInt? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterUInt.read(buf)
+    }
+
+    override fun allocationSize(value: kotlin.UInt?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterUInt.allocationSize(value)
+        }
+    }
+
+    override fun write(value: kotlin.UInt?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterUInt.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
 public object FfiConverterOptionalString: FfiConverterRustBuffer<kotlin.String?> {
     override fun read(buf: ByteBuffer): kotlin.String? {
         if (buf.get().toInt() == 0) {
@@ -3355,6 +3647,34 @@ public object FfiConverterSequenceString: FfiConverterRustBuffer<List<kotlin.Str
         buf.putInt(value.size)
         value.iterator().forEach {
             FfiConverterString.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceTypeDisplayScreen: FfiConverterRustBuffer<List<DisplayScreen>> {
+    override fun read(buf: ByteBuffer): List<DisplayScreen> {
+        val len = buf.getInt()
+        return List<DisplayScreen>(len) {
+            FfiConverterTypeDisplayScreen.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<DisplayScreen>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeDisplayScreen.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<DisplayScreen>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeDisplayScreen.write(it, buf)
         }
     }
 }

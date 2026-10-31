@@ -383,34 +383,32 @@ class UniFfiRemoteSession(
         val alignedHeight = alignedBottom - alignedTop
 
         val request = frameMutex.withLock {
-            if (alignedLeft == viewportX && alignedTop == viewportY &&
+            val unchanged = alignedLeft == viewportX && alignedTop == viewportY &&
                 alignedWidth == viewportWidth && alignedHeight == viewportHeight &&
                 scale == displayScale && front != null
-            ) {
-                return
-            }
-
-            if (!installViewport(
-                    serverWidth,
-                    serverHeight,
-                    alignedLeft,
-                    alignedTop,
-                    alignedWidth,
-                    alignedHeight,
-                    scale,
+            if (!unchanged) {
+                if (!installViewport(
+                        serverWidth,
+                        serverHeight,
+                        alignedLeft,
+                        alignedTop,
+                        alignedWidth,
+                        alignedHeight,
+                        scale,
+                    )
+                ) {
+                    _events.emit(
+                        SessionEvent.Failed("Not enough memory for the visible screen area."),
+                    )
+                    return
+                }
+                viewportEmitted = false
+                Log.d(
+                    TAG,
+                    "viewport ${alignedLeft},${alignedTop} ${alignedWidth}x$alignedHeight " +
+                        "sampling 1/$scale",
                 )
-            ) {
-                _events.emit(
-                    SessionEvent.Failed("Not enough memory for the visible screen area."),
-                )
-                return
             }
-            viewportEmitted = false
-            Log.d(
-                TAG,
-                "viewport ${alignedLeft},${alignedTop} ${alignedWidth}x$alignedHeight " +
-                    "sampling 1/$scale",
-            )
             intArrayOf(alignedLeft, alignedTop, alignedWidth, alignedHeight)
         }
 

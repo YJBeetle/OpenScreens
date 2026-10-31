@@ -1,6 +1,10 @@
 import OpenScreensCanvas
 import SwiftUI
 
+#if os(macOS)
+import AppKit
+#endif
+
 /// Full-screen remote session chrome shared by macOS and iOS.
 public struct SessionScreen: View {
     @Environment(SettingsStore.self) private var settings
@@ -13,6 +17,7 @@ public struct SessionScreen: View {
 
     #if os(macOS)
     @FocusState private var keyboardFocused: Bool
+    @State private var hidesSystemCursor = false
     #endif
 
     public init(
@@ -34,6 +39,7 @@ public struct SessionScreen: View {
                 .ignoresSafeArea()
                 .accessibilityHidden(true)
 
+            cursorOverlay
             pointerSurface
             hardwareKeyboardLayer
 
@@ -55,6 +61,14 @@ public struct SessionScreen: View {
         }
         .onDisappear {
             model.stop()
+            #if os(macOS)
+            showSystemCursor()
+            #endif
+        }
+        .onChange(of: model.state.isConnected) { _, connected in
+            #if os(macOS)
+            if !connected { showSystemCursor() }
+            #endif
         }
         .confirmationDialog(
             "Disconnect from “\(model.profile.name)”?",
@@ -72,29 +86,62 @@ public struct SessionScreen: View {
 
     // MARK: - Layers
 
+    private struct CursorPlacement {
+        var image: CGImage
+        var size: CGSize
+        var center: CGPoint
+    }
+
+    /// Client-side pointer bitmap, positioned over the scaled framebuffer.
+    private var cursorOverlay: some View {
+        GeometryReader { proxy in
+            if let placement = cursorPlacement(in: proxy.size) {
+                Image(decorative: placement.image, scale: 1)
+                    .resizable()
+                    .interpolation(.none)
+                    .frame(width: placement.size.width, height: placement.size.height)
+                    .position(placement.center)
+            }
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
+    private func cursorPlacement(in viewSize: CGSize) -> CursorPlacement? {
+        guard model.state.isConnected,
+              let image = model.remoteCursorImage,
+              let shape = model.remoteCursorShape,
+              let rect = model.remoteImageRect(in: viewSize),
+              let frame = model.frameSize,
+              frame.width > 0, frame.height > 0
+        else { return nil }
+
+        let scale = rect.width / frame.width
+        let cursorSize = CGSize(
+            width: CGFloat(shape.width) * scale,
+            height: CGFloat(shape.height) * scale
+        )
+        let anchorX = rect.minX + model.remoteCursor.x * rect.width
+        let anchorY = rect.minY + model.remoteCursor.y * rect.height
+        let left = anchorX - CGFloat(shape.hotspotX) * scale
+        let top = anchorY - CGFloat(shape.hotspotY) * scale
+        let center = CGPoint(
+            x: left + cursorSize.width / 2,
+            y: top + cursorSize.height / 2
+        )
+        return CursorPlacement(image: image, size: cursorSize, center: center)
+    }
+
     private var pointerSurface: some View {
         GeometryReader { proxy in
             Color.clear
                 .contentShape(Rectangle())
-                .gesture(
-                    DragGesture(minimumDistance: 0)
-                        .onChanged { value in
-                            let dx = value.translation.width
-                            let dy = value.translation.height
-                            if (dx * dx + dy * dy).squareRoot() > 3 {
-                                model.drag(to: value.location, in: proxy.size)
-                            }
-                        }
-                        .onEnded { value in
-                            let dx = value.translation.width
-                            let dy = value.translation.height
-                            if (dx * dx + dy * dy).squareRoot() <= 6 {
-                                model.tap(at: value.location, in: proxy.size)
-                            }
-                            model.endDrag()
-                            focusHardwareKeyboard()
-                        }
-                )
+                .gesture(dragGesture(in: proxy.size))
+                #if os(macOS)
+                .onContinuousHover { phase in
+                    handleHover(phase, in: proxy.size)
+                }
+                #endif
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Remote screen for \(model.profile.name)")
@@ -107,6 +154,40 @@ public struct SessionScreen: View {
             model.toggleObserveMode()
         }
     }
+
+    private func dragGesture(in size: CGSize) -> some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { value in
+                let dx = value.translation.width
+                let dy = value.translation.height
+                if (dx * dx + dy * dy).squareRoot() > 3 {
+                    model.drag(to: value.location, in: size)
+                }
+            }
+            .onEnded { value in
+                let dx = value.translation.width
+                let dy = value.translation.height
+                if (dx * dx + dy * dy).squareRoot() <= 6 {
+                    model.tap(at: value.location, in: size)
+                }
+                model.endDrag()
+                focusHardwareKeyboard()
+            }
+    }
+
+    #if os(macOS)
+    private func handleHover(_ phase: HoverPhase, in size: CGSize) {
+        switch phase {
+        case .active(let location):
+            model.hover(at: location, in: size)
+            hideSystemCursorIfNeeded()
+        case .ended:
+            showSystemCursor()
+        @unknown default:
+            break
+        }
+    }
+    #endif
 
     @ViewBuilder
     private var hardwareKeyboardLayer: some View {
@@ -371,6 +452,20 @@ public struct SessionScreen: View {
         }
         #endif
     }
+
+    #if os(macOS)
+    private func hideSystemCursorIfNeeded() {
+        guard model.remoteCursorImage != nil, !hidesSystemCursor else { return }
+        NSCursor.hide()
+        hidesSystemCursor = true
+    }
+
+    private func showSystemCursor() {
+        guard hidesSystemCursor else { return }
+        NSCursor.unhide()
+        hidesSystemCursor = false
+    }
+    #endif
 
     // MARK: - Hardware keyboard (macOS)
 

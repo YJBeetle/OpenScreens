@@ -107,12 +107,21 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
             sshFingerprint = fingerprint.isEmpty ? nil : fingerprint
         }
 
+        // macOS draws the pointer client-side; on touch platforms the remote
+        // server keeps compositing it into the framebuffer.
+        #if os(macOS)
+        let localCursor = true
+        #else
+        let localCursor = false
+        #endif
+
         let config = OpenScreensCore.SessionConfig(
             host: profile.trimmedHost,
             port: UInt16(clamping: profile.port),
             username: username.isEmpty ? nil : username,
             password: (password?.isEmpty == false) ? password : nil,
             shared: true,
+            localCursor: localCursor,
             sshHost: sshHost,
             sshPort: sshPort,
             sshUsername: sshUsername,
@@ -263,6 +272,23 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
 
         case .bell:
             continuation.yield(.bell)
+
+        case .cursor(let hotspotX, let hotspotY, let width, let height, let pixels):
+            let shape = RemoteCursorShape(
+                hotspotX: Int(hotspotX),
+                hotspotY: Int(hotspotY),
+                width: Int(width),
+                height: Int(height),
+                bgraPixels: pixels
+            )
+            continuation.yield(.cursor(shape))
+
+        case .pointerPosition(let x, let y):
+            guard width > 0, height > 0 else { return }
+            continuation.yield(.pointerPosition(
+                x: Double(x) / Double(width),
+                y: Double(y) / Double(height)
+            ))
 
         case .disconnected(let reason):
             finish(reason: reason)

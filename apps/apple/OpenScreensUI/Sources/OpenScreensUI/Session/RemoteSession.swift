@@ -64,10 +64,34 @@ public struct RemoteFrame: Sendable {
     }
 }
 
+/// A client-side cursor bitmap received through the Cursor pseudo-encoding.
+/// `bgraPixels` is tightly packed BGRA8888 with the cursor mask folded into
+/// the alpha channel.
+public struct RemoteCursorShape: Sendable, Equatable {
+    public var hotspotX: Int
+    public var hotspotY: Int
+    public var width: Int
+    public var height: Int
+    public var bgraPixels: Data
+
+    public init(hotspotX: Int, hotspotY: Int, width: Int, height: Int, bgraPixels: Data) {
+        self.hotspotX = hotspotX
+        self.hotspotY = hotspotY
+        self.width = width
+        self.height = height
+        self.bgraPixels = bgraPixels
+    }
+
+    public var isEmpty: Bool { width <= 0 || height <= 0 || bgraPixels.isEmpty }
+}
+
 public enum RemoteSessionEvent: Sendable {
     case state(RemoteSessionState)
     case displays([RemoteDisplay])
     case frame(RemoteFrame)
+    case cursor(RemoteCursorShape)
+    /// Pointer position reported by the server, normalized to 0...1.
+    case pointerPosition(x: Double, y: Double)
     case clipboard(String)
     case bell
     case failure(String)

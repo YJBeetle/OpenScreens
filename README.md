@@ -8,11 +8,12 @@ Implemented:
 
 - RFB 3.3/3.7/3.8 client with VNC password and Apple DH authentication (macOS Screen Sharing)
 - Raw, CopyRect, RRE, Hextile, ZRLE, zlib and Tight/JPEG decoding into a BGRA framebuffer
+- Client-side cursor rendering on macOS (Cursor and PointerPos pseudo-encodings) with hover-driven pointer tracking; iOS and Android keep the server-composited cursor
 - TCP and SSH (`direct-tcpip`) transports; SSH jump hosts and password/private-key auth are exposed in the Android editor (with an encrypted key manager) and in the macOS editor (private keys can be selected directly from `~/.ssh`)
 - Native SwiftUI apps for macOS and iOS/iPadOS with a Metal canvas
 - Compose Material 3 app for Android
 
-Not yet implemented: Apple Adaptive DCT, adaptive quality scaling, local cursor rendering, multi-display selection, file transfer, WireGuard/OpenVPN. Apple frontends still use password-only SSH configuration in the core; their SSH UI and key manager are pending.
+Not yet implemented: Apple Adaptive DCT, adaptive quality scaling, multi-display selection, file transfer, WireGuard/OpenVPN. On iOS, SSH supports password auth only and has no key manager yet.
 
 ## Layout
 

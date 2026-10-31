@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="linear-gradient-1" x1="154" y1="0" x2="870" y2="1024" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0b2f63"/>
+      <stop offset="0.52" stop-color="#1a5fd0"/>
+      <stop offset="1" stop-color="#061a3a"/>
+    </linearGradient>
+    <radialGradient id="radial-gradient-1" cx="340" cy="205" r="560" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#8ccbff" stop-opacity="0.34"/>
+      <stop offset="1" stop-color="#8ccbff" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="linear-gradient-2" x1="169.291" y1="278.74" x2="718.2" y2="548.189" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.07"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0.07"/>
+    </linearGradient>
+    <linearGradient id="linear-gradient-3" x1="169.291" y1="278.74" x2="718.2" y2="548.189" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.42"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0.42"/>
+    </linearGradient>
+    <filter id="filter-1" filterUnits="userSpaceOnUse" x="218" y="302" width="692" height="564" data-vc-blend="multiply" color-interpolation-filters="sRGB"><feGaussianBlur in="SourceAlpha" stdDeviation="20"/><feOffset dx="0" dy="28" result="shadow"/><feFlood flood-color="#001528" flood-opacity="0.55"/><feComposite in2="shadow" operator="in" result="paint"/><feMerge><feMergeNode in="paint"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    <linearGradient id="linear-gradient-4" x1="308" y1="392" x2="820" y2="776" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#f7fbff"/>
+      <stop offset="0.55" stop-color="#bbdcff"/>
+      <stop offset="1" stop-color="#7db3ff"/>
+    </linearGradient>
+    <linearGradient id="linear-gradient-5" x1="564" y1="414" x2="564" y2="564" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="filter-2" filterUnits="userSpaceOnUse" x="420" y="411" width="284" height="339" data-vc-blend="multiply" color-interpolation-filters="sRGB"><feGaussianBlur in="SourceAlpha" stdDeviation="9"/><feOffset dx="0" dy="14" result="shadow"/><feFlood flood-color="#00122e" flood-opacity="0.35"/><feComposite in2="shadow" operator="in" result="paint"/><feMerge><feMergeNode in="paint"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  </defs>
+  <title>Artboard 1</title>
+  <g id="Layer_1" data-name="Layer 1">
+    <rect id="Background" x="0" y="0" width="1024" height="1024" fill="url(#linear-gradient-1)"/>
+    <circle id="Glow" cx="340" cy="205" r="560" fill="url(#radial-gradient-1)"/>
+    <path id="Back_Screen" data-name="Back Screen" d="M260.158 264.348 L572.268 214.914 C622.452 206.966 669.578 241.205 677.527 291.39 L703.808 457.321 C711.756 507.506 677.517 554.632 627.333 562.581 L315.223 612.014 C265.038 619.963 217.912 585.723 209.964 535.539 L183.683 369.607 C175.734 319.422 209.973 272.296 260.158 264.348 Z" fill="url(#linear-gradient-2)" stroke="url(#linear-gradient-3)" stroke-width="14" stroke-miterlimit="10"/>
+    <g filter="url(#filter-1)">
+      <path id="Front_Screen" data-name="Front Screen" d="M412 392 L716 392 C773.438 392 820 438.562 820 496 L820 672 C820 729.438 773.438 776 716 776 L412 776 C354.562 776 308 729.438 308 672 L308 496 C308 438.562 354.562 392 412 392 Z" fill="url(#linear-gradient-4)"/>
+    </g>
+    <path id="Gloss" d="M405 414 L723 414 C764.421 414 798 447.579 798 489 L798 489 C798 530.421 764.421 564 723 564 L405 564 C363.579 564 330 530.421 330 489 L330 489 C330 447.579 363.579 414 405 414 Z" fill="url(#linear-gradient-5)"/>
+    <g filter="url(#filter-2)">
+      <polygon id="Cursor" points="463,454 463,684 523,624 560,707 615,681 578,601 661,601" fill="#0a2a6b"/>
+    </g>
+  </g>
+</svg>

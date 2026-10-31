@@ -2,6 +2,10 @@ name: Snapshot
 
 on:
   workflow_dispatch:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
 
 permissions:
   contents: write
@@ -12,6 +16,7 @@ concurrency:
 
 jobs:
   android:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     env:
       HAS_ANDROID_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
@@ -19,6 +24,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -58,6 +64,7 @@ jobs:
           if-no-files-found: error
 
   macos:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: macos-15
     environment: Build
     env:
@@ -68,6 +75,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-apple-darwin,aarch64-apple-ios,aarch64-apple-ios-sim,x86_64-apple-ios
@@ -163,6 +171,7 @@ jobs:
           if-no-files-found: ignore
 
   publish:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     needs: [android, macos]
     runs-on: ubuntu-latest
     steps:
@@ -176,7 +185,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          short="${GITHUB_SHA::7}"
+          sha="${{ github.event.workflow_run.head_sha || github.sha }}"
+          short="${sha::7}"
           date="$(date -u +%Y-%m-%d)"
           title="Development snapshot ${short} (${date})"
           mac_note="The macOS build is unsigned until notarization credentials are configured."
@@ -184,7 +194,7 @@ jobs:
             mac_note="The macOS build is signed with Developer ID and notarized."
           fi
           cat > notes.md <<EOF
-          Automated development snapshot from \`${GITHUB_SHA}\` (${date}).
+          Automated development snapshot from \`${sha}\` (${date}).
 
           - Android APK is signed with the project release key and updates the "Snapshot" channel.
           - $mac_note

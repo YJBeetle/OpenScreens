@@ -25,6 +25,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         username: env::var("OPENSCREENS_USERNAME").ok(),
         password: env::var("OPENSCREENS_PASSWORD").ok(),
         shared: true,
+        ssh: None,
     };
 
     let session = Session::connect(config).await?;

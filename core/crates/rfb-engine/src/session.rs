@@ -6,6 +6,7 @@ use std::sync::{Arc, Mutex};
 
 use bytes::{Buf, BytesMut};
 use rfb_codec::{DecodeError, Decoder, Framebuffer, Rect};
+use rfb_io::{HostKeyPolicy, SshAuth, SshConfig as IoSshConfig};
 use rfb_proto::encoding::Encoding;
 use rfb_proto::messages::{
     client_cut_text, framebuffer_update_request, key_event, pointer_event, set_encodings,
@@ -25,7 +26,8 @@ const READ_CHUNK: usize = 64 * 1024;
 const MAX_CUT_TEXT_LEN: usize = 16 * 1024 * 1024;
 
 /// Encodings advertised to the server, most preferred first.
-const ENCODINGS: [i32; 7] = [
+const ENCODINGS: [i32; 9] = [
+    Encoding::Tight.to_id(),
     Encoding::Zrle.to_id(),
     Encoding::Hextile.to_id(),
     Encoding::CopyRect.to_id(),
@@ -33,6 +35,8 @@ const ENCODINGS: [i32; 7] = [
     Encoding::Zlib.to_id(),
     Encoding::DesktopSize.to_id(),
     Encoding::LastRect.to_id(),
+    // TightVNC JPEG quality level 9.
+    -23,
 ];
 
 #[derive(Debug, Clone)]
@@ -42,6 +46,18 @@ pub struct SessionConfig {
     pub username: Option<String>,
     pub password: Option<String>,
     pub shared: bool,
+    pub ssh: Option<SshSettings>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SshSettings {
+    pub host: String,
+    pub port: u16,
+    pub username: String,
+    pub password: String,
+    /// Optional SHA-256 host-key fingerprint; when empty the first key is
+    /// accepted (TOFU pinning is surfaced by the frontend later).
+    pub host_key_fingerprint: Option<String>,
 }
 
 impl SessionConfig {
@@ -52,6 +68,7 @@ impl SessionConfig {
             username: None,
             password: None,
             shared: true,
+            ssh: None,
         }
     }
 }
@@ -86,6 +103,7 @@ pub enum SessionError {
     Handshake(HandshakeError),
     Decode(DecodeError),
     Protocol(&'static str),
+    Ssh(rfb_io::SshError),
     Closed,
 }
 
@@ -96,6 +114,7 @@ impl fmt::Display for SessionError {
             Self::Handshake(error) => write!(f, "handshake failed: {error}"),
             Self::Decode(error) => write!(f, "decode failed: {error:?}"),
             Self::Protocol(message) => write!(f, "protocol error: {message}"),
+            Self::Ssh(error) => write!(f, "SSH tunnel failed: {error}"),
             Self::Closed => f.write_str("connection closed"),
         }
     }
@@ -121,6 +140,12 @@ impl From<DecodeError> for SessionError {
     }
 }
 
+impl From<rfb_io::SshError> for SessionError {
+    fn from(error: rfb_io::SshError) -> Self {
+        Self::Ssh(error)
+    }
+}
+
 /// A connected RFB session.
 pub struct Session {
     commands: mpsc::Sender<Vec<u8>>,
@@ -134,7 +159,26 @@ pub struct Session {
 
 impl Session {
     pub async fn connect(config: SessionConfig) -> Result<Self, SessionError> {
-        let stream = rfb_io::connect_tcp(&config.host, config.port).await?;
+        let stream: rfb_io::BoxedTransport = if let Some(ssh) = &config.ssh {
+            let host_key = match ssh.host_key_fingerprint.as_deref() {
+                Some(fingerprint) if !fingerprint.trim().is_empty() => {
+                    HostKeyPolicy::PinSha256(fingerprint.trim().to_owned())
+                }
+                _ => HostKeyPolicy::AcceptAny,
+            };
+            let ssh_config = IoSshConfig {
+                host: ssh.host.clone(),
+                port: ssh.port,
+                username: ssh.username.clone(),
+                auth: SshAuth::Password(ssh.password.clone()),
+                host_key,
+                target_host: "127.0.0.1".to_owned(),
+                target_port: config.port,
+            };
+            rfb_io::connect_ssh(&ssh_config).await?
+        } else {
+            Box::new(rfb_io::connect_tcp(&config.host, config.port).await?)
+        };
         Self::connect_stream(stream, config).await
     }
 

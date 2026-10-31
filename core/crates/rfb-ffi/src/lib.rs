@@ -6,7 +6,9 @@
 use std::sync::Arc;
 
 use rfb_codec::Rect as EngineRect;
-use rfb_engine::session::{Event as EngineEvent, Session, SessionConfig as EngineConfig};
+use rfb_engine::session::{
+    Event as EngineEvent, Session, SessionConfig as EngineConfig, SshSettings as EngineSshSettings,
+};
 
 uniffi::setup_scaffolding!();
 
@@ -17,16 +19,35 @@ pub struct SessionConfig {
     pub username: Option<String>,
     pub password: Option<String>,
     pub shared: bool,
+    pub ssh_host: Option<String>,
+    pub ssh_port: Option<u16>,
+    pub ssh_username: Option<String>,
+    pub ssh_password: Option<String>,
+    pub ssh_host_key_fingerprint: Option<String>,
 }
 
 impl From<SessionConfig> for EngineConfig {
     fn from(config: SessionConfig) -> Self {
+        let ssh = match config.ssh_username {
+            Some(username) if !username.trim().is_empty() => Some(EngineSshSettings {
+                host: config
+                    .ssh_host
+                    .filter(|host| !host.trim().is_empty())
+                    .unwrap_or_else(|| config.host.clone()),
+                port: config.ssh_port.unwrap_or(22),
+                username,
+                password: config.ssh_password.unwrap_or_default(),
+                host_key_fingerprint: config.ssh_host_key_fingerprint,
+            }),
+            _ => None,
+        };
         Self {
             host: config.host,
             port: config.port,
             username: config.username,
             password: config.password,
             shared: config.shared,
+            ssh,
         }
     }
 }

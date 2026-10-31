@@ -43,12 +43,18 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
 
     private var width: UInt16 = 0
     private var height: UInt16 = 0
+    // Framebuffer pixels are sampled down so a 6K host does not allocate a
+    // full-resolution texture (and a 268 MB frame buffer copy) per frame.
+    private var displayScale: UInt16 = 1
+    private var scaledWidth = 0
+    private var scaledHeight = 0
     private var cursor = CGPoint(x: 0.5, y: 0.5)
     private var buttonMask: UInt8 = 0
     private var observing = false
     private var finished = false
 
     private let logger = Logger(subsystem: "app.openscreens", category: "Session")
+    private static let displayTargetWidth = 2560
 
     public init() {
         let (stream, continuation) = AsyncStream.makeStream(
@@ -244,30 +250,40 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
         case .connected(let width, let height, let name):
             self.width = width
             self.height = height
+            updateDisplayScale()
             continuation.yield(.displays([
                 RemoteDisplay(id: 0, name: name, width: Int(width), height: Int(height)),
             ]))
             continuation.yield(.state(.connected))
 
         case .frame(_, let rects):
-            guard width > 0, height > 0 else { return }
-            let frameWidth = Int(width)
-            let frameHeight = Int(height)
+            guard width > 0, height > 0, displayScale > 0 else { return }
+            let scale = Int(displayScale)
             for rect in rects where rect.width > 0 && rect.height > 0 {
-                guard let data = session.copyRegion(rect: rect) else { continue }
+                guard let data = session.copyRegionScaled(rect: rect, scale: displayScale)
+                else { continue }
                 // The renderer only allocates its texture from a full frame, so a
                 // rect that covers the whole framebuffer must clear `region`.
                 let coversFrame = rect.x == 0 && rect.y == 0
-                    && Int(rect.width) == frameWidth && Int(rect.height) == frameHeight
-                let region = coversFrame ? nil : RemoteRegion(
-                    x: Int(rect.x),
-                    y: Int(rect.y),
-                    width: Int(rect.width),
-                    height: Int(rect.height)
-                )
+                    && Int(rect.width) == Int(width) && Int(rect.height) == Int(height)
+                let region: RemoteRegion?
+                if coversFrame {
+                    region = nil
+                } else {
+                    let left = Int(rect.x) / scale
+                    let top = Int(rect.y) / scale
+                    let right = (Int(rect.x) + Int(rect.width) - 1) / scale
+                    let bottom = (Int(rect.y) + Int(rect.height) - 1) / scale
+                    region = RemoteRegion(
+                        x: left,
+                        y: top,
+                        width: right - left + 1,
+                        height: bottom - top + 1
+                    )
+                }
                 continuation.yield(.frame(RemoteFrame(
-                    width: frameWidth,
-                    height: frameHeight,
+                    width: scaledWidth,
+                    height: scaledHeight,
                     region: region,
                     data: data
                 )))
@@ -276,6 +292,7 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
         case .resized(let width, let height):
             self.width = width
             self.height = height
+            updateDisplayScale()
             continuation.yield(.displays([
                 RemoteDisplay(id: 0, name: "Display", width: Int(width), height: Int(height)),
             ]))
@@ -287,12 +304,12 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
             continuation.yield(.bell)
 
         case .cursor(let hotspotX, let hotspotY, let width, let height, let pixels):
-            let shape = RemoteCursorShape(
-                hotspotX: Int(hotspotX),
-                hotspotY: Int(hotspotY),
-                width: Int(width),
-                height: Int(height),
-                bgraPixels: pixels
+            let shape = scaledCursor(
+                hotspotX: hotspotX,
+                hotspotY: hotspotY,
+                width: width,
+                height: height,
+                pixels: pixels
             )
             continuation.yield(.cursor(shape))
 
@@ -345,6 +362,72 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
         guard let size else { return }
         width = size.width
         height = size.height
+        updateDisplayScale()
+    }
+
+    private func updateDisplayScale() {
+        guard width > 0, height > 0 else {
+            displayScale = 1
+            scaledWidth = 0
+            scaledHeight = 0
+            return
+        }
+        let scale = max(1, min(8, Int(width) / Self.displayTargetWidth))
+        displayScale = UInt16(scale)
+        scaledWidth = (Int(width) + scale - 1) / scale
+        scaledHeight = (Int(height) + scale - 1) / scale
+        logger.info(
+            "display sampling 1/\(scale) (\(self.scaledWidth)x\(self.scaledHeight)) for \(self.width)x\(self.height)"
+        )
+    }
+
+    private func scaledCursor(
+        hotspotX: UInt16,
+        hotspotY: UInt16,
+        width: UInt16,
+        height: UInt16,
+        pixels: Data
+    ) -> RemoteCursorShape {
+        let scale = Int(displayScale)
+        let sourceWidth = Int(width)
+        let sourceHeight = Int(height)
+        guard scale > 1, sourceWidth > 0, sourceHeight > 0,
+              pixels.count >= sourceWidth * sourceHeight * 4
+        else {
+            return RemoteCursorShape(
+                hotspotX: Int(hotspotX),
+                hotspotY: Int(hotspotY),
+                width: sourceWidth,
+                height: sourceHeight,
+                bgraPixels: pixels
+            )
+        }
+
+        let destWidth = (sourceWidth + scale - 1) / scale
+        let destHeight = (sourceHeight + scale - 1) / scale
+        let source = [UInt8](pixels)
+        var output = [UInt8](repeating: 0, count: destWidth * destHeight * 4)
+        for y in 0..<destHeight {
+            let sourceY = y * scale
+            guard sourceY < sourceHeight else { continue }
+            for x in 0..<destWidth {
+                let sourceX = x * scale
+                guard sourceX < sourceWidth else { continue }
+                let s = (sourceY * sourceWidth + sourceX) * 4
+                let d = (y * destWidth + x) * 4
+                output[d] = source[s]
+                output[d + 1] = source[s + 1]
+                output[d + 2] = source[s + 2]
+                output[d + 3] = source[s + 3]
+            }
+        }
+        return RemoteCursorShape(
+            hotspotX: Int(hotspotX) / scale,
+            hotspotY: Int(hotspotY) / scale,
+            width: destWidth,
+            height: destHeight,
+            bgraPixels: Data(output)
+        )
     }
 
     private static func bit(for button: PointerButton) -> UInt8 {

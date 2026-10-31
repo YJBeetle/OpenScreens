@@ -15,6 +15,8 @@ public final class SessionViewModel {
     public private(set) var state: RemoteSessionState = .idle
     public private(set) var displays: [RemoteDisplay] = []
     public var selectedDisplayID: Int?
+    /// Size of the server framebuffer; frames may be sampled down from this.
+    public private(set) var serverSize: CGSize?
     public private(set) var frameSize: CGSize?
 
     public var cursorMode: CursorMode
@@ -188,6 +190,9 @@ public final class SessionViewModel {
 
         case .displays(let list):
             displays = list
+            if let display = list.first {
+                serverSize = CGSize(width: display.width, height: display.height)
+            }
             if selectedDisplayID == nil || !list.contains(where: { $0.id == selectedDisplayID }) {
                 selectedDisplayID = list.first?.id
             }

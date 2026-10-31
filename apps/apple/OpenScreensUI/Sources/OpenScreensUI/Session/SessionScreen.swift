@@ -424,7 +424,7 @@ public struct SessionScreen: View {
     }
 
     private var connectionDetail: String {
-        if let size = model.frameSize {
+        if let size = model.serverSize ?? model.frameSize {
             return "\(Int(size.width)) × \(Int(size.height)) · \(model.cursorMode.title)"
         }
         return model.state.label

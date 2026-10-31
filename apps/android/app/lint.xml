@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<lint>
+    <!--
+        UniFFI's generated Kotlin bindings probe for java.lang.ref.Cleaner with
+        Class.forName and fall back to their JNA cleaner when it is unavailable, which is
+        what happens below Android 13 (API 33). Lint cannot follow that reflective guard,
+        so the API check is scoped to the generated bindings instead of the whole app.
+    -->
+    <issue id="NewApi">
+        <ignore path="src/main/java/uniffi/rfb_ffi/rfb_ffi.kt" />
+    </issue>
+</lint>

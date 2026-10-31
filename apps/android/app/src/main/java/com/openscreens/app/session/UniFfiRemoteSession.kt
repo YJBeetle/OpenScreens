@@ -39,6 +39,10 @@ class UniFfiRemoteSession(
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
+    // Input events must reach the server in the order they were produced: a pointer
+    // press before its release, and a modifier before the key it modifies.
+    private val inputDispatcher = Dispatchers.IO.limitedParallelism(1)
+
     private val _events = MutableSharedFlow<SessionEvent>(
         replay = 1,
         extraBufferCapacity = 8,
@@ -119,7 +123,7 @@ class UniFfiRemoteSession(
 
     override fun sendPointer(x: Int, y: Int, buttonMask: Int) {
         val current = session ?: return
-        scope.launch {
+        scope.launch(inputDispatcher) {
             runCatching {
                 current.sendPointer(
                     mask = buttonMask.toUByte(),
@@ -132,7 +136,7 @@ class UniFfiRemoteSession(
 
     override fun sendKey(keysym: Int, pressed: Boolean) {
         val current = session ?: return
-        scope.launch {
+        scope.launch(inputDispatcher) {
             runCatching { current.sendKey(down = pressed, keysym = keysym.toUInt()) }
                 .onFailure { error -> Log.w(TAG, "sendKey failed", error) }
         }
@@ -140,7 +144,7 @@ class UniFfiRemoteSession(
 
     override fun sendClipboard(text: String) {
         val current = session ?: return
-        scope.launch {
+        scope.launch(inputDispatcher) {
             runCatching { current.sendClipboard(text) }
                 .onFailure { error -> Log.w(TAG, "sendClipboard failed", error) }
         }

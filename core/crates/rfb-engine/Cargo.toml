@@ -12,6 +12,7 @@ bytes = "1"
 flate2 = "1"
 rfb-codec = { path = "../rfb-codec" }
 rfb-io = { path = "../rfb-io" }
+rfb-openvpn = { path = "../rfb-openvpn" }
 rfb-proto = { path = "../rfb-proto" }
 tokio = { version = "1", features = ["io-util", "macros", "rt", "sync", "time"] }
 

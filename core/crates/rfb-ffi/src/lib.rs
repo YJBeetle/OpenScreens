@@ -8,7 +8,8 @@ use std::sync::Arc;
 use rfb_codec::Rect as EngineRect;
 use rfb_engine::apple_file_transfer as ft;
 use rfb_engine::session::{
-    Event as EngineEvent, Session, SessionConfig as EngineConfig, SshAuthSettings as EngineSshAuth,
+    Event as EngineEvent, OpenVpnSettings as EngineOpenVpnSettings, Session,
+    SessionConfig as EngineConfig, SshAuthSettings as EngineSshAuth,
     SshSettings as EngineSshSettings, WireGuardSettings as EngineWireGuardSettings,
 };
 
@@ -36,9 +37,12 @@ pub struct SessionConfig {
     pub quality: u8,
     pub frame_interval_ms: u16,
     /// Full wg-quick text; when set the target is dialled through a userspace
-    /// WireGuard tunnel (mutually exclusive with SSH).
+    /// WireGuard tunnel (mutually exclusive with OpenVPN and SSH).
     pub wireguard_config: Option<String>,
     pub wireguard_dns_fallback: bool,
+    /// Full `.ovpn` text; when set the target is dialled through a userspace
+    /// OpenVPN tunnel (mutually exclusive with WireGuard and SSH).
+    pub openvpn_config: Option<String>,
     pub ssh_host: Option<String>,
     pub ssh_port: Option<u16>,
     pub ssh_username: Option<String>,
@@ -88,6 +92,13 @@ impl From<SessionConfig> for EngineConfig {
                 .map(|wg_quick| EngineWireGuardSettings {
                     wg_quick,
                     dns_fallback: config.wireguard_dns_fallback,
+                    connect_timeout_secs: 30,
+                }),
+            openvpn: config
+                .openvpn_config
+                .filter(|text| !text.trim().is_empty())
+                .map(|profile| EngineOpenVpnSettings {
+                    profile,
                     connect_timeout_secs: 30,
                 }),
             ssh,
@@ -381,6 +392,70 @@ impl TransferEntry {
 pub enum SessionFailure {
     #[error("{reason}")]
     Session { reason: String },
+}
+
+/// Summary of a validated `.ovpn` profile, shown before saving a connection.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct OpenVpnProfileSummary {
+    pub remote: String,
+    pub proto: String,
+    pub cipher: String,
+    pub tls_wrap: Option<String>,
+}
+
+#[derive(Debug, thiserror::Error, uniffi::Error)]
+pub enum OpenVpnProfileError {
+    #[error("{message}")]
+    Invalid { message: String },
+}
+
+/// Parses an `.ovpn` profile without touching the network.
+///
+/// Profiles must embed the CA, certificate, key and optional tls-auth/tls-crypt
+/// material: frontends persist only the text, so external file references
+/// would break after import.
+#[uniffi::export]
+pub fn validate_openvpn_profile(
+    text: String,
+) -> Result<OpenVpnProfileSummary, OpenVpnProfileError> {
+    let config =
+        rfb_openvpn::OvpnConfig::parse(&text).map_err(|error| OpenVpnProfileError::Invalid {
+            message: error.to_string(),
+        })?;
+    if config.ca.inline().is_none() || config.cert.inline().is_none() {
+        return Err(OpenVpnProfileError::Invalid {
+            message: "the profile must embed its CA and client certificate".to_string(),
+        });
+    }
+    if config.key.inline().is_none() {
+        return Err(OpenVpnProfileError::Invalid {
+            message: "the profile must embed its client key".to_string(),
+        });
+    }
+    if let Some(wrap) = &config.tls_wrap
+        && wrap.material.inline().is_none()
+    {
+        return Err(OpenVpnProfileError::Invalid {
+            message: "tls-auth/tls-crypt must be embedded in the profile".to_string(),
+        });
+    }
+    config
+        .load_material()
+        .map_err(|error| OpenVpnProfileError::Invalid {
+            message: error.to_string(),
+        })?;
+    Ok(OpenVpnProfileSummary {
+        remote: config.remote().endpoint(),
+        proto: config.remote().proto.name().to_string(),
+        cipher: config.cipher.name().to_string(),
+        tls_wrap: config.tls_wrap.as_ref().map(|wrap| {
+            match wrap.mode {
+                rfb_openvpn::TlsWrapMode::Auth => "tls-auth",
+                rfb_openvpn::TlsWrapMode::Crypt => "tls-crypt",
+            }
+            .to_string()
+        }),
+    })
 }
 
 #[derive(uniffi::Object)]

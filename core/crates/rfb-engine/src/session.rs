@@ -111,8 +111,11 @@ pub struct SessionConfig {
     /// Advertise and decode Apple Adaptive DCT (encoding 1011).
     pub adaptive_dct: bool,
     /// Route the target connection through a userspace WireGuard tunnel.
-    /// Mutually exclusive with `ssh`.
+    /// Mutually exclusive with `openvpn` and `ssh`.
     pub wireguard: Option<WireGuardSettings>,
+    /// Route the target connection through a userspace OpenVPN tunnel.
+    /// Mutually exclusive with `wireguard` and `ssh`.
+    pub openvpn: Option<OpenVpnSettings>,
     pub ssh: Option<SshSettings>,
 }
 
@@ -124,6 +127,15 @@ pub struct WireGuardSettings {
     /// Fall back to the system resolver when the tunnel DNS fails.
     pub dns_fallback: bool,
     /// TCP handshake timeout for inner connections, in seconds.
+    pub connect_timeout_secs: u64,
+}
+
+/// Userspace OpenVPN settings for reaching the RFB target.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OpenVpnSettings {
+    /// Full `.ovpn` client profile text with inline certificates and keys.
+    pub profile: String,
+    /// TCP handshake timeout for the inner connection, in seconds.
     pub connect_timeout_secs: u64,
 }
 
@@ -161,6 +173,7 @@ impl SessionConfig {
             apple_session: false,
             adaptive_dct: false,
             wireguard: None,
+            openvpn: None,
             ssh: None,
         }
     }
@@ -271,7 +284,7 @@ impl fmt::Display for SessionError {
             Self::Handshake(error) => write!(f, "handshake failed: {error}"),
             Self::Decode(error) => write!(f, "decode failed: {error:?}"),
             Self::Protocol(message) => write!(f, "protocol error: {message}"),
-            Self::Tunnel(message) => write!(f, "WireGuard tunnel failed: {message}"),
+            Self::Tunnel(message) => write!(f, "tunnel failed: {message}"),
             Self::Ssh(error) => write!(f, "SSH tunnel failed: {error}"),
             Self::Closed => f.write_str("connection closed"),
         }
@@ -330,9 +343,17 @@ pub struct Session {
 
 impl Session {
     pub async fn connect(config: SessionConfig) -> Result<Self, SessionError> {
-        if config.wireguard.is_some() && config.ssh.is_some() {
+        let tunnel_count = [
+            config.wireguard.is_some(),
+            config.openvpn.is_some(),
+            config.ssh.is_some(),
+        ]
+        .into_iter()
+        .filter(|active| *active)
+        .count();
+        if tunnel_count > 1 {
             return Err(SessionError::Protocol(
-                "wireguard and ssh cannot be combined",
+                "WireGuard, OpenVPN and SSH tunnels cannot be combined",
             ));
         }
         let stream: rfb_io::BoxedTransport = if let Some(wireguard) = &config.wireguard {
@@ -349,6 +370,24 @@ impl Session {
                 .dial_tcp(&config.host, config.port)
                 .await
                 .map_err(|error| SessionError::Tunnel(error.to_string()))?
+        } else if let Some(openvpn) = &config.openvpn {
+            let profile = rfb_openvpn::OvpnConfig::parse(&openvpn.profile).map_err(|error| {
+                SessionError::Tunnel(format!("invalid OpenVPN profile: {error}"))
+            })?;
+            let options = rfb_openvpn::TunnelOptions {
+                connect_timeout: std::time::Duration::from_secs(
+                    openvpn.connect_timeout_secs.max(1),
+                ),
+                ..rfb_openvpn::TunnelOptions::default()
+            };
+            let tunnel = rfb_openvpn::Tunnel::connect(profile, options)
+                .await
+                .map_err(|error| SessionError::Tunnel(error.to_string()))?;
+            let stream = tunnel
+                .connect_tcp(&config.host, config.port)
+                .await
+                .map_err(|error| SessionError::Tunnel(error.to_string()))?;
+            Box::new(stream)
         } else if let Some(ssh) = &config.ssh {
             let host_key = match ssh.host_key_fingerprint.as_deref() {
                 Some(fingerprint) if !fingerprint.trim().is_empty() => {
@@ -1835,6 +1874,45 @@ fn copy_region_scaled_from(framebuffer: &Framebuffer, rect: Rect, scale: u16) ->
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn rejects_combined_tunnels() {
+        let mut config = SessionConfig::new("10.24.11.1", 5900);
+        config.openvpn = Some(OpenVpnSettings {
+            profile: "client\nremote vpn.example 1194\n".to_owned(),
+            connect_timeout_secs: 1,
+        });
+        config.ssh = Some(SshSettings {
+            host: "10.24.11.1".to_owned(),
+            port: 22,
+            username: "probe".to_owned(),
+            auth: SshAuthSettings::Password("secret".to_owned()),
+            host_key_fingerprint: None,
+        });
+        match Session::connect(config).await {
+            Ok(_) => panic!("combined tunnels must be rejected"),
+            Err(SessionError::Protocol(message)) => {
+                assert!(message.contains("cannot be combined"), "{message}");
+            }
+            Err(error) => panic!("unexpected error: {error}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn rejects_invalid_openvpn_profile() {
+        let mut config = SessionConfig::new("10.24.11.1", 5900);
+        config.openvpn = Some(OpenVpnSettings {
+            profile: "this is not a profile\n".to_owned(),
+            connect_timeout_secs: 1,
+        });
+        match Session::connect(config).await {
+            Ok(_) => panic!("an invalid profile must be rejected"),
+            Err(SessionError::Tunnel(message)) => {
+                assert!(message.contains("invalid OpenVPN profile"), "{message}");
+            }
+            Err(error) => panic!("unexpected error: {error}"),
+        }
+    }
 
     #[test]
     fn maps_quality_to_tight_pseudo_encoding() {

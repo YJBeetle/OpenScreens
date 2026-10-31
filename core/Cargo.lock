@@ -1913,6 +1913,7 @@ dependencies = [
  "flate2",
  "rfb-codec",
  "rfb-io",
+ "rfb-openvpn",
  "rfb-proto",
  "tokio",
 ]
@@ -1924,6 +1925,7 @@ dependencies = [
  "rfb-codec",
  "rfb-engine",
  "rfb-io",
+ "rfb-openvpn",
  "thiserror",
  "tokio",
  "uniffi",

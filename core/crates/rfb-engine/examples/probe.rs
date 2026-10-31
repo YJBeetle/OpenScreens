@@ -31,6 +31,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         apple_session: false,
         adaptive_dct: false,
         wireguard: None,
+        openvpn: None,
         ssh: None,
     };
 

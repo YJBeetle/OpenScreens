@@ -591,6 +591,12 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
         }
     }
 
+    private static func fileName(inRemotePath path: String) -> String {
+        let trimmed = path.count > 1 && path.hasSuffix("/") ? String(path.dropLast()) : path
+        let name = (trimmed as NSString).lastPathComponent
+        return name.isEmpty ? path : name
+    }
+
     private func failDownload(handle: UInt32, error: Error) {
         guard let waiter = downloadWaiters.removeValue(forKey: handle) else { return }
         if let root = downloadRoots.removeValue(forKey: handle) {

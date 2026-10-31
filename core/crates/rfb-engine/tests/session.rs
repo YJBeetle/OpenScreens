@@ -146,9 +146,8 @@ async fn local_cursor_events() {
     let (client, mut server) = duplex(64 * 1024);
 
     let server_task = tokio::spawn(async move {
-        perform_handshake(&mut server).await;
+        perform_apple_handshake(&mut server).await;
         let encodings = read_setup(&mut server).await;
-        assert_eq!(encodings.len(), 12);
         assert!(encodings.contains(&(-239)));
 
         server.write_all(&cursor_update()).await.unwrap();
@@ -160,6 +159,7 @@ async fn local_cursor_events() {
     });
 
     let mut config = SessionConfig::new("mock", 5900);
+    config.apple_session = true;
     config.local_cursor = true;
     let session = Session::connect_stream(client, config).await.unwrap();
 

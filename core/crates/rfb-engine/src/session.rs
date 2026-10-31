@@ -411,7 +411,7 @@ impl Session {
         }
         initial.extend_from_slice(&set_pixel_format(&PixelFormat::bgra8888()));
         initial.extend_from_slice(&set_encodings(&encodings(
-            config.local_cursor,
+            config.local_cursor && apple_session,
             config.quality,
             apple_session,
             config.adaptive_dct && apple_session,
@@ -435,7 +435,7 @@ impl Session {
             name.clone(),
             std::time::Duration::from_millis(u64::from(config.frame_interval_ms)),
             viewport.clone(),
-            config.local_cursor,
+            config.local_cursor && apple_session,
             config.quality,
             apple_session,
             config.adaptive_dct && apple_session,

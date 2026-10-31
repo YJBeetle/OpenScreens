@@ -30,6 +30,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import uniffi.rfb_ffi.Rect
 import uniffi.rfb_ffi.SessionConfig
+import uniffi.rfb_ffi.SessionFailure
 import uniffi.rfb_ffi.SshAuthConfig
 import uniffi.rfb_ffi.DisplayScreen as NativeDisplayScreen
 import uniffi.rfb_ffi.SessionEvent as NativeEvent
@@ -801,8 +802,10 @@ class UniFfiRemoteSession(
         height = height.coerceIn(0, UShort.MAX_VALUE.toInt()).toUShort(),
     )
 
-    private fun describe(error: Exception): String =
-        error.message?.takeIf { it.isNotBlank() } ?: error.javaClass.simpleName
+    private fun describe(error: Exception): String = when (error) {
+        is SessionFailure.Session -> error.reason
+        else -> error.message?.takeIf { it.isNotBlank() } ?: error.javaClass.simpleName
+    }
 
     private companion object {
         const val TAG = "UniFfiRemoteSession"

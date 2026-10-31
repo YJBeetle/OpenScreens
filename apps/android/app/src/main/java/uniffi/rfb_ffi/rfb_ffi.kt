@@ -724,6 +724,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Int
     external fun uniffi_rfb_ffi_checksum_method_remotesession_send_pointer(
     ): Int
+    external fun uniffi_rfb_ffi_checksum_method_remotesession_send_scroll(
+    ): Int
     external fun uniffi_rfb_ffi_checksum_method_remotesession_server_name(
     ): Int
     external fun uniffi_rfb_ffi_checksum_method_remotesession_set_viewport(
@@ -797,6 +799,8 @@ internal object UniffiLib {
     external fun uniffi_rfb_ffi_fn_method_remotesession_send_key(`ptr`: Long,`down`: Byte,`keysym`: Int,
     ): Long
     external fun uniffi_rfb_ffi_fn_method_remotesession_send_pointer(`ptr`: Long,`mask`: Byte,`x`: Short,`y`: Short,
+    ): Long
+    external fun uniffi_rfb_ffi_fn_method_remotesession_send_scroll(`ptr`: Long,`x`: Short,`y`: Short,`stepsX`: Int,`stepsY`: Int,
     ): Long
     external fun uniffi_rfb_ffi_fn_method_remotesession_server_name(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
@@ -1014,6 +1018,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_rfb_ffi_checksum_method_remotesession_send_pointer() and 0xFFFF) != 40220) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_rfb_ffi_checksum_method_remotesession_send_scroll() and 0xFFFF) != 30956) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_rfb_ffi_checksum_method_remotesession_server_name() and 0xFFFF) != 53654) {
@@ -1326,6 +1333,29 @@ public object FfiConverterUInt: FfiConverter<UInt, Int> {
 /**
  * @suppress
  */
+public object FfiConverterInt: FfiConverter<Int, Int> {
+    override fun lift(value: Int): Int {
+        return value
+    }
+
+    override fun read(buf: ByteBuffer): Int {
+        return buf.getInt()
+    }
+
+    override fun lower(value: Int): Int {
+        return value
+    }
+
+    override fun allocationSize(value: Int) = 4UL
+
+    override fun write(value: Int, buf: ByteBuffer) {
+        buf.putInt(value)
+    }
+}
+
+/**
+ * @suppress
+ */
 public object FfiConverterULong: FfiConverter<ULong, Long> {
     override fun lift(value: Long): ULong {
         return value.toULong()
@@ -1608,6 +1638,8 @@ public interface RemoteSessionInterface {
     suspend fun `sendKey`(`down`: kotlin.Boolean, `keysym`: kotlin.UInt)
     
     suspend fun `sendPointer`(`mask`: kotlin.UByte, `x`: kotlin.UShort, `y`: kotlin.UShort)
+    
+    suspend fun `sendScroll`(`x`: kotlin.UShort, `y`: kotlin.UShort, `stepsX`: kotlin.Int, `stepsY`: kotlin.Int)
     
     fun `serverName`(): kotlin.String
     
@@ -2017,6 +2049,32 @@ open class RemoteSession: Disposable, AutoCloseable, RemoteSessionInterface
         FfiConverterUByte.lower(`mask`),
         FfiConverterUShort.lower(`x`),
         FfiConverterUShort.lower(`y`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_rfb_ffi_rust_future_poll_void(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_rfb_ffi_rust_future_complete_void(future, continuation) },
+        { future -> UniffiLib.ffi_rfb_ffi_rust_future_free_void(future) },
+        // lift function
+        { },
+        
+        // Error FFI converter
+        SessionFailure.ErrorHandler,
+    )
+    }
+
+    
+    @Throws(SessionFailure::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `sendScroll`(`x`: kotlin.UShort, `y`: kotlin.UShort, `stepsX`: kotlin.Int, `stepsY`: kotlin.Int) {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_rfb_ffi_fn_method_remotesession_send_scroll(
+                uniffiHandle,
+                
+        FfiConverterUShort.lower(`x`),
+        FfiConverterUShort.lower(`y`),
+        FfiConverterInt.lower(`stepsX`),
+        FfiConverterInt.lower(`stepsY`),
             )
         },
         { future, callback, continuation -> UniffiLib.ffi_rfb_ffi_rust_future_poll_void(future, callback, continuation) },

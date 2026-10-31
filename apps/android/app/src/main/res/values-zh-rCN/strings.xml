@@ -31,7 +31,9 @@
     <string name="editor_show_password">显示密码</string>
     <string name="editor_hide_password">隐藏密码</string>
     <string name="editor_ssh_toggle">通过 SSH 隧道连接</string>
-    <string name="editor_ssh_description">连接前通过 SSH 服务器转发 VNC 流量。</string>
+    <string name="editor_ssh_description">通过 SSH 跳板机转发 VNC 流量，VNC 地址从跳板机侧解析。</string>
+    <string name="editor_ssh_host">SSH 跳板机地址</string>
+    <string name="editor_ssh_host_help">留空则使用 VNC 主机地址。</string>
     <string name="editor_ssh_username">SSH 用户名</string>
     <string name="editor_ssh_password">SSH 密码</string>
     <string name="editor_ssh_password_optional">留空则使用密钥代理。</string>

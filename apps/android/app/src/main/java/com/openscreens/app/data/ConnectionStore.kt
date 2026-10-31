@@ -90,6 +90,7 @@ class ConnectionStore(
                 item.put(
                     "ssh",
                     JSONObject()
+                        .put("host", ssh.host)
                         .put("username", ssh.username)
                         .put("password", ssh.password)
                         .put("port", ssh.port)
@@ -112,6 +113,7 @@ class ConnectionStore(
                 val item = array.getJSONObject(index)
                 val ssh = item.optJSONObject("ssh")?.let {
                     SshCredentials(
+                        host = it.optString("host"),
                         username = it.optString("username"),
                         password = it.optString("password"),
                         port = it.optInt("port", SshCredentials.DEFAULT_SSH_PORT),

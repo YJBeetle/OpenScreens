@@ -31,7 +31,9 @@
     <string name="editor_show_password">Show password</string>
     <string name="editor_hide_password">Hide password</string>
     <string name="editor_ssh_toggle">Tunnel through SSH</string>
-    <string name="editor_ssh_description">Route VNC traffic through an SSH server before connecting.</string>
+    <string name="editor_ssh_description">Route VNC traffic through an SSH jump host. The VNC address is resolved from that host.</string>
+    <string name="editor_ssh_host">SSH jump host</string>
+    <string name="editor_ssh_host_help">Leave empty to use the VNC host.</string>
     <string name="editor_ssh_username">SSH username</string>
     <string name="editor_ssh_password">SSH password</string>
     <string name="editor_ssh_password_optional">Leave empty to use a key agent.</string>

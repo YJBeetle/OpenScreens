@@ -21,6 +21,7 @@ data class Connection(
 }
 
 data class SshCredentials(
+    val host: String = "",
     val username: String,
     val password: String = "",
     val port: Int = DEFAULT_SSH_PORT,

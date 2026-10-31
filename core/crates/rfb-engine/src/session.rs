@@ -172,7 +172,7 @@ impl Session {
                 username: ssh.username.clone(),
                 auth: SshAuth::Password(ssh.password.clone()),
                 host_key,
-                target_host: "127.0.0.1".to_owned(),
+                target_host: config.host.clone(),
                 target_port: config.port,
             };
             rfb_io::connect_ssh(&ssh_config).await?

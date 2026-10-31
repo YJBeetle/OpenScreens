@@ -74,6 +74,9 @@ fun ConnectionEditorScreen(
         mutableStateOf(connection?.username.orEmpty())
     }
     var sshEnabled by rememberSaveable(editorKey) { mutableStateOf(connection?.ssh != null) }
+    var sshHost by rememberSaveable(editorKey) {
+        mutableStateOf(connection?.ssh?.host.orEmpty())
+    }
     var sshUsername by rememberSaveable(editorKey) {
         mutableStateOf(connection?.ssh?.username.orEmpty())
     }
@@ -119,6 +122,7 @@ fun ConnectionEditorScreen(
         ) {
             val ssh = if (sshEnabled) {
                 SshCredentials(
+                    host = sshHost.trim(),
                     username = sshUsername.trim(),
                     password = sshPassword,
                     port = sshPortNumber ?: SshCredentials.DEFAULT_SSH_PORT,
@@ -294,6 +298,20 @@ fun ConnectionEditorScreen(
 
                 AnimatedVisibility(visible = sshEnabled) {
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        OutlinedTextField(
+                            value = sshHost,
+                            onValueChange = { sshHost = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = { Text(stringResource(R.string.editor_ssh_host)) },
+                            singleLine = true,
+                            supportingText = {
+                                Text(stringResource(R.string.editor_ssh_host_help))
+                            },
+                            keyboardOptions = KeyboardOptions(
+                                autoCorrectEnabled = false,
+                                imeAction = ImeAction.Next,
+                            ),
+                        )
                         OutlinedTextField(
                             value = sshUsername,
                             onValueChange = { sshUsername = it },

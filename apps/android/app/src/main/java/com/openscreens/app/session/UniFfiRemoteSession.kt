@@ -79,7 +79,7 @@ class UniFfiRemoteSession(
             username = connection.username.ifBlank { null },
             password = connection.vncPassword.ifBlank { null },
             shared = true,
-            sshHost = ssh?.let { connection.host },
+            sshHost = ssh?.let { it.host.ifBlank { connection.host } },
             sshPort = ssh?.let { it.port.toUShort() },
             sshUsername = ssh?.username?.ifBlank { null },
             sshPassword = ssh?.password?.ifBlank { null },

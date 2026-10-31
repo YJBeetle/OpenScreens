@@ -94,6 +94,6 @@ The `Snapshot` workflow (manual dispatch) builds and publishes:
 - `OpenScreens-snapshot-android.apk` — signed with the release key from the `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` and `ANDROID_KEY_PASSWORD` secrets
 - `OpenScreens-snapshot-macos.zip` — unsigned until notarization credentials are configured
 
-Stable releases must attach an Android `.apk` and a macOS `.dmg` or `.zip` with names containing `android` / `macos`. iOS is distributed through the App Store and does not use this updater.
+Stable releases must attach an Android `.apk` and a macOS `.dmg` or `.zip` with names containing `android` / `macos`. On Android the update card's primary action opens the GitHub release page; the in-app download that hands the APK to the system installer remains available. iOS is distributed through the App Store and does not use this updater.
 
 Release signing uses repository secrets `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` and `ANDROID_KEY_PASSWORD`. The `Build` environment holds the macOS Apple ID notarization secrets (`NOTARY_APPLE_ID`, `NOTARY_APP_PASSWORD`), the variables `SIGNING_IDENTITY` / `SIGNING_TEAM_ID`, and — once exported — the `SIGNING_CERTIFICATE_P12_BASE64` / `SIGNING_CERTIFICATE_PASSWORD` secrets. Without the certificate secrets the snapshot macOS build is packaged unsigned.

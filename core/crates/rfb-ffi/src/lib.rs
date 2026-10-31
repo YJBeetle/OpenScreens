@@ -243,6 +243,24 @@ impl RemoteSession {
         self.session.request_refresh().await.map_err(to_failure)
     }
 
+    /// Restricts incremental update requests to a region and refreshes it.
+    /// A zero width or height restores full-screen updates.
+    pub async fn set_viewport(
+        &self,
+        x: u16,
+        y: u16,
+        width: u16,
+        height: u16,
+    ) -> Result<(), SessionFailure> {
+        let rect = (width > 0 && height > 0).then_some(EngineRect {
+            x,
+            y,
+            width,
+            height,
+        });
+        self.session.set_viewport(rect).await.map_err(to_failure)
+    }
+
     /// Returns tightly packed BGRA8888 pixels for one framebuffer region.
     pub fn copy_region(&self, rect: Rect) -> Option<Vec<u8>> {
         self.session.copy_region(rect.into())

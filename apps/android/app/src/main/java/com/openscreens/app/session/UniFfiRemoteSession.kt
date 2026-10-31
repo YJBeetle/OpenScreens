@@ -64,6 +64,9 @@ class UniFfiRemoteSession(
     private val closed = AtomicBoolean(false)
     private val disposed = AtomicBoolean(false)
     private val openMutex = Mutex()
+    // Serializes viewport reallocation against frame rendering: the UI may
+    // change the crop while the poller is painting the previous buffer.
+    private val frameMutex = Mutex()
 
     private var pollJob: Job? = null
 
@@ -76,12 +79,17 @@ class UniFfiRemoteSession(
     // Reused conversion buffer so partial updates do not allocate per rectangle.
     private var scratch = IntArray(0)
 
-    // Server framebuffer size and the sampled size Android keeps in memory.
+    // Server framebuffer size and the visible crop Android keeps in memory.
     private var serverWidth = 0
     private var serverHeight = 0
-    private var displayWidth = 0
-    private var displayHeight = 0
+    private var viewportX = 0
+    private var viewportY = 0
+    private var viewportWidth = 0
+    private var viewportHeight = 0
     private var displayScale = 1
+    // False while the UI still knows the previous crop; the new geometry is
+    // published together with the first frame that fills it.
+    private var viewportEmitted = true
 
     override suspend fun connect() = open()
 
@@ -148,25 +156,24 @@ class UniFfiRemoteSession(
             return
         }
 
-        val serverWidth = size.width.toInt()
-        val serverHeight = size.height.toInt()
-        val scale = displayScaleFor(serverWidth, serverHeight)
-        if (!prepareFramebuffer(serverWidth, serverHeight, scale)) {
+        val width = size.width.toInt()
+        val height = size.height.toInt()
+        val scale = initialDisplayScale(width, height)
+        if (!installViewport(width, height, 0, 0, width, height, scale)) {
             connected.close()
             _events.emit(
-                SessionEvent.Failed(
-                    "Not enough memory to display ${serverWidth}×$serverHeight.",
-                ),
+                SessionEvent.Failed("Not enough memory to display ${width}×$height."),
             )
             return
         }
+        viewportEmitted = true
 
         session = connected
-        _events.emit(SessionEvent.Connected(displayWidth, displayHeight))
+        _events.emit(SessionEvent.Connected(width, height))
         Log.i(
             TAG,
             "connected to ${connection.address} (${connected.serverName()}) at " +
-                "$serverWidth x $serverHeight, showing $displayWidth x $displayHeight (1/$scale)",
+                "$width x $height, sampling 1/$scale",
         )
         pollJob = scope.launch { poll(connected) }
     }
@@ -206,10 +213,9 @@ class UniFfiRemoteSession(
 
     override fun sendPointer(x: Int, y: Int, buttonMask: Int) {
         val current = session ?: return
-        // The UI works in downscaled display pixels; the server expects pixels
-        // of its own framebuffer.
-        val serverX = displayToServer(x, displayScale, serverWidth)
-        val serverY = displayToServer(y, displayScale, serverHeight)
+        // The UI maps touches against the full server framebuffer.
+        val serverX = x.coerceIn(0, (serverWidth - 1).coerceAtLeast(0))
+        val serverY = y.coerceIn(0, (serverHeight - 1).coerceAtLeast(0))
         scope.launch(inputDispatcher) {
             runCatching {
                 current.sendPointer(
@@ -253,6 +259,87 @@ class UniFfiRemoteSession(
         Log.d(TAG, "setQuality ${quality.name} (takes effect on the next connection)")
     }
 
+    override suspend fun setViewport(
+        x: Int,
+        y: Int,
+        width: Int,
+        height: Int,
+        screenPixelWidth: Int,
+    ) {
+        val current = session ?: return
+        if (serverWidth <= 0 || serverHeight <= 0) return
+
+        val left = x.coerceIn(0, serverWidth - 1)
+        val top = y.coerceIn(0, serverHeight - 1)
+        val right = (x + width.coerceAtLeast(1)).coerceIn(left + 1, serverWidth)
+        val bottom = (y + height.coerceAtLeast(1)).coerceIn(top + 1, serverHeight)
+        val visibleWidth = right - left
+        val visibleHeight = bottom - top
+        // One stored pixel per screen pixel keeps zoomed content sharp; the
+        // budget guard coarsens only when a single viewport would be too large.
+        var scale = (visibleWidth / screenPixelWidth.coerceAtLeast(1)).coerceAtLeast(1)
+        // Keep a little slack around the visible area for panning, then align
+        // outward to the sampling grid so server rectangles map without gaps.
+        val margin = maxOf(64, visibleWidth / 12)
+        val expandedLeft = (left - margin).coerceAtLeast(0)
+        val expandedTop = (top - margin).coerceAtLeast(0)
+        val expandedRight = (right + margin).coerceAtMost(serverWidth)
+        val expandedBottom = (bottom + margin).coerceAtMost(serverHeight)
+        while (scale < MAX_DISPLAY_SCALE &&
+            ceilDiv(expandedRight - expandedLeft, scale).toLong() *
+            ceilDiv(expandedBottom - expandedTop, scale) > MAX_VIEWPORT_PIXELS
+        ) {
+            scale++
+        }
+        val alignedLeft = (expandedLeft / scale) * scale
+        val alignedTop = (expandedTop / scale) * scale
+        val alignedRight = minOf(serverWidth, ceilDiv(expandedRight, scale) * scale)
+        val alignedBottom = minOf(serverHeight, ceilDiv(expandedBottom, scale) * scale)
+        val alignedWidth = alignedRight - alignedLeft
+        val alignedHeight = alignedBottom - alignedTop
+
+        val request = frameMutex.withLock {
+            if (alignedLeft == viewportX && alignedTop == viewportY &&
+                alignedWidth == viewportWidth && alignedHeight == viewportHeight &&
+                scale == displayScale && front != null
+            ) {
+                return
+            }
+
+            if (!installViewport(
+                    serverWidth,
+                    serverHeight,
+                    alignedLeft,
+                    alignedTop,
+                    alignedWidth,
+                    alignedHeight,
+                    scale,
+                )
+            ) {
+                _events.emit(
+                    SessionEvent.Failed("Not enough memory for the visible screen area."),
+                )
+                return
+            }
+            viewportEmitted = false
+            Log.d(
+                TAG,
+                "viewport ${alignedLeft},${alignedTop} ${alignedWidth}x$alignedHeight " +
+                    "sampling 1/$scale",
+            )
+            intArrayOf(alignedLeft, alignedTop, alignedWidth, alignedHeight)
+        }
+
+        runCatching {
+            current.setViewport(
+                x = request[0].toUShort(),
+                y = request[1].toUShort(),
+                width = request[2].toUShort(),
+                height = request[3].toUShort(),
+            )
+        }.onFailure { Log.w(TAG, "setViewport failed", it) }
+    }
+
     private suspend fun poll(connected: NativeSession) {
         try {
             while (true) {
@@ -282,35 +369,23 @@ class UniFfiRemoteSession(
     }
 
     private suspend fun renderCursor(event: NativeEvent.Cursor) {
-        val scale = displayScale.coerceAtLeast(1)
-        val sourceWidth = event.width.toInt()
-        val sourceHeight = event.height.toInt()
+        val width = event.width.toInt()
+        val height = event.height.toInt()
         val pixels = event.pixels
-        if (sourceWidth <= 0 || sourceHeight <= 0 ||
-            pixels.size < sourceWidth * sourceHeight * 4
-        ) {
-            return
-        }
+        if (width <= 0 || height <= 0 || pixels.size < width * height * 4) return
 
-        val width = ceilDiv(sourceWidth, scale)
-        val height = ceilDiv(sourceHeight, scale)
+        // Cursors stay at server resolution: the UI draws them in framebuffer
+        // coordinates, so they scale with the view automatically.
         val bitmap = withContext(Dispatchers.Default) {
             val argb = IntArray(width * height)
             val buffer = ByteBuffer.wrap(pixels).order(ByteOrder.LITTLE_ENDIAN)
-            val sourcePixels = sourceWidth * sourceHeight
-            for (y in 0 until height) {
-                for (x in 0 until width) {
-                    val source = (y * scale) * sourceWidth + x * scale
-                    if (source >= sourcePixels) continue
-                    buffer.position(source * 4)
-                    val bgra = buffer.getInt()
-                    val blue = bgra and 0xFF
-                    val green = (bgra ushr 8) and 0xFF
-                    val red = (bgra ushr 16) and 0xFF
-                    val alpha = (bgra ushr 24) and 0xFF
-                    argb[y * width + x] =
-                        (alpha shl 24) or (red shl 16) or (green shl 8) or blue
-                }
+            for (index in argb.indices) {
+                val bgra = buffer.getInt()
+                val blue = bgra and 0xFF
+                val green = (bgra ushr 8) and 0xFF
+                val red = (bgra ushr 16) and 0xFF
+                val alpha = (bgra ushr 24) and 0xFF
+                argb[index] = (alpha shl 24) or (red shl 16) or (green shl 8) or blue
             }
             Bitmap.createBitmap(argb, width, height, Bitmap.Config.ARGB_8888)
                 .apply { setHasAlpha(true) }
@@ -318,77 +393,97 @@ class UniFfiRemoteSession(
         _events.emit(
             SessionEvent.Cursor(
                 bitmap = bitmap,
-                hotspotX = event.hotspotX.toInt() / scale,
-                hotspotY = event.hotspotY.toInt() / scale,
+                hotspotX = event.hotspotX.toInt(),
+                hotspotY = event.hotspotY.toInt(),
             ),
         )
     }
 
     private suspend fun applySize(width: Int, height: Int) {
+        frameMutex.withLock { applySizeLocked(width, height) }
+    }
+
+    private suspend fun applySizeLocked(width: Int, height: Int) {
         if (width == serverWidth && height == serverHeight && front != null) return
-        val scale = displayScaleFor(width, height)
-        if (!prepareFramebuffer(width, height, scale)) {
+        val scale = initialDisplayScale(width, height)
+        if (!installViewport(width, height, 0, 0, width, height, scale)) {
             _events.emit(
                 SessionEvent.Failed("Not enough memory to display ${width}×$height."),
             )
             return
         }
-        _events.emit(SessionEvent.Resized(displayWidth, displayHeight))
+        // The UI resets its crop to the whole framebuffer on resize.
+        viewportEmitted = true
+        _events.emit(SessionEvent.Resized(width, height))
     }
 
-    private suspend fun prepareFramebuffer(
+    private suspend fun installViewport(
         serverWidth: Int,
         serverHeight: Int,
+        x: Int,
+        y: Int,
+        width: Int,
+        height: Int,
         scale: Int,
     ): Boolean {
-        val displayWidth = ceilDiv(serverWidth, scale)
-        val displayHeight = ceilDiv(serverHeight, scale)
+        val bitmapWidth = ceilDiv(width, scale)
+        val bitmapHeight = ceilDiv(height, scale)
         val allocated = withContext(Dispatchers.Default) {
-            runCatching { allocate(displayWidth, displayHeight) }.isSuccess
+            runCatching { allocate(bitmapWidth, bitmapHeight) }.isSuccess
         }
         if (!allocated) {
-            Log.w(TAG, "unable to allocate $displayWidth x $displayHeight bitmaps")
+            Log.w(TAG, "unable to allocate $bitmapWidth x $bitmapHeight bitmaps")
             return false
         }
         this.serverWidth = serverWidth
         this.serverHeight = serverHeight
-        this.displayWidth = displayWidth
-        this.displayHeight = displayHeight
+        this.viewportX = x
+        this.viewportY = y
+        this.viewportWidth = width
+        this.viewportHeight = height
         this.displayScale = scale
         return true
     }
 
     private suspend fun renderFrame(connected: NativeSession, event: NativeEvent.Frame) {
+        frameMutex.withLock { renderFrameLocked(connected, event) }
+    }
+
+    private suspend fun renderFrameLocked(connected: NativeSession, event: NativeEvent.Frame) {
         val target = back ?: front ?: return
         val scale = displayScale.coerceAtLeast(1)
         // The poller rotates buffers, so the target starts as the previous frame;
         // otherwise incremental updates would be painted on a stale (often black)
-        // bitmap. A full-frame update overwrites everything and skips the copy.
-        val coversFrame = event.rects.any { rect ->
-            rect.x == 0.toUShort() && rect.y == 0.toUShort() &&
-                rect.width.toInt() == serverWidth && rect.height.toInt() == serverHeight
+        // bitmap. An update that covers the whole viewport, or the first paint of
+        // a new viewport, skips the copy.
+        val coversViewport = event.rects.any { rect ->
+            rect.x.toInt() <= viewportX && rect.y.toInt() <= viewportY &&
+                rect.x.toInt() + rect.width.toInt() >= viewportX + viewportWidth &&
+                rect.y.toInt() + rect.height.toInt() >= viewportY + viewportHeight
         }
-        if (!coversFrame) {
+        if (!coversViewport && viewportEmitted) {
             front?.let { copyInto(target, it) }
         }
 
+        var wrote = false
         for (rect in event.rects) {
-            val rectWidth = rect.width.toInt()
-            val rectHeight = rect.height.toInt()
-            if (rectWidth == 0 || rectHeight == 0) continue
+            val left = maxOf(rect.x.toInt(), viewportX)
+            val top = maxOf(rect.y.toInt(), viewportY)
+            val right = minOf(rect.x.toInt() + rect.width.toInt(), viewportX + viewportWidth)
+            val bottom = minOf(rect.y.toInt() + rect.height.toInt(), viewportY + viewportHeight)
+            if (right <= left || bottom <= top) continue
 
-            val left = rect.x.toInt()
-            val top = rect.y.toInt()
-            if (left + rectWidth > serverWidth || top + rectHeight > serverHeight) continue
-
-            val destLeft = left / scale
-            val destTop = top / scale
-            val destWidth = (left + rectWidth - 1) / scale - destLeft + 1
-            val destHeight = (top + rectHeight - 1) / scale - destTop + 1
+            val destLeft = left / scale - viewportX / scale
+            val destTop = top / scale - viewportY / scale
+            val destWidth = (right - 1) / scale - left / scale + 1
+            val destHeight = (bottom - 1) / scale - top / scale + 1
             val count = destWidth * destHeight
             if (count <= 0) continue
 
-            val pixels = connected.copyRegionScaled(rect, scale.toUShort()) ?: continue
+            val pixels = connected.copyRegionScaled(
+                rect = rect(left, top, right - left, bottom - top),
+                scale = scale.toUShort(),
+            ) ?: continue
             if (pixels.size < count * 4) continue
 
             val argb = scratchFor(count)
@@ -402,11 +497,26 @@ class UniFfiRemoteSession(
                 offset += 4
             }
             target.setPixels(argb, 0, destWidth, destLeft, destTop, destWidth, destHeight)
+            wrote = true
         }
+        if (!wrote) return
 
+        val firstPaint = !viewportEmitted
         val previous = front
         front = target
         back = previous ?: target
+        if (firstPaint) {
+            viewportEmitted = true
+            _events.emit(
+                SessionEvent.Viewport(
+                    x = viewportX,
+                    y = viewportY,
+                    width = viewportWidth,
+                    height = viewportHeight,
+                    scale = scale,
+                ),
+            )
+        }
         _events.emit(SessionEvent.Frame(event.sequence.toLong(), target))
     }
 
@@ -419,21 +529,12 @@ class UniFfiRemoteSession(
         Canvas(target).drawBitmap(source, 0f, 0f, null)
     }
 
-    private fun displayToServer(value: Int, scale: Int, limit: Int): Int {
-        if (limit <= 1) return 0
-        val step = scale.coerceAtLeast(1)
-        val mapped = value.toLong() * step + step / 2
-        return mapped.coerceIn(0L, (limit - 1).toLong()).toInt()
-    }
-
-    private fun displayScaleFor(width: Int, height: Int): Int {
-        var scale = 1
-        while (scale < MAX_DISPLAY_SCALE) {
-            val w = ceilDiv(width, scale)
-            val h = ceilDiv(height, scale)
-            val fits = w.toLong() * h <= MAX_DISPLAY_PIXELS &&
-                w <= MAX_DISPLAY_DIM && h <= MAX_DISPLAY_DIM
-            if (fits) break
+    private fun initialDisplayScale(width: Int, height: Int): Int {
+        var scale = (width / INITIAL_TARGET_WIDTH).coerceAtLeast(1)
+        while (scale < MAX_DISPLAY_SCALE &&
+            ceilDiv(width, scale).toLong() * ceilDiv(height, scale) >
+            MAX_VIEWPORT_PIXELS
+        ) {
             scale++
         }
         return scale
@@ -466,10 +567,11 @@ class UniFfiRemoteSession(
     private companion object {
         const val TAG = "UniFfiRemoteSession"
 
-        // Bounded at roughly a 2560x1440 ARGB frame (16 MB per bitmap) so a
-        // 6K Retina Mac cannot exhaust the Android heap.
-        const val MAX_DISPLAY_PIXELS = 4_000_000L
-        const val MAX_DISPLAY_DIM = 4096
+        // The first paint assumes a phone-width target; the UI then sends its
+        // exact pixel width through setViewport. The budget keeps a viewport
+        // bitmap under ~16 MB.
+        const val INITIAL_TARGET_WIDTH = 1080
+        const val MAX_VIEWPORT_PIXELS = 6_000_000L
         const val MAX_DISPLAY_SCALE = 16
     }
 }

@@ -98,6 +98,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
@@ -112,6 +113,7 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -179,6 +181,7 @@ fun SessionScreen(
     var backgroundedAt by remember { mutableLongStateOf(0L) }
     var cursor by remember { mutableStateOf<SessionEvent.Cursor?>(null) }
     var cursorPosition by remember { mutableStateOf<IntOffset?>(null) }
+    var viewport by remember { mutableStateOf<SessionEvent.Viewport?>(null) }
 
     val focusRequester = remember { FocusRequester() }
     val pointerMemory = remember(session) { PointerMemory() }
@@ -247,17 +250,21 @@ fun SessionScreen(
                     status = SessionStatus.Connecting
                     cursor = null
                     cursorPosition = null
+                    viewport = null
                 }
                 is SessionEvent.Connected -> {
                     status = SessionStatus.Connected
                     remoteWidth = event.width
                     remoteHeight = event.height
+                    viewport = null
                     onConnected()
                 }
                 is SessionEvent.Resized -> {
                     remoteWidth = event.width
                     remoteHeight = event.height
+                    viewport = null
                 }
+                is SessionEvent.Viewport -> viewport = event
                 is SessionEvent.Frame -> {
                     status = SessionStatus.Connected
                     frame = event
@@ -368,6 +375,43 @@ fun SessionScreen(
     ) {
         val aspect = (remoteWidth.toFloat() / remoteHeight.toFloat()).coerceAtLeast(0.1f)
         val canvasWidth = min(maxWidth.value, maxHeight.value * aspect).dp
+
+        // Subscribe only to the region the viewport shows, and ask for a
+        // sampling density that matches the current zoom. Debounced so a pinch
+        // or pan settles before the region is re-requested.
+        val density = LocalDensity.current
+        val canvasPixelWidth = with(density) { canvasWidth.toPx() }
+        LaunchedEffect(
+            session,
+            status,
+            zoom,
+            pan,
+            remoteWidth,
+            remoteHeight,
+            canvasPixelWidth,
+        ) {
+            if (status != SessionStatus.Connected ||
+                remoteWidth <= 1 || remoteHeight <= 1 || canvasPixelWidth < 1f
+            ) {
+                return@LaunchedEffect
+            }
+            delay(VIEWPORT_SETTLE_MS)
+            val rect = visibleServerRect(
+                zoom = zoom,
+                pan = pan,
+                viewWidth = canvasPixelWidth,
+                viewHeight = canvasPixelWidth / aspect,
+                serverWidth = remoteWidth,
+                serverHeight = remoteHeight,
+            )
+            session.setViewport(
+                rect[0],
+                rect[1],
+                rect[2],
+                rect[3],
+                canvasPixelWidth.roundToInt(),
+            )
+        }
 
         // Letterboxed area around the framebuffer: tapping it toggles the session chrome
         // without stealing taps from the canvas, which sits above this layer.
@@ -732,12 +776,28 @@ fun SessionScreen(
                             transformOrigin = TransformOrigin.Center
                         },
                 ) {
+                    val crop = viewport
+                    val sourceX = crop?.x ?: 0
+                    val sourceY = crop?.y ?: 0
+                    val sourceWidth = crop?.width ?: remoteWidth
+                    val sourceHeight = crop?.height ?: remoteHeight
+                    val destination = IntRect(
+                        left = (sourceX.toFloat() / remoteWidth * size.width).roundToInt(),
+                        top = (sourceY.toFloat() / remoteHeight * size.height).roundToInt(),
+                        right = ((sourceX + sourceWidth).toFloat() / remoteWidth * size.width)
+                            .roundToInt(),
+                        bottom = ((sourceY + sourceHeight).toFloat() / remoteHeight * size.height)
+                            .roundToInt(),
+                    )
                     drawImage(
                         image = live.bitmap.asImageBitmap(),
                         srcOffset = IntOffset.Zero,
                         srcSize = IntSize(live.bitmap.width, live.bitmap.height),
-                        dstOffset = IntOffset.Zero,
-                        dstSize = IntSize(size.width.roundToInt(), size.height.roundToInt()),
+                        dstOffset = IntOffset(destination.left, destination.top),
+                        dstSize = IntSize(
+                            (destination.right - destination.left).coerceAtLeast(1),
+                            (destination.bottom - destination.top).coerceAtLeast(1),
+                        ),
                         filterQuality = if (zoom > 1.2f) FilterQuality.Medium else FilterQuality.Low,
                     )
                     drawRemoteCursor(cursor, cursorPosition, remoteWidth.toFloat(), size)
@@ -857,6 +917,40 @@ fun SessionScreen(
             },
         )
     }
+}
+
+/** Framebuffer region visible under the current zoom/pan, in server pixels. */
+private fun visibleServerRect(
+    zoom: Float,
+    pan: Offset,
+    viewWidth: Float,
+    viewHeight: Float,
+    serverWidth: Int,
+    serverHeight: Int,
+): IntArray {
+    val safeZoom = zoom.coerceAtLeast(0.01f)
+    val center = Offset(viewWidth / 2f, viewHeight / 2f)
+
+    fun toImage(point: Offset): Offset =
+        (point - center - pan) / safeZoom + center
+
+    val first = toImage(Offset.Zero)
+    val second = toImage(Offset(viewWidth, viewHeight))
+    val scaleX = serverWidth / viewWidth
+    val scaleY = serverHeight / viewHeight
+    val left = (min(first.x, second.x) * scaleX)
+        .roundToInt()
+        .coerceIn(0, serverWidth - 1)
+    val top = (min(first.y, second.y) * scaleY)
+        .roundToInt()
+        .coerceIn(0, serverHeight - 1)
+    val right = (max(first.x, second.x) * scaleX)
+        .roundToInt()
+        .coerceIn(left + 1, serverWidth)
+    val bottom = (max(first.y, second.y) * scaleY)
+        .roundToInt()
+        .coerceIn(top + 1, serverHeight)
+    return intArrayOf(left, top, right - left, bottom - top)
 }
 
 /**
@@ -1383,6 +1477,7 @@ private const val PINCH_ZOOM_EPSILON = 0.08f
 private const val LONG_PRESS_MS = 500L
 private const val IME_OPEN_GRACE_MS = 1200L
 private const val RESUME_RECONNECT_MS = 5_000L
+private const val VIEWPORT_SETTLE_MS = 120L
 private const val DOUBLE_TAP_CLICK_MARGIN_MS = 32L
 
 // Wheel scrolling: one RFB button press/release pair per step of finger travel.

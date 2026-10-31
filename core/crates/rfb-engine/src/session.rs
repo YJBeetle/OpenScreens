@@ -193,6 +193,7 @@ pub struct Session {
     commands: mpsc::Sender<Vec<u8>>,
     events: AsyncMutex<mpsc::Receiver<Event>>,
     framebuffer: Arc<Mutex<Framebuffer>>,
+    viewport: Arc<Mutex<Option<Rect>>>,
     input_key: Option<[u8; 16]>,
     name: String,
     reader: JoinHandle<()>,
@@ -253,6 +254,7 @@ impl Session {
         let height = handshake.server_init.height;
         let name = handshake.server_init.name.clone();
         let framebuffer = Arc::new(Mutex::new(Framebuffer::new(width, height)));
+        let viewport = Arc::new(Mutex::new(None));
 
         let (read_half, write_half) = tokio::io::split(stream);
         let (command_tx, command_rx) = mpsc::channel(COMMAND_CHANNEL_CAPACITY);
@@ -281,12 +283,14 @@ impl Session {
             height,
             name.clone(),
             std::time::Duration::from_millis(u64::from(config.frame_interval_ms)),
+            viewport.clone(),
         ));
 
         Ok(Self {
             commands: command_tx,
             events: AsyncMutex::new(event_rx),
             framebuffer,
+            viewport,
             input_key,
             name,
             reader,
@@ -337,6 +341,25 @@ impl Session {
         self.send(client_cut_text(text.as_bytes())).await
     }
 
+    /// Restricts incremental update requests to a framebuffer region and asks
+    /// the server for that region right away. `None` restores full-screen
+    /// updates.
+    pub async fn set_viewport(&self, rect: Option<Rect>) -> Result<(), SessionError> {
+        let Some((width, height)) = self.size() else {
+            return Err(SessionError::Closed);
+        };
+        let rect = rect.and_then(|rect| clamp_rect(rect, width, height));
+        if let Ok(mut viewport) = self.viewport.lock() {
+            *viewport = rect;
+        }
+        let (x, y, w, h) = match rect {
+            Some(rect) => (rect.x, rect.y, rect.width, rect.height),
+            None => (0, 0, width, height),
+        };
+        self.send(framebuffer_update_request(false, x, y, w, h).to_vec())
+            .await
+    }
+
     pub async fn request_refresh(&self) -> Result<(), SessionError> {
         let Some((width, height)) = self.size() else {
             return Err(SessionError::Closed);
@@ -379,6 +402,7 @@ struct ReaderState {
     pixel_format: PixelFormat,
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn reader_task<R>(
     mut read: R,
     commands: mpsc::Sender<Vec<u8>>,
@@ -388,6 +412,7 @@ async fn reader_task<R>(
     height: u16,
     name: String,
     frame_interval: std::time::Duration,
+    viewport: Arc<Mutex<Option<Rect>>>,
 ) where
     R: AsyncRead + Unpin,
 {
@@ -424,10 +449,17 @@ async fn reader_task<R>(
                             }
                         }
                     }
-                    let Some((width, height)) = state.size() else {
-                        break;
-                    };
-                    let request = framebuffer_update_request(true, 0, 0, width, height);
+                    let (x, y, width, height) =
+                        match viewport.lock().ok().and_then(|viewport| *viewport) {
+                            Some(rect) => (rect.x, rect.y, rect.width, rect.height),
+                            None => {
+                                let Some((width, height)) = state.size() else {
+                                    break;
+                                };
+                                (0, 0, width, height)
+                            }
+                        };
+                    let request = framebuffer_update_request(true, x, y, width, height);
                     if commands.send(request.to_vec()).await.is_err() {
                         break;
                     }
@@ -753,6 +785,18 @@ where
         return Err(SessionError::Closed);
     }
     Ok(())
+}
+
+fn clamp_rect(rect: Rect, width: u16, height: u16) -> Option<Rect> {
+    if rect.width == 0 || rect.height == 0 || rect.x >= width || rect.y >= height {
+        return None;
+    }
+    Some(Rect {
+        x: rect.x,
+        y: rect.y,
+        width: rect.width.min(width - rect.x),
+        height: rect.height.min(height - rect.y),
+    })
 }
 
 fn copy_region_from(framebuffer: &Framebuffer, rect: Rect) -> Option<Vec<u8>> {

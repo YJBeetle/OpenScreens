@@ -10,7 +10,7 @@
 - Raw、CopyRect、RRE、Hextile、ZRLE、zlib、Tight/JPEG 解码到 BGRA 帧缓冲
 - macOS（悬停即移动指针）与 Android 客户端本地光标渲染（Cursor 与 PointerPos 伪编码）；iOS 仍使用服务端合成光标
 - 按连接选择 Tight JPEG 画质（Android 画质菜单），并对帧更新请求限速
-- Android 对大帧缓冲按整数倍采样，限制到位图内存预算内，6K Retina 主机也能正常显示
+- Android 只请求当前可见的帧缓冲区域，并按屏幕像素密度采样；6K Retina 主机放大后依旧清晰，位图内存受控
 - TCP 与 SSH（direct-tcpip）传输；跳板机支持密码或私钥认证。Android 有加密的密钥管理，macOS 直接选用 `~/.ssh` 下的私钥，iOS 可导入私钥到钥匙串（设置 → SSH Keys）
 - macOS 与 iOS/iPadOS 的 SwiftUI 应用，Metal 画布
 - Android 的 Compose Material 3 应用

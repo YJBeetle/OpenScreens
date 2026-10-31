@@ -641,6 +641,12 @@ public protocol RemoteSessionProtocol: AnyObject, Sendable {
     
     func serverName()  -> String
     
+    /**
+     * Restricts incremental update requests to a region and refreshes it.
+     * A zero width or height restores full-screen updates.
+     */
+    func setViewport(x: UInt16, y: UInt16, width: UInt16, height: UInt16) async throws 
+    
     func size()  -> SessionSize?
     
 }
@@ -827,6 +833,26 @@ open func serverName() -> String  {
             self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
+}
+    
+    /**
+     * Restricts incremental update requests to a region and refreshes it.
+     * A zero width or height restores full-screen updates.
+     */
+open func setViewport(x: UInt16, y: UInt16, width: UInt16, height: UInt16)async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_rfb_ffi_fn_method_remotesession_set_viewport(
+                        self.uniffiCloneHandle(),FfiConverterUInt16.lower(x),FfiConverterUInt16.lower(y),FfiConverterUInt16.lower(width),FfiConverterUInt16.lower(height)
+                )
+            },
+            pollFunc: ffi_rfb_ffi_rust_future_poll_void,
+            completeFunc: ffi_rfb_ffi_rust_future_complete_void,
+            freeFunc: ffi_rfb_ffi_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeSessionFailure_lift
+        )
 }
     
 open func size() -> SessionSize?  {
@@ -1743,6 +1769,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_rfb_ffi_checksum_method_remotesession_server_name() != 53654) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_rfb_ffi_checksum_method_remotesession_set_viewport() != 37258) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_rfb_ffi_checksum_method_remotesession_size() != 45230) {

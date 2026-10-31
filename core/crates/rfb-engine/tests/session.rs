@@ -168,6 +168,41 @@ async fn local_cursor_events() {
 }
 
 #[tokio::test]
+async fn viewport_limits_update_requests() {
+    let (client, mut server) = duplex(64 * 1024);
+
+    let server_task = tokio::spawn(async move {
+        perform_handshake(&mut server).await;
+        read_setup(&mut server).await;
+
+        // Changing the viewport requests the region immediately.
+        let mut first = [0u8; 10];
+        server.read_exact(&mut first).await.unwrap();
+        assert_eq!(first, [3, 0, 0, 1, 0, 1, 0, 1, 0, 1]);
+
+        server.write_all(&raw_update()).await.unwrap();
+        let mut next = [0u8; 10];
+        server.read_exact(&mut next).await.unwrap();
+        assert_eq!(next, [3, 1, 0, 1, 0, 1, 0, 1, 0, 1]);
+    });
+
+    let session = Session::connect_stream(client, SessionConfig::new("mock", 5900))
+        .await
+        .unwrap();
+    session
+        .set_viewport(Some(Rect {
+            x: 1,
+            y: 1,
+            width: 1,
+            height: 1,
+        }))
+        .await
+        .unwrap();
+    server_task.await.unwrap();
+    drop(session);
+}
+
+#[tokio::test]
 async fn advertises_configured_quality() {
     let (client, mut server) = duplex(64 * 1024);
 

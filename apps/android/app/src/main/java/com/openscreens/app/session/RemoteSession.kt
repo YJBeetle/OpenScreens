@@ -38,6 +38,13 @@ interface RemoteSession {
     suspend fun copyRegion(x: Int, y: Int, width: Int, height: Int): ByteArray
 
     fun setQuality(quality: QualityPreset)
+
+    /**
+     * Restricts server updates to the visible framebuffer region (server
+     * pixels) and sizes the stored bitmap for an on-screen width of
+     * [screenPixelWidth] pixels.
+     */
+    suspend fun setViewport(x: Int, y: Int, width: Int, height: Int, screenPixelWidth: Int)
 }
 
 sealed interface SessionEvent {
@@ -54,6 +61,16 @@ sealed interface SessionEvent {
 
     /** A client-side cursor bitmap supplied through the Cursor pseudo-encoding. */
     data class Cursor(val bitmap: Bitmap, val hotspotX: Int, val hotspotY: Int) : SessionEvent
+
+    /** The framebuffer region currently stored in [Frame] bitmaps, in server
+     * pixels. Frames outside this region are not delivered. */
+    data class Viewport(
+        val x: Int,
+        val y: Int,
+        val width: Int,
+        val height: Int,
+        val scale: Int,
+    ) : SessionEvent
 
     data object Disconnected : SessionEvent
     data class Failed(val reason: String) : SessionEvent

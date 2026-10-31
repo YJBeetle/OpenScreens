@@ -704,6 +704,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Int
     external fun uniffi_rfb_ffi_checksum_method_remotesession_server_name(
     ): Int
+    external fun uniffi_rfb_ffi_checksum_method_remotesession_set_viewport(
+    ): Int
     external fun uniffi_rfb_ffi_checksum_method_remotesession_size(
     ): Int
     external fun uniffi_rfb_ffi_checksum_constructor_remotesession_connect(
@@ -750,6 +752,8 @@ internal object UniffiLib {
     ): Long
     external fun uniffi_rfb_ffi_fn_method_remotesession_server_name(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
+    external fun uniffi_rfb_ffi_fn_method_remotesession_set_viewport(`ptr`: Long,`x`: Short,`y`: Short,`width`: Short,`height`: Short,
+    ): Long
     external fun uniffi_rfb_ffi_fn_method_remotesession_size(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_rfb_ffi_fn_func_generate_ssh_key(uniffi_out_err: UniffiRustCallStatus, 
@@ -908,6 +912,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_rfb_ffi_checksum_method_remotesession_server_name() and 0xFFFF) != 53654) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_rfb_ffi_checksum_method_remotesession_set_viewport() and 0xFFFF) != 37258) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_rfb_ffi_checksum_method_remotesession_size() and 0xFFFF) != 45230) {
@@ -1432,6 +1439,12 @@ public interface RemoteSessionInterface {
     
     fun `serverName`(): kotlin.String
     
+    /**
+     * Restricts incremental update requests to a region and refreshes it.
+     * A zero width or height restores full-screen updates.
+     */
+    suspend fun `setViewport`(`x`: kotlin.UShort, `y`: kotlin.UShort, `width`: kotlin.UShort, `height`: kotlin.UShort)
+    
     fun `size`(): SessionSize?
     
     companion object
@@ -1699,6 +1712,36 @@ open class RemoteSession: Disposable, AutoCloseable, RemoteSessionInterface
     )
     }
     
+
+    
+    /**
+     * Restricts incremental update requests to a region and refreshes it.
+     * A zero width or height restores full-screen updates.
+     */
+    @Throws(SessionFailure::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `setViewport`(`x`: kotlin.UShort, `y`: kotlin.UShort, `width`: kotlin.UShort, `height`: kotlin.UShort) {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_rfb_ffi_fn_method_remotesession_set_viewport(
+                uniffiHandle,
+                
+        FfiConverterUShort.lower(`x`),
+        FfiConverterUShort.lower(`y`),
+        FfiConverterUShort.lower(`width`),
+        FfiConverterUShort.lower(`height`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_rfb_ffi_rust_future_poll_void(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_rfb_ffi_rust_future_complete_void(future, continuation) },
+        { future -> UniffiLib.ffi_rfb_ffi_rust_future_free_void(future) },
+        // lift function
+        { },
+        
+        // Error FFI converter
+        SessionFailure.ErrorHandler,
+    )
+    }
 
     override fun `size`(): SessionSize? {
             return FfiConverterOptionalTypeSessionSize.lift(

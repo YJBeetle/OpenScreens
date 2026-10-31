@@ -32,7 +32,7 @@ struct PhoneLibraryView: View {
                     .presentationDetents([.large])
                     .presentationDragIndicator(.visible)
             case .settings:
-                SettingsSheet(appVersion: IOSAppInfo.version)
+                SettingsSheet(appVersion: IOSAppInfo.version, buildVersion: IOSAppInfo.buildVersion)
                     .environment(store)
                     .environment(settings)
             }

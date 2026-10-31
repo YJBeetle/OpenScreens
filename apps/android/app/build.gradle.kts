@@ -17,6 +17,15 @@ val releaseKeystore = keystoreProperties.getProperty("storeFile")
     ?.let(rootProject::file)
     ?.takeIf { it.isFile }
 
+// `git describe --tags` yields the tag alone when HEAD is tagged and
+// "tag-<count>-g<hash>[-dirty]" afterwards, so release and snapshot builds are
+// distinguishable without touching the numeric version used by the updater.
+val buildVersion = runCatching {
+    providers.exec {
+        commandLine("git", "describe", "--tags", "--always", "--dirty")
+    }.standardOutput.asText.get().trim()
+}.getOrNull().orEmpty().ifBlank { "dev" }
+
 android {
     namespace = "com.openscreens.app"
     compileSdk = 36
@@ -27,6 +36,7 @@ android {
         targetSdk = 36
         versionCode = 1
         versionName = "0.1.0"
+        buildConfigField("String", "BUILD_VERSION", "\"$buildVersion\"")
 
         ndk {
             abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")

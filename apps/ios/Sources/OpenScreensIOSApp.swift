@@ -21,7 +21,18 @@ struct OpenScreensIOSApp: App {
 
 enum IOSAppInfo {
     static var version: String {
-        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.1.0"
+        infoString("CFBundleShortVersionString") ?? "0.1.0"
+    }
+
+    static var buildVersion: String {
+        infoString("OpenScreensBuildVersion") ?? version
+    }
+
+    private static func infoString(_ key: String) -> String? {
+        guard let value = Bundle.main.object(forInfoDictionaryKey: key) as? String,
+              !value.isEmpty,
+              !value.hasPrefix("$(") else { return nil }
+        return value
     }
 }
 

@@ -42,7 +42,7 @@ struct OpenScreensMacApp: App {
         .defaultSize(width: 1120, height: 760)
 
         Settings {
-            MacSettingsView(appVersion: MacAppInfo.version)
+            MacSettingsView(appVersion: MacAppInfo.version, buildVersion: MacAppInfo.buildVersion)
                 .environment(connections)
                 .environment(settings)
                 .environment(sshKeys)
@@ -58,7 +58,18 @@ enum MacSceneID {
 
 enum MacAppInfo {
     static var version: String {
-        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.1.0"
+        infoString("CFBundleShortVersionString") ?? "0.1.0"
+    }
+
+    static var buildVersion: String {
+        infoString("OpenScreensBuildVersion") ?? version
+    }
+
+    private static func infoString(_ key: String) -> String? {
+        guard let value = Bundle.main.object(forInfoDictionaryKey: key) as? String,
+              !value.isEmpty,
+              !value.hasPrefix("$(") else { return nil }
+        return value
     }
 }
 
@@ -68,9 +79,10 @@ struct SessionRoute: Codable, Hashable {
 
 struct MacSettingsView: View {
     let appVersion: String
+    let buildVersion: String
 
     var body: some View {
-        SettingsView(appVersion: appVersion)
+        SettingsView(appVersion: appVersion, buildVersion: buildVersion)
             .frame(width: 620, height: 620)
     }
 }

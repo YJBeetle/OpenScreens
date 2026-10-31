@@ -19,6 +19,7 @@ settings:
     SWIFT_STRICT_CONCURRENCY: complete
     MARKETING_VERSION: "0.1.0"
     CURRENT_PROJECT_VERSION: "1"
+    OPENSCREENS_BUILD_VERSION: dev
     CODE_SIGN_STYLE: Automatic
     DEVELOPMENT_TEAM: "84GS944T65"
     ENABLE_USER_SCRIPT_SANDBOXING: YES
@@ -48,10 +49,8 @@ targets:
         PRODUCT_NAME: OpenScreens
         PRODUCT_BUNDLE_IDENTIFIER: app.openscreens.macos
         MACOSX_DEPLOYMENT_TARGET: "15.0"
-        GENERATE_INFOPLIST_FILE: YES
-        INFOPLIST_KEY_CFBundleDisplayName: OpenScreens
-        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.utilities
-        INFOPLIST_KEY_NSHumanReadableCopyright: "AGPL-3.0 · OpenScreens contributors"
+        GENERATE_INFOPLIST_FILE: NO
+        INFOPLIST_FILE: Info.plist
         ENABLE_HARDENED_RUNTIME: YES
         SWIFT_EMIT_LOC_STRINGS: YES
 

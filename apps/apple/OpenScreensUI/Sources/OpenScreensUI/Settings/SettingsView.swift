@@ -10,14 +10,16 @@ public struct SettingsView: View {
     @Environment(ConnectionStore.self) private var connections
 
     private let appVersion: String
+    private let buildVersion: String?
     @State private var confirmingRestore = false
     #if os(macOS)
     @State private var updateStatus: MacUpdateStatus = .idle
     @State private var isDownloadingUpdate = false
     #endif
 
-    public init(appVersion: String = "1.0") {
+    public init(appVersion: String = "1.0", buildVersion: String? = nil) {
         self.appVersion = appVersion
+        self.buildVersion = buildVersion
     }
 
     public var body: some View {
@@ -138,7 +140,7 @@ public struct SettingsView: View {
             }
 
             Section {
-                LabeledContent("Version", value: appVersion)
+                LabeledContent("Version", value: buildVersion ?? appVersion)
                 LabeledContent("Protocol", value: "RFB (VNC)")
                 LabeledContent("Transport", value: NSLocalizedString("Direct connection", comment: "Transport kind"))
 
@@ -275,14 +277,16 @@ public struct SettingsSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     private let appVersion: String
+    private let buildVersion: String?
 
-    public init(appVersion: String = "1.0") {
+    public init(appVersion: String = "1.0", buildVersion: String? = nil) {
         self.appVersion = appVersion
+        self.buildVersion = buildVersion
     }
 
     public var body: some View {
         NavigationStack {
-            SettingsView(appVersion: appVersion)
+            SettingsView(appVersion: appVersion, buildVersion: buildVersion)
                 .toolbar {
                     ToolbarItem(placement: .primaryAction) {
                         Button("Done") {

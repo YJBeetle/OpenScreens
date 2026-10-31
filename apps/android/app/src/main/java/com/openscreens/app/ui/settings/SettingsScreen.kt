@@ -78,6 +78,8 @@ fun SettingsScreen(
 ) {
     ThemedSystemBarIcons()
 
+    val versionLabel = BuildConfig.BUILD_VERSION.ifBlank { BuildConfig.VERSION_NAME }
+
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val updater = remember { ApkUpdater(context) }
@@ -356,7 +358,7 @@ fun SettingsScreen(
                             Text(
                                 text = stringResource(
                                     R.string.settings_version,
-                                    BuildConfig.VERSION_NAME,
+                                    versionLabel,
                                 ),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,

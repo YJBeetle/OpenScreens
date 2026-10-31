@@ -17,6 +17,8 @@ jobs:
       HAS_ANDROID_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -63,6 +65,8 @@ jobs:
       notarized: ${{ steps.package.outputs.notarized }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-apple-darwin,aarch64-apple-ios,aarch64-apple-ios-sim,x86_64-apple-ios
@@ -80,7 +84,8 @@ jobs:
           xcodebuild -project OpenScreens.xcodeproj -scheme OpenScreens \
             -configuration Release -destination 'platform=macOS' \
             ARCHS=arm64 ONLY_ACTIVE_ARCH=YES \
-            CODE_SIGNING_ALLOWED=NO SYMROOT="$PWD/build" build
+            CODE_SIGNING_ALLOWED=NO SYMROOT="$PWD/build" \
+            OPENSCREENS_BUILD_VERSION="$(git describe --tags --always --dirty)" build
       - name: Sign, notarize and package
         id: package
         working-directory: apps/macos

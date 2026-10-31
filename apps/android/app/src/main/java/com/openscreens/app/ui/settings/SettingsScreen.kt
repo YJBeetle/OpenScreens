@@ -27,7 +27,6 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -49,7 +48,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.openscreens.app.BuildConfig
@@ -228,36 +226,28 @@ fun SettingsScreen(
                     modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        UpdateChannel.entries.forEach { channel ->
-                            FilterChip(
-                                modifier = Modifier.weight(1f),
-                                selected = updateChannel == channel,
-                                onClick = {
-                                    if (updateChannel != channel) {
-                                        updateState = UpdateUiState.Idle
-                                        onUpdateChannelChange(channel)
-                                    }
+                    UpdateChannel.entries.forEachIndexed { index, channel ->
+                        SelectionRow(
+                            title = stringResource(
+                                when (channel) {
+                                    UpdateChannel.Release -> R.string.settings_channel_release
+                                    UpdateChannel.PreRelease -> R.string.settings_channel_prerelease
+                                    UpdateChannel.Snapshot -> R.string.settings_channel_snapshot
                                 },
-                                label = {
-                                    Text(
-                                        text = stringResource(
-                                            when (channel) {
-                                                UpdateChannel.Release ->
-                                                    R.string.settings_channel_release
-                                                UpdateChannel.PreRelease ->
-                                                    R.string.settings_channel_prerelease
-                                                UpdateChannel.Snapshot ->
-                                                    R.string.settings_channel_snapshot
-                                            },
-                                        ),
-                                        modifier = Modifier.fillMaxWidth(),
-                                        textAlign = TextAlign.Center,
-                                    )
-                                },
-                            )
+                            ),
+                            selected = updateChannel == channel,
+                            onClick = {
+                                if (updateChannel != channel) {
+                                    updateState = UpdateUiState.Idle
+                                    onUpdateChannelChange(channel)
+                                }
+                            },
+                        )
+                        if (index != UpdateChannel.entries.lastIndex) {
+                            HorizontalDivider(Modifier.padding(start = 16.dp))
                         }
                     }
+
                     val available = updateState as? UpdateUiState.Available
                     if (available == null) {
                         Text(

@@ -53,10 +53,7 @@ pub fn parse_server_init(bytes: &[u8]) -> Result<(ServerInit, usize), Error> {
 
 /// Parses a ServerInit message, optionally decoding Apple's 22-byte name
 /// extension (RFB 3.889). See [`AppleServerFeatures`].
-pub fn parse_server_init_ext(
-    bytes: &[u8],
-    apple: bool,
-) -> Result<(ServerInit, usize), Error> {
+pub fn parse_server_init_ext(bytes: &[u8], apple: bool) -> Result<(ServerInit, usize), Error> {
     if bytes.len() < SERVER_INIT_HEADER_LEN {
         return Err(Error::UnexpectedEof);
     }

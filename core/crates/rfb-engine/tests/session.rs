@@ -732,10 +732,7 @@ async fn apple_clipboard_request_upload_and_replay() {
     let mut client_init = [0u8; 1];
     server.read_exact(&mut client_init).await.unwrap();
     assert_eq!(client_init[0], 0xc1);
-    server
-        .write_all(&apple_server_init(1 << 32))
-        .await
-        .unwrap();
+    server.write_all(&apple_server_init(1 << 32)).await.unwrap();
     let mut apple = [0u8; 66];
     server.read_exact(&mut apple).await.unwrap();
     let _ = read_setup(&mut server).await;

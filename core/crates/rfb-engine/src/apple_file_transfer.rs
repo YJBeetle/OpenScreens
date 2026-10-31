@@ -220,7 +220,9 @@ pub fn remote_files_from_pasteboard(blob: &[u8]) -> Vec<RemoteFile> {
     let mut files = Vec::new();
     for url in pasteboard.urls {
         if let Some(file) = remote_file_from_url(&url)
-            && !files.iter().any(|existing: &RemoteFile| existing.path == file.path)
+            && !files
+                .iter()
+                .any(|existing: &RemoteFile| existing.path == file.path)
         {
             files.push(file);
         }
@@ -1049,8 +1051,9 @@ mod tests {
 
     #[test]
     fn converts_file_urls_to_remote_files() {
-        let file = remote_file_from_url("file:///Users/example/Desktop/a%20b%20%E4%B8%96%E7%95%8C.txt")
-            .unwrap();
+        let file =
+            remote_file_from_url("file:///Users/example/Desktop/a%20b%20%E4%B8%96%E7%95%8C.txt")
+                .unwrap();
         assert_eq!(file.path, "/Users/example/Desktop/a b 世界.txt");
         assert_eq!(file.name, "a b 世界.txt");
 

@@ -386,9 +386,7 @@ pub fn parse_pasteboard_archive(archive: &[u8]) -> Result<ApplePasteboard, Apple
 /// concatenated item groups. VNCKit's drag-in template writes a fresh item
 /// count for every URL, so a multi-file drag-in payload is several archives
 /// back to back; drag-out payloads normally contain one group.
-pub fn parse_pasteboard_archive_all(
-    archive: &[u8],
-) -> Result<ApplePasteboard, AppleInputError> {
+pub fn parse_pasteboard_archive_all(archive: &[u8]) -> Result<ApplePasteboard, AppleInputError> {
     let mut cursor = Cursor::new(archive);
     let mut combined = ApplePasteboard::default();
     while cursor.pos < archive.len() {
@@ -806,10 +804,12 @@ mod tests {
             1
         );
         cursor += 4;
-        let key_len =
-            u32::from_be_bytes(archive[cursor..cursor + 4].try_into().unwrap()) as usize;
+        let key_len = u32::from_be_bytes(archive[cursor..cursor + 4].try_into().unwrap()) as usize;
         cursor += 4;
-        assert_eq!(&archive[cursor..cursor + key_len], b"public.utf8-plain-text");
+        assert_eq!(
+            &archive[cursor..cursor + key_len],
+            b"public.utf8-plain-text"
+        );
         cursor += key_len;
         assert_eq!(&archive[cursor..cursor + 4], &[0, 0, 0, 0]);
         cursor += 4;
@@ -819,7 +819,10 @@ mod tests {
         );
 
         let message = client_pasteboard_message(text);
-        assert_eq!(message.len(), 16 + u32::from_be_bytes(message[12..16].try_into().unwrap()) as usize);
+        assert_eq!(
+            message.len(),
+            16 + u32::from_be_bytes(message[12..16].try_into().unwrap()) as usize
+        );
         assert_eq!(message[0], MSG_SERVER_PASTEBOARD);
         assert_eq!(message[2], 0);
         assert_eq!(

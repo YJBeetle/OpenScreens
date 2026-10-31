@@ -80,3 +80,18 @@ Release signing reads `apps/android/keystore.properties` when present and falls 
 ## License
 
 AGPL-3.0. See [LICENSE-AGPL](LICENSE-AGPL).
+
+## Updates
+
+Android and macOS check GitHub Releases and let you choose a channel in Settings:
+
+- **Release** — stable `vX.Y.Z` releases only
+- **Pre-release** — the newest release including betas (the rolling `snapshot` tag is excluded)
+- **Snapshot** — the rolling development pre-release tagged `snapshot`
+
+The `Snapshot` workflow (manual dispatch) builds and publishes:
+
+- `OpenScreens-snapshot-android.apk` — signed with the release key from the `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` and `ANDROID_KEY_PASSWORD` secrets
+- `OpenScreens-snapshot-macos.zip` — unsigned until notarization credentials are configured
+
+Stable releases must attach an Android `.apk` and a macOS `.dmg` or `.zip` with names containing `android` / `macos`. iOS is distributed through the App Store and does not use this updater.

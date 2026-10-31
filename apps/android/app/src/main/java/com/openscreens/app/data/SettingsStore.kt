@@ -10,12 +10,17 @@ class SettingsStore(context: Context) {
     fun load(): AppSettings = AppSettings(
         themeMode = enumValueOrDefault(preferences.getString("themeMode", null), ThemeMode.System),
         quality = enumValueOrDefault(preferences.getString("quality", null), QualityPreset.Balanced),
+        updateChannel = enumValueOrDefault(
+            preferences.getString("updateChannel", null),
+            UpdateChannel.Release,
+        ),
     )
 
     fun save(settings: AppSettings) {
         preferences.edit()
             .putString("themeMode", settings.themeMode.name)
             .putString("quality", settings.quality.name)
+            .putString("updateChannel", settings.updateChannel.name)
             .apply()
     }
 

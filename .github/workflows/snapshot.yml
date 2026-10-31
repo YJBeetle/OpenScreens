@@ -1,0 +1,118 @@
+name: Snapshot
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: snapshot-release
+  cancel-in-progress: true
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    env:
+      HAS_ANDROID_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: "platform-tools platforms;android-36 build-tools;35.0.0"
+      - name: Configure release signing
+        if: env.HAS_ANDROID_KEYSTORE == 'true'
+        working-directory: apps/android
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          mkdir -p keystore
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > keystore/release.jks
+          umask 077
+          cat > keystore.properties <<EOF
+          storeFile=keystore/release.jks
+          storePassword=$STORE_PASSWORD
+          keyAlias=$KEY_ALIAS
+          keyPassword=$KEY_PASSWORD
+          EOF
+      - name: Build signed snapshot APK
+        working-directory: apps/android
+        run: |
+          chmod +x gradlew
+          ./gradlew :app:assembleRelease --no-daemon
+          cp app/build/outputs/apk/release/app-release.apk "$GITHUB_WORKSPACE/OpenScreens-snapshot-android.apk"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: OpenScreens-snapshot-android
+          path: OpenScreens-snapshot-android.apk
+          if-no-files-found: error
+
+  macos:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,aarch64-apple-ios,aarch64-apple-ios-sim,x86_64-apple-ios
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: core
+      - name: Build Apple core
+        run: ./scripts/build-apple-core.sh
+      - name: Install xcodegen
+        run: brew install xcodegen
+      - name: Build macOS app
+        working-directory: apps/macos
+        run: |
+          xcodegen generate
+          xcodebuild -project OpenScreens.xcodeproj -scheme OpenScreens \
+            -configuration Release -destination 'platform=macOS' \
+            CODE_SIGNING_ALLOWED=NO SYMROOT="$PWD/build" build
+          ditto -c -k --sequesterRsrc --keepParent \
+            "$PWD/build/Release/OpenScreens.app" \
+            "$GITHUB_WORKSPACE/OpenScreens-snapshot-macos.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: OpenScreens-snapshot-macos
+          path: OpenScreens-snapshot-macos.zip
+          if-no-files-found: error
+
+  publish:
+    needs: [android, macos]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: OpenScreens-snapshot-*
+          merge-multiple: true
+          path: dist
+      - name: Publish rolling snapshot release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          short="${GITHUB_SHA::7}"
+          date="$(date -u +%Y-%m-%d)"
+          title="Development snapshot ${short} (${date})"
+          cat > notes.md <<EOF
+          Automated development snapshot from \`${GITHUB_SHA}\` (${date}).
+
+          - Android APK is signed with the project release key and updates the "Snapshot" channel.
+          - The macOS build is unsigned until notarization credentials are configured.
+          - Stable and pre-release channels are unaffected by this rolling release.
+          EOF
+          if gh release view snapshot --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release edit snapshot --repo "$GITHUB_REPOSITORY" \
+              --title "$title" --notes-file notes.md --prerelease
+            gh release upload snapshot --repo "$GITHUB_REPOSITORY" dist/* --clobber
+          else
+            gh release create snapshot --repo "$GITHUB_REPOSITORY" dist/* \
+              --title "$title" --notes-file notes.md --prerelease --latest=false
+          fi

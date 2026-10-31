@@ -6,6 +6,7 @@ import com.openscreens.app.data.AppSettings
 import com.openscreens.app.data.Connection
 import com.openscreens.app.data.ConnectionStore
 import com.openscreens.app.data.QualityPreset
+import com.openscreens.app.data.UpdateChannel
 import com.openscreens.app.data.SettingsStore
 import com.openscreens.app.data.SshKey
 import com.openscreens.app.data.SshKeyStore
@@ -75,6 +76,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setQuality(quality: QualityPreset) {
         _settings.update { it.copy(quality = quality) }
+        settingsStore.save(_settings.value)
+    }
+
+    fun setUpdateChannel(channel: UpdateChannel) {
+        _settings.update { it.copy(updateChannel = channel) }
         settingsStore.save(_settings.value)
     }
 

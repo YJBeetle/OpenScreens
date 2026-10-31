@@ -79,3 +79,18 @@ Release 签名在存在 `apps/android/keystore.properties` 时使用本地测试
 ## 许可证
 
 AGPL-3.0，见 [LICENSE-AGPL](LICENSE-AGPL)。
+
+## 更新
+
+Android 与 macOS 通过 GitHub Releases 检查更新，设置里可选三档通道：
+
+- **Release** — 只接收正式 `vX.Y.Z`
+- **Pre-release** — 接收包括 beta 在内的最新版本（滚动 `snapshot` 除外）
+- **Snapshot** — 滚动开发快照，固定标签 `snapshot`
+
+`Snapshot` 工作流（手动触发）构建并发布：
+
+- `OpenScreens-snapshot-android.apk` — 用 `ANDROID_KEYSTORE_BASE64`、`ANDROID_KEYSTORE_PASSWORD`、`ANDROID_KEY_ALIAS`、`ANDROID_KEY_PASSWORD` 机密变量对应的发布密钥签名
+- `OpenScreens-snapshot-macos.zip` — 公证凭据配置前为未签名包
+
+正式版本需附带文件名含 `android` 的 `.apk` 与含 `macos` 的 `.dmg`/`.zip`。iOS 走 App Store，不使用该更新器。

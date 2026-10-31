@@ -12,3 +12,5 @@ apps/**/DerivedData/
 apps/**/build/
 apps/**/*.xcodeproj
 apps/apple/OpenScreensCore/OpenScreensCore.xcframework/
+apps/android/keystore/
+apps/android/keystore.properties

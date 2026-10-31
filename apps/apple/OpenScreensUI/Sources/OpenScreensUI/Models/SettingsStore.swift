@@ -68,6 +68,22 @@ public enum TileDensity: String, Codable, CaseIterable, Identifiable, Sendable {
     }
 }
 
+public enum UpdateChannel: String, Codable, CaseIterable, Identifiable, Sendable {
+    case release
+    case prerelease
+    case snapshot
+
+    public var id: String { rawValue }
+
+    public var title: String {
+        switch self {
+        case .release: "Release"
+        case .prerelease: "Pre-release"
+        case .snapshot: "Snapshot"
+        }
+    }
+}
+
 public struct AppSettings: Codable, Hashable, Sendable {
     public var appearance: AppAppearance
     public var tileDensity: TileDensity
@@ -75,6 +91,7 @@ public struct AppSettings: Codable, Hashable, Sendable {
     public var sharedClipboard: Bool
     public var autoReconnect: Bool
     public var confirmDisconnect: Bool
+    public var updateChannel: UpdateChannel
 
     public init(
         appearance: AppAppearance = .system,
@@ -82,7 +99,8 @@ public struct AppSettings: Codable, Hashable, Sendable {
         defaultCursorMode: CursorMode = .touch,
         sharedClipboard: Bool = true,
         autoReconnect: Bool = true,
-        confirmDisconnect: Bool = true
+        confirmDisconnect: Bool = true,
+        updateChannel: UpdateChannel = .release
     ) {
         self.appearance = appearance
         self.tileDensity = tileDensity
@@ -90,6 +108,23 @@ public struct AppSettings: Codable, Hashable, Sendable {
         self.sharedClipboard = sharedClipboard
         self.autoReconnect = autoReconnect
         self.confirmDisconnect = confirmDisconnect
+        self.updateChannel = updateChannel
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case appearance, tileDensity, defaultCursorMode, sharedClipboard
+        case autoReconnect, confirmDisconnect, updateChannel
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        appearance = try container.decode(AppAppearance.self, forKey: .appearance)
+        tileDensity = try container.decode(TileDensity.self, forKey: .tileDensity)
+        defaultCursorMode = try container.decode(CursorMode.self, forKey: .defaultCursorMode)
+        sharedClipboard = try container.decode(Bool.self, forKey: .sharedClipboard)
+        autoReconnect = try container.decode(Bool.self, forKey: .autoReconnect)
+        confirmDisconnect = try container.decode(Bool.self, forKey: .confirmDisconnect)
+        updateChannel = try container.decodeIfPresent(UpdateChannel.self, forKey: .updateChannel) ?? .release
     }
 }
 

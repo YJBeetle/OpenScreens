@@ -51,6 +51,8 @@ fun OpenScreensApp(viewModel: MainViewModel = viewModel()) {
                     sshKeyCount = sshKeys.size,
                     onThemeModeChange = viewModel::setThemeMode,
                     onQualityChange = viewModel::setQuality,
+                    updateChannel = settings.updateChannel,
+                    onUpdateChannelChange = viewModel::setUpdateChannel,
                     onManageSshKeys = { viewModel.navigate(Route.SshKeys) },
                     onBack = viewModel::back,
                 )

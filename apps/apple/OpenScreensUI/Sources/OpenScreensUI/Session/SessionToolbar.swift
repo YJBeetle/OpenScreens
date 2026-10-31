@@ -4,6 +4,7 @@ import SwiftUI
 /// Floating/docked session controls.
 struct SessionToolbar: View {
     let model: SessionViewModel
+    let onDownload: () -> Void
     let onDisconnect: () -> Void
 
     var body: some View {
@@ -25,6 +26,14 @@ struct SessionToolbar: View {
             #endif
 
             clipboardMenu
+
+            FloatingIconButton(
+                systemImage: "arrow.down.doc",
+                title: "Download Remote File"
+            ) {
+                onDownload()
+            }
+
             displayMenu
 
             FloatingIconButton(

@@ -66,6 +66,8 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
     private var pendingUploads: [UInt32: [URL]] = [:]
     /// Last file name seen for an upload, so a bare ack can clear the UI.
     private var uploadFileNames: [UInt32: String] = [:]
+    /// Local destination folder for each download, keyed by transfer handle.
+    private var downloadRoots: [UInt32: String] = [:]
 
     private let logger = Logger(subsystem: "app.openscreens", category: "Session")
     private static let displayTargetWidth = 2560
@@ -425,6 +427,73 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
         return UInt32(truncatingIfNeeded: unix &+ epoch1904Offset)
     }
 
+    // MARK: - File download
+
+    /// Asks the server for a remote POSIX path and stores what it sends below
+    /// the local Downloads directory (or Documents when that is unavailable).
+    public func download(remotePath: String) async {
+        let path = remotePath.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !path.isEmpty else {
+            yieldDownloadFailure("Enter a remote path to download.")
+            return
+        }
+        guard let session, !finished else {
+            yieldDownloadFailure("The session is not connected.")
+            return
+        }
+        guard let root = downloadRootDirectory() else {
+            yieldDownloadFailure("No local folder is available for downloads.")
+            return
+        }
+
+        let handle = session.nextTransferHandle()
+        // Store the destination before starting so a fast completion can find it.
+        downloadRoots[handle] = root.path
+        do {
+            try await session.startDownload(handle: handle, path: path, root: root.path)
+            logger.info(
+                "download started handle=\(handle) path=\(path, privacy: .public) root=\(root.path, privacy: .public)"
+            )
+        } catch {
+            downloadRoots.removeValue(forKey: handle)
+            let message = error.localizedDescription
+            logger.error("download failed: \(message, privacy: .public)")
+            continuation.yield(.failure("Could not download “\(path)”: \(message)"))
+            // Also closes the in-flight status in the UI.
+            continuation.yield(.downloadComplete(savedPath: nil, error: message))
+        }
+    }
+
+    /// Reports a download that could not start and clears any UI progress.
+    private func yieldDownloadFailure(_ message: String) {
+        continuation.yield(.failure(message))
+        continuation.yield(.downloadComplete(savedPath: nil, error: message))
+    }
+
+    /// The first usable local folder: Downloads, then Documents. The folder is
+    /// created on demand because iOS does not ship a Downloads directory.
+    private func downloadRootDirectory() -> URL? {
+        let manager = FileManager.default
+        let candidates = [
+            manager.urls(for: .downloadsDirectory, in: .userDomainMask).first,
+            manager.urls(for: .documentDirectory, in: .userDomainMask).first,
+        ]
+        for candidate in candidates.compactMap({ $0 }) {
+            if manager.fileExists(atPath: candidate.path) {
+                return candidate
+            }
+            do {
+                try manager.createDirectory(at: candidate, withIntermediateDirectories: true)
+                return candidate
+            } catch {
+                logger.error(
+                    "could not create \(candidate.path, privacy: .public): \(error.localizedDescription, privacy: .public)"
+                )
+            }
+        }
+        return nil
+    }
+
     private func handleFileTransfer(subtype: UInt16, handle: UInt32, payload: Data) {
         switch subtype {
         case Self.transferProgressSubtype:
@@ -568,9 +637,26 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
         case .fileTransfer(let subtype, let handle, let payload):
             handleFileTransfer(subtype: subtype, handle: handle, payload: payload)
 
-        case .downloadProgress, .downloadComplete:
-            // Download UI is not wired into the Apple apps yet.
-            break
+        case .downloadProgress(let handle, let name, let bytes, let total):
+            guard downloadRoots[handle] != nil else { return }
+            continuation.yield(.downloadProgress(
+                name: name,
+                received: Int64(clamping: bytes),
+                total: Int64(clamping: total)
+            ))
+
+        case .downloadComplete(let handle, let files, let directories, let bytes, let error):
+            guard let root = downloadRoots.removeValue(forKey: handle) else { return }
+            if let error {
+                logger.error("download \(handle) failed: \(error, privacy: .public)")
+                continuation.yield(.failure("Download failed: \(error)"))
+                continuation.yield(.downloadComplete(savedPath: nil, error: error))
+            } else {
+                logger.info(
+                    "downloaded \(files) file(s), \(directories) folder(s), \(bytes) bytes to \(root, privacy: .public)"
+                )
+                continuation.yield(.downloadComplete(savedPath: root, error: nil))
+            }
 
         case .disconnected(let reason):
             finish(reason: reason)
@@ -602,6 +688,7 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
         finished = true
         pendingUploads.removeAll()
         uploadFileNames.removeAll()
+        downloadRoots.removeAll()
         continuation.yield(.state(.disconnected(reason: reason)))
         continuation.finish()
         eventTask?.cancel()

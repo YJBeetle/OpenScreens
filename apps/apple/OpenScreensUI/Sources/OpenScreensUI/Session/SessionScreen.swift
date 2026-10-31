@@ -17,6 +17,8 @@ public struct SessionScreen: View {
 
     @State private var confirmingDisconnect = false
     @State private var isDropTargeted = false
+    @State private var showingDownloadDialog = false
+    @State private var downloadPath = ""
 
     #if os(macOS)
     @FocusState private var keyboardFocused: Bool
@@ -41,6 +43,15 @@ public struct SessionScreen: View {
             RemoteCanvasView(renderer: model.renderer, contentMode: model.scaling)
                 .ignoresSafeArea()
                 .accessibilityHidden(true)
+                .alert(
+                    "Download Complete",
+                    isPresented: downloadCompleteBinding,
+                    presenting: model.downloadSavedPath
+                ) { _ in
+                    Button("OK", role: .cancel) {}
+                } message: { path in
+                    Text("Saved to \(path)")
+                }
 
             cursorOverlay
             pointerSurface
@@ -55,7 +66,7 @@ public struct SessionScreen: View {
             if model.state.isConnected {
                 chrome
                 toast
-                uploadStatus
+                transferStatus
             }
 
             if isDropTargeted {
@@ -104,6 +115,26 @@ public struct SessionScreen: View {
         } message: {
             Text("The remote session ends. You can reconnect from the library at any time.")
         }
+        .alert("Download Remote File", isPresented: $showingDownloadDialog) {
+            TextField("/path/on/remote/computer", text: $downloadPath)
+            Button("Download") {
+                let path = downloadPath.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !path.isEmpty else { return }
+                model.download(remotePath: path)
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Enter the POSIX path of a file on the remote computer. It is saved to your Downloads folder.")
+        }
+    }
+
+    private var downloadCompleteBinding: Binding<Bool> {
+        Binding(
+            get: { model.downloadSavedPath != nil },
+            set: { presented in
+                if !presented { model.clearDownloadResult() }
+            }
+        )
     }
 
     // MARK: - Layers
@@ -246,7 +277,14 @@ public struct SessionScreen: View {
                 Spacer(minLength: 0)
                 HStack {
                     Spacer(minLength: 0)
-                    SessionToolbar(model: model, onDisconnect: requestClose)
+                    SessionToolbar(
+                        model: model,
+                        onDownload: {
+                            downloadPath = ""
+                            showingDownloadDialog = true
+                        },
+                        onDisconnect: requestClose
+                    )
                     Spacer(minLength: 0)
                 }
             }
@@ -430,16 +468,16 @@ public struct SessionScreen: View {
         }
     }
 
-    /// Upload status for dropped files, below the session header.
+    /// Upload/download status for file transfers, below the session header.
     @ViewBuilder
-    private var uploadStatus: some View {
-        if let name = model.uploadFileName {
+    private var transferStatus: some View {
+        if let text = transferStatusText {
             VStack {
                 HStack(spacing: 8) {
                     ProgressView()
                         .controlSize(.small)
 
-                    Text(uploadStatusText(name))
+                    Text(text)
                         .font(.footnote.weight(.medium))
                         .lineLimit(1)
                 }
@@ -456,9 +494,19 @@ public struct SessionScreen: View {
             }
             .allowsHitTesting(false)
             .transition(.opacity)
-            .animation(.snappy, value: model.uploadFileName)
+            .animation(.snappy, value: text)
             .accessibilityAddTraits(.isStaticText)
         }
+    }
+
+    private var transferStatusText: String? {
+        if let name = model.uploadFileName {
+            return uploadStatusText(name)
+        }
+        if let name = model.downloadFileName {
+            return downloadStatusText(name)
+        }
+        return nil
     }
 
     private func uploadStatusText(_ name: String) -> String {
@@ -466,6 +514,13 @@ public struct SessionScreen: View {
             return "Sending \(name)… \(Int((fraction * 100).rounded()))%"
         }
         return "Sending \(name)…"
+    }
+
+    private func downloadStatusText(_ name: String) -> String {
+        if let fraction = model.downloadFraction {
+            return "Downloading \(name)… \(Int((fraction * 100).rounded()))%"
+        }
+        return "Downloading \(name)…"
     }
 
     private var dropTargetOverlay: some View {

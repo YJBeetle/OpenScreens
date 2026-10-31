@@ -99,6 +99,12 @@ public enum RemoteSessionEvent: Sendable {
     case transferProgress(name: String?, fraction: Double?)
     /// An upload finished or was aborted. `name` is the last known file.
     case transferFinished(name: String?)
+    /// Download status for a file requested with `download(remotePath:)`.
+    /// `total` is 0 when the server does not report a size.
+    case downloadProgress(name: String?, received: Int64, total: Int64)
+    /// A download finished. `savedPath` is the local folder the file was
+    /// written to; `error` is set when the transfer failed.
+    case downloadComplete(savedPath: String?, error: String?)
     case failure(String)
 }
 
@@ -207,6 +213,9 @@ public protocol RemoteSessionProtocol: Sendable {
     /// Sends local files to the remote desktop through Apple's drag-and-drop
     /// file transfer protocol. Progress and completion arrive as events.
     func uploadFiles(_ urls: [URL]) async
+    /// Downloads a remote POSIX path to the local Downloads folder. Progress
+    /// and completion arrive as events.
+    func download(remotePath: String) async
 }
 
 public extension RemoteSessionProtocol {
@@ -214,6 +223,8 @@ public extension RemoteSessionProtocol {
     func selectDisplay(_ id: Int?) async {}
     /// Transports without file transfer support ignore the request.
     func uploadFiles(_ urls: [URL]) async {}
+    /// Transports without file download support ignore the request.
+    func download(remotePath: String) async {}
 }
 
 public protocol RemoteSessionService: Sendable {

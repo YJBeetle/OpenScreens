@@ -35,6 +35,12 @@ public final class SessionViewModel {
     public private(set) var uploadFileName: String?
     /// Overall transfer progress (0...1) when the server reports it.
     public private(set) var uploadFraction: Double?
+    /// Name of the file currently being downloaded from the remote desktop.
+    public private(set) var downloadFileName: String?
+    /// Download progress (0...1) when the server reports the total size.
+    public private(set) var downloadFraction: Double?
+    /// Destination folder of the last successful download, shown in an alert.
+    public private(set) var downloadSavedPath: String?
     /// Last known pointer position, normalized to the remote framebuffer.
     public private(set) var remoteCursor = CGPoint(x: 0.5, y: 0.55)
 
@@ -174,6 +180,7 @@ public final class SessionViewModel {
         eventTask?.cancel()
         eventTask = nil
         clearUploadState()
+        clearDownloadState()
         if let active {
             Task { await active.disconnect() }
         }
@@ -191,6 +198,7 @@ public final class SessionViewModel {
             }
             if case .disconnected(let reason) = newState {
                 clearUploadState()
+                clearDownloadState()
                 handleRemoteClose(reason: reason)
             }
 
@@ -252,6 +260,20 @@ public final class SessionViewModel {
 
         case .transferFinished:
             clearUploadState()
+
+        case .downloadProgress(let name, let received, let total):
+            if let name, !name.isEmpty {
+                downloadFileName = name
+            }
+            if total > 0 {
+                downloadFraction = min(max(Double(received) / Double(total), 0), 1)
+            }
+
+        case .downloadComplete(let savedPath, let error):
+            clearDownloadState()
+            if error == nil, let savedPath, !savedPath.isEmpty {
+                downloadSavedPath = savedPath
+            }
 
         case .failure(let message):
             failureMessage = message
@@ -506,6 +528,35 @@ public final class SessionViewModel {
     private func clearUploadState() {
         uploadFileName = nil
         uploadFraction = nil
+    }
+
+    /// Downloads one remote POSIX path into the local Downloads folder. The
+    /// transport reports progress and completion as events.
+    public func download(remotePath: String) {
+        guard state.isConnected, let session else { return }
+        let path = remotePath.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !path.isEmpty else { return }
+        downloadFileName = Self.fileName(inRemotePath: path)
+        downloadFraction = nil
+        downloadSavedPath = nil
+        Task { await session.download(remotePath: path) }
+    }
+
+    private static func fileName(inRemotePath path: String) -> String {
+        let trimmed = path.count > 1 && path.hasSuffix("/") ? String(path.dropLast()) : path
+        let name = (trimmed as NSString).lastPathComponent
+        return name.isEmpty ? path : name
+    }
+
+    private func clearDownloadState() {
+        downloadFileName = nil
+        downloadFraction = nil
+        downloadSavedPath = nil
+    }
+
+    /// Dismisses the download completion alert.
+    public func clearDownloadResult() {
+        downloadSavedPath = nil
     }
 
     // MARK: - Session controls

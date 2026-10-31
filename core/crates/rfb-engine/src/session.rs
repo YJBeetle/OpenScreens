@@ -25,8 +25,10 @@ const COMMAND_CHANNEL_CAPACITY: usize = 64;
 const READ_CHUNK: usize = 64 * 1024;
 const MAX_CUT_TEXT_LEN: usize = 16 * 1024 * 1024;
 
-/// Encodings advertised to the server, most preferred first.
-const BASE_ENCODINGS: [i32; 9] = [
+/// Encodings advertised to the server, most preferred first. The TightVNC
+/// JPEG quality pseudo-encoding is inserted per session, before these move
+/// on to pseudo-encodings.
+const BASE_ENCODINGS: [i32; 8] = [
     Encoding::Tight.to_id(),
     Encoding::Zrle.to_id(),
     Encoding::Hextile.to_id(),
@@ -35,12 +37,16 @@ const BASE_ENCODINGS: [i32; 9] = [
     Encoding::Zlib.to_id(),
     Encoding::DesktopSize.to_id(),
     Encoding::LastRect.to_id(),
-    // TightVNC JPEG quality level 9.
-    -23,
 ];
 
-fn encodings(local_cursor: bool) -> Vec<i32> {
+/// TightVNC quality levels are advertised as -23 (best) through -32 (worst).
+fn tight_quality_id(quality: u8) -> i32 {
+    -23 - i32::from(9u8.saturating_sub(quality.min(9)))
+}
+
+fn encodings(local_cursor: bool, quality: u8) -> Vec<i32> {
     let mut ids = BASE_ENCODINGS.to_vec();
+    ids.push(tight_quality_id(quality));
     if local_cursor {
         ids.push(Encoding::Cursor.to_id());
         ids.push(Encoding::PointerPos.to_id());
@@ -57,6 +63,11 @@ pub struct SessionConfig {
     pub shared: bool,
     /// Advertise the Cursor pseudo-encoding and draw the pointer client-side.
     pub local_cursor: bool,
+    /// Tight JPEG quality, 0 (smallest) to 9 (best).
+    pub quality: u8,
+    /// Minimum delay between incremental update requests, in milliseconds.
+    /// Zero requests the next update as soon as the previous one arrived.
+    pub frame_interval_ms: u16,
     pub ssh: Option<SshSettings>,
 }
 
@@ -89,6 +100,8 @@ impl SessionConfig {
             password: None,
             shared: true,
             local_cursor: false,
+            quality: 9,
+            frame_interval_ms: 16,
             ssh: None,
         }
     }
@@ -249,7 +262,10 @@ impl Session {
 
         let mut initial = Vec::new();
         initial.extend_from_slice(&set_pixel_format(&PixelFormat::bgra8888()));
-        initial.extend_from_slice(&set_encodings(&encodings(config.local_cursor)));
+        initial.extend_from_slice(&set_encodings(&encodings(
+            config.local_cursor,
+            config.quality,
+        )));
         initial.extend_from_slice(&framebuffer_update_request(false, 0, 0, width, height));
         command_tx
             .send(initial)
@@ -264,6 +280,7 @@ impl Session {
             width,
             height,
             name.clone(),
+            std::time::Duration::from_millis(u64::from(config.frame_interval_ms)),
         ));
 
         Ok(Self {
@@ -362,6 +379,7 @@ async fn reader_task<R>(
     width: u16,
     height: u16,
     name: String,
+    frame_interval: std::time::Duration,
 ) where
     R: AsyncRead + Unpin,
 {
@@ -384,11 +402,20 @@ async fn reader_task<R>(
         pixel_format: PixelFormat::bgra8888(),
     };
     let mut sequence = 0u64;
+    let mut last_request: Option<std::time::Instant> = None;
 
     loop {
         match read_message(&mut read, &mut state, &events, &mut sequence).await {
             Ok(needs_request) => {
                 if needs_request {
+                    if !frame_interval.is_zero() {
+                        if let Some(last) = last_request {
+                            let elapsed = last.elapsed();
+                            if elapsed < frame_interval {
+                                tokio::time::sleep(frame_interval - elapsed).await;
+                            }
+                        }
+                    }
                     let Some((width, height)) = state.size() else {
                         break;
                     };
@@ -396,6 +423,7 @@ async fn reader_task<R>(
                     if commands.send(request.to_vec()).await.is_err() {
                         break;
                     }
+                    last_request = Some(std::time::Instant::now());
                 }
             }
             Err(SessionError::Closed) => {
@@ -743,6 +771,27 @@ fn copy_region_from(framebuffer: &Framebuffer, rect: Rect) -> Option<Vec<u8>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn maps_quality_to_tight_pseudo_encoding() {
+        assert_eq!(tight_quality_id(9), -23);
+        assert_eq!(tight_quality_id(6), -26);
+        assert_eq!(tight_quality_id(0), -32);
+        assert_eq!(tight_quality_id(12), -23);
+    }
+
+    #[test]
+    fn advertises_quality_and_cursor_encodings() {
+        let ids = encodings(false, 6);
+        assert_eq!(ids.len(), 9);
+        assert_eq!(*ids.last().unwrap(), -26);
+
+        let ids = encodings(true, 3);
+        assert_eq!(ids.len(), 11);
+        assert_eq!(ids[ids.len() - 3], -29);
+        assert!(ids.contains(&Encoding::Cursor.to_id()));
+        assert!(ids.contains(&Encoding::PointerPos.to_id()));
+    }
 
     #[test]
     fn copy_region_validates_bounds() {

@@ -9,11 +9,12 @@
 - RFB 3.3/3.7/3.8 客户端，支持 VNC 密码认证与 Apple DH 认证（macOS 屏幕共享）
 - Raw、CopyRect、RRE、Hextile、ZRLE、zlib、Tight/JPEG 解码到 BGRA 帧缓冲
 - macOS 客户端本地光标渲染（Cursor 与 PointerPos 伪编码），指针悬停即移动远程指针；iOS 与 Android 仍使用服务端合成光标
+- 按连接选择 Tight JPEG 画质（Android 画质菜单），并对帧更新请求限速
 - TCP 与 SSH（direct-tcpip）传输；Android 已支持跳板机、密码/私钥认证和加密的 SSH 密钥管理；macOS 可直接选用 `~/.ssh` 下的私钥
 - macOS 与 iOS/iPadOS 的 SwiftUI 应用，Metal 画布
 - Android 的 Compose Material 3 应用
 
-尚未实现：Apple Adaptive DCT、自适应画质、多显示器选择、文件传输、WireGuard/OpenVPN。iOS 端 SSH 目前仅支持密码认证，尚无密钥导入与密钥管理。
+尚未实现：Apple Adaptive DCT、按带宽自动调节画质、多显示器选择、文件传输、WireGuard/OpenVPN。iOS 端 SSH 目前仅支持密码认证，尚无密钥导入与密钥管理。
 
 ## 目录
 

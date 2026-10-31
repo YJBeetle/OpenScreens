@@ -122,6 +122,8 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
             password: (password?.isEmpty == false) ? password : nil,
             shared: true,
             localCursor: localCursor,
+            quality: 9,
+            frameIntervalMs: 16,
             sshHost: sshHost,
             sshPort: sshPort,
             sshUsername: sshUsername,

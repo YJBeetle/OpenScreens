@@ -37,7 +37,7 @@ async fn perform_handshake(server: &mut DuplexStream) {
     server.write_all(&server_init()).await.unwrap();
 }
 
-async fn read_setup(server: &mut DuplexStream) -> u16 {
+async fn read_setup(server: &mut DuplexStream) -> Vec<i32> {
     let mut set_pixel_format = [0u8; 20];
     server.read_exact(&mut set_pixel_format).await.unwrap();
     assert_eq!(set_pixel_format[0], 0);
@@ -46,14 +46,18 @@ async fn read_setup(server: &mut DuplexStream) -> u16 {
     server.read_exact(&mut set_encodings).await.unwrap();
     assert_eq!(set_encodings[0], 2);
     let count = u16::from_be_bytes([set_encodings[2], set_encodings[3]]);
-    let mut encodings = vec![0u8; usize::from(count) * 4];
-    server.read_exact(&mut encodings).await.unwrap();
+    let mut raw = vec![0u8; usize::from(count) * 4];
+    server.read_exact(&mut raw).await.unwrap();
+    let encodings = raw
+        .chunks_exact(4)
+        .map(|id| i32::from_be_bytes([id[0], id[1], id[2], id[3]]))
+        .collect();
 
     let mut request = [0u8; 10];
     server.read_exact(&mut request).await.unwrap();
     assert_eq!(request[0], 3);
     assert_eq!(request[1], 0);
-    count
+    encodings
 }
 
 fn raw_update() -> Vec<u8> {
@@ -111,8 +115,9 @@ async fn local_cursor_events() {
 
     let server_task = tokio::spawn(async move {
         perform_handshake(&mut server).await;
-        let encoding_count = read_setup(&mut server).await;
-        assert_eq!(encoding_count, 11);
+        let encodings = read_setup(&mut server).await;
+        assert_eq!(encodings.len(), 11);
+        assert!(encodings.contains(&(-239)));
 
         server.write_all(&cursor_update()).await.unwrap();
 
@@ -163,13 +168,61 @@ async fn local_cursor_events() {
 }
 
 #[tokio::test]
+async fn advertises_configured_quality() {
+    let (client, mut server) = duplex(64 * 1024);
+
+    let server_task = tokio::spawn(async move {
+        perform_handshake(&mut server).await;
+        read_setup(&mut server).await
+    });
+
+    let mut config = SessionConfig::new("mock", 5900);
+    config.quality = 4;
+    let session = Session::connect_stream(client, config).await.unwrap();
+    let encodings = server_task.await.unwrap();
+
+    assert!(encodings.contains(&-28), "got {encodings:?}");
+    drop(session);
+}
+
+#[tokio::test]
+async fn paces_incremental_requests() {
+    let (client, mut server) = duplex(64 * 1024);
+
+    let server_task = tokio::spawn(async move {
+        perform_handshake(&mut server).await;
+        read_setup(&mut server).await;
+
+        server.write_all(&raw_update()).await.unwrap();
+        let mut request = [0u8; 10];
+        server.read_exact(&mut request).await.unwrap();
+
+        let sent = std::time::Instant::now();
+        server.write_all(&raw_update()).await.unwrap();
+        server.read_exact(&mut request).await.unwrap();
+        sent.elapsed()
+    });
+
+    let mut config = SessionConfig::new("mock", 5900);
+    config.frame_interval_ms = 100;
+    let session = Session::connect_stream(client, config).await.unwrap();
+
+    let gap = server_task.await.unwrap();
+    assert!(
+        gap >= Duration::from_millis(60),
+        "second request came after {gap:?}"
+    );
+    drop(session);
+}
+
+#[tokio::test]
 async fn session_round_trip() {
     let (client, mut server) = duplex(64 * 1024);
 
     let server_task = tokio::spawn(async move {
         perform_handshake(&mut server).await;
-        let encoding_count = read_setup(&mut server).await;
-        assert!(encoding_count > 0);
+        let encodings = read_setup(&mut server).await;
+        assert!(!encodings.is_empty());
 
         let mut pointer = [0u8; 6];
         server.read_exact(&mut pointer).await.unwrap();

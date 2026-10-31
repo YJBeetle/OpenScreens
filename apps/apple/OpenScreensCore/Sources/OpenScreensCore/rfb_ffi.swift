@@ -997,6 +997,8 @@ public struct SessionConfig: Equatable, Hashable {
     public var password: String?
     public var shared: Bool
     public var localCursor: Bool
+    public var quality: UInt8
+    public var frameIntervalMs: UInt16
     public var sshHost: String?
     public var sshPort: UInt16?
     public var sshUsername: String?
@@ -1005,13 +1007,15 @@ public struct SessionConfig: Equatable, Hashable {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(host: String, port: UInt16, username: String?, password: String?, shared: Bool, localCursor: Bool, sshHost: String?, sshPort: UInt16?, sshUsername: String?, sshAuth: SshAuthConfig?, sshHostKeyFingerprint: String?) {
+    public init(host: String, port: UInt16, username: String?, password: String?, shared: Bool, localCursor: Bool, quality: UInt8, frameIntervalMs: UInt16, sshHost: String?, sshPort: UInt16?, sshUsername: String?, sshAuth: SshAuthConfig?, sshHostKeyFingerprint: String?) {
         self.host = host
         self.port = port
         self.username = username
         self.password = password
         self.shared = shared
         self.localCursor = localCursor
+        self.quality = quality
+        self.frameIntervalMs = frameIntervalMs
         self.sshHost = sshHost
         self.sshPort = sshPort
         self.sshUsername = sshUsername
@@ -1041,6 +1045,8 @@ public struct FfiConverterTypeSessionConfig: FfiConverterRustBuffer {
                 password: FfiConverterOptionString.read(from: &buf), 
                 shared: FfiConverterBool.read(from: &buf), 
                 localCursor: FfiConverterBool.read(from: &buf), 
+                quality: FfiConverterUInt8.read(from: &buf), 
+                frameIntervalMs: FfiConverterUInt16.read(from: &buf), 
                 sshHost: FfiConverterOptionString.read(from: &buf), 
                 sshPort: FfiConverterOptionUInt16.read(from: &buf), 
                 sshUsername: FfiConverterOptionString.read(from: &buf), 
@@ -1056,6 +1062,8 @@ public struct FfiConverterTypeSessionConfig: FfiConverterRustBuffer {
         FfiConverterOptionString.write(value.password, into: &buf)
         FfiConverterBool.write(value.shared, into: &buf)
         FfiConverterBool.write(value.localCursor, into: &buf)
+        FfiConverterUInt8.write(value.quality, into: &buf)
+        FfiConverterUInt16.write(value.frameIntervalMs, into: &buf)
         FfiConverterOptionString.write(value.sshHost, into: &buf)
         FfiConverterOptionUInt16.write(value.sshPort, into: &buf)
         FfiConverterOptionString.write(value.sshUsername, into: &buf)

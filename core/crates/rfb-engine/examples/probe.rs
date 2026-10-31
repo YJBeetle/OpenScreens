@@ -26,6 +26,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         password: env::var("OPENSCREENS_PASSWORD").ok(),
         shared: true,
         local_cursor: false,
+        quality: 9,
+        frame_interval_ms: 16,
         ssh: None,
     };
 

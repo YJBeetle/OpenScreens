@@ -32,6 +32,8 @@ pub struct SessionConfig {
     pub password: Option<String>,
     pub shared: bool,
     pub local_cursor: bool,
+    pub quality: u8,
+    pub frame_interval_ms: u16,
     pub ssh_host: Option<String>,
     pub ssh_port: Option<u16>,
     pub ssh_username: Option<String>,
@@ -69,6 +71,8 @@ impl From<SessionConfig> for EngineConfig {
             password: config.password,
             shared: config.shared,
             local_cursor: config.local_cursor,
+            quality: config.quality,
+            frame_interval_ms: config.frame_interval_ms,
             ssh,
         }
     }

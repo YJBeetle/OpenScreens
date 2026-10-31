@@ -111,6 +111,12 @@ class UniFfiRemoteSession(
             password = connection.vncPassword.ifBlank { null },
             shared = true,
             localCursor = false,
+            quality = when (quality) {
+                QualityPreset.Low -> 3u
+                QualityPreset.Balanced -> 6u
+                QualityPreset.High -> 9u
+            },
+            frameIntervalMs = 16u,
             sshHost = ssh?.let { it.host.ifBlank { connection.host } },
             sshPort = ssh?.let { it.port.toUShort() },
             sshUsername = ssh?.username?.ifBlank { null },

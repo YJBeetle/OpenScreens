@@ -1845,6 +1845,10 @@ data class SessionConfig (
     , 
     var `localCursor`: kotlin.Boolean
     , 
+    var `quality`: kotlin.UByte
+    , 
+    var `frameIntervalMs`: kotlin.UShort
+    , 
     var `sshHost`: kotlin.String?
     , 
     var `sshPort`: kotlin.UShort?
@@ -1876,6 +1880,8 @@ public object FfiConverterTypeSessionConfig: FfiConverterRustBuffer<SessionConfi
             FfiConverterOptionalString.read(buf),
             FfiConverterBoolean.read(buf),
             FfiConverterBoolean.read(buf),
+            FfiConverterUByte.read(buf),
+            FfiConverterUShort.read(buf),
             FfiConverterOptionalString.read(buf),
             FfiConverterOptionalUShort.read(buf),
             FfiConverterOptionalString.read(buf),
@@ -1891,6 +1897,8 @@ public object FfiConverterTypeSessionConfig: FfiConverterRustBuffer<SessionConfi
             FfiConverterOptionalString.allocationSize(value.`password`) +
             FfiConverterBoolean.allocationSize(value.`shared`) +
             FfiConverterBoolean.allocationSize(value.`localCursor`) +
+            FfiConverterUByte.allocationSize(value.`quality`) +
+            FfiConverterUShort.allocationSize(value.`frameIntervalMs`) +
             FfiConverterOptionalString.allocationSize(value.`sshHost`) +
             FfiConverterOptionalUShort.allocationSize(value.`sshPort`) +
             FfiConverterOptionalString.allocationSize(value.`sshUsername`) +
@@ -1905,6 +1913,8 @@ public object FfiConverterTypeSessionConfig: FfiConverterRustBuffer<SessionConfi
             FfiConverterOptionalString.write(value.`password`, buf)
             FfiConverterBoolean.write(value.`shared`, buf)
             FfiConverterBoolean.write(value.`localCursor`, buf)
+            FfiConverterUByte.write(value.`quality`, buf)
+            FfiConverterUShort.write(value.`frameIntervalMs`, buf)
             FfiConverterOptionalString.write(value.`sshHost`, buf)
             FfiConverterOptionalUShort.write(value.`sshPort`, buf)
             FfiConverterOptionalString.write(value.`sshUsername`, buf)

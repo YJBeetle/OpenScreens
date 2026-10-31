@@ -12,9 +12,8 @@ const TILE_SIZE: usize = 64;
 
 const RAW: u8 = 0;
 const SOLID: u8 = 1;
-const PACKED_PALETTE: u8 = 2;
-const PLAIN_RLE: u8 = 3;
-const PALETTE_RLE: u8 = 4;
+const PLAIN_RLE: u8 = 128;
+const PALETTE_RLE_MIN: u8 = 130;
 
 pub(crate) fn decode(
     data: &[u8],
@@ -56,7 +55,7 @@ pub(crate) fn decode(
                         format,
                     )?;
                 }
-                PACKED_PALETTE => decode_packed_palette(
+                2..=16 => decode_packed_palette(
                     &mut cursor,
                     format,
                     scratch,
@@ -65,6 +64,7 @@ pub(crate) fn decode(
                     tile_y,
                     tile_width,
                     tile_height,
+                    subencoding,
                 )?,
                 PLAIN_RLE => decode_plain_rle(
                     &mut cursor,
@@ -76,7 +76,7 @@ pub(crate) fn decode(
                     tile_width,
                     tile_height,
                 )?,
-                PALETTE_RLE => decode_palette_rle(
+                PALETTE_RLE_MIN..=255 => decode_palette_rle(
                     &mut cursor,
                     format,
                     scratch,
@@ -85,6 +85,7 @@ pub(crate) fn decode(
                     tile_y,
                     tile_width,
                     tile_height,
+                    subencoding - 128,
                 )?,
                 _ => return Err(DecodeError::InvalidData("unknown ZRLE subencoding")),
             }
@@ -122,8 +123,12 @@ fn decode_raw_tile(
     Ok(())
 }
 
-fn read_palette(cursor: &mut Cursor<'_>, format: PixelFormat) -> Result<Vec<u32>, DecodeError> {
-    let size = usize::from(cursor.u8()?);
+fn read_palette(
+    cursor: &mut Cursor<'_>,
+    format: PixelFormat,
+    size: u8,
+) -> Result<Vec<u32>, DecodeError> {
+    let size = usize::from(size);
     if size == 0 {
         return Err(DecodeError::InvalidData("empty ZRLE palette"));
     }
@@ -144,8 +149,9 @@ fn decode_packed_palette(
     tile_y: usize,
     width: usize,
     height: usize,
+    palette_size: u8,
 ) -> Result<(), DecodeError> {
-    let palette = read_palette(cursor, format)?;
+    let palette = read_palette(cursor, format, palette_size)?;
     let bits = match palette.len() {
         1..=2 => 1,
         3..=4 => 2,
@@ -222,8 +228,9 @@ fn decode_palette_rle(
     tile_y: usize,
     width: usize,
     height: usize,
+    palette_size: u8,
 ) -> Result<(), DecodeError> {
-    let palette = read_palette(cursor, format)?;
+    let palette = read_palette(cursor, format, palette_size)?;
     let total = width * height;
     let mut written = 0;
     while written < total {

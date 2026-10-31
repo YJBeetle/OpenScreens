@@ -50,8 +50,10 @@ const APPLE_CLIENT_VERSION: [u8; 66] = [
 /// JPEG quality pseudo-encoding is inserted per session, before these move
 /// on to pseudo-encodings.
 const BASE_ENCODINGS: [i32; 9] = [
-    Encoding::Tight.to_id(),
+    // ZRLE is preferred over Tight: it is lossless and our Tight decoder does
+    // not yet handle libvncserver's compact-length/palette wire format.
     Encoding::Zrle.to_id(),
+    Encoding::Tight.to_id(),
     Encoding::Hextile.to_id(),
     Encoding::CopyRect.to_id(),
     Encoding::Raw.to_id(),
@@ -1216,17 +1218,38 @@ where
         }
 
         if encoding == Encoding::ExtendedDesktopSize {
-            // Unlike pixel rects, the header carries the new framebuffer size
-            // in its x and y fields (x is the width, y the height).
-            let (new_width, new_height) = (x, y);
-            fill_buffer(read, &mut state.buffer, 2).await?;
+            // One byte of screen count followed by three padding bytes.
+            fill_buffer(read, &mut state.buffer, 4).await?;
             let screen_count = state.buffer[0];
-            // state.buffer[1] is the resize reason; it does not affect layout.
-            state.buffer.advance(2);
+            state.buffer.advance(4);
             let payload_len = usize::from(screen_count) * DESKTOP_SCREEN_LEN;
             fill_buffer(read, &mut state.buffer, payload_len).await?;
             let screens = parse_desktop_screens(&state.buffer[..payload_len], screen_count)?;
             state.buffer.advance(payload_len);
+            // TigerVNC puts the new framebuffer size in x/y. libvncserver
+            // (x11vnc, QEMU) leaves x/y zero and carries the size only in the
+            // screen records (or, for some versions, in w/h), so fall back to
+            // the screen bounds instead of resizing to 0x0.
+            let screen_width = screens
+                .iter()
+                .map(|screen| u32::from(screen.x) + u32::from(screen.width))
+                .max()
+                .unwrap_or(0);
+            let screen_height = screens
+                .iter()
+                .map(|screen| u32::from(screen.y) + u32::from(screen.height))
+                .max()
+                .unwrap_or(0);
+            let (new_width, new_height) = if x > 0 && y > 0 {
+                (x, y)
+            } else if screen_width > 0 && screen_height > 0 {
+                (
+                    u16::try_from(screen_width).unwrap_or(width),
+                    u16::try_from(screen_height).unwrap_or(height),
+                )
+            } else {
+                (width, height)
+            };
             {
                 let mut framebuffer = state
                     .framebuffer

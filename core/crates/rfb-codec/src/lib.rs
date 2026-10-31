@@ -592,7 +592,7 @@ mod tests {
     fn decodes_zrle_plain_rle() {
         let mut framebuffer = Framebuffer::new(2, 2);
         let mut decoder = Decoder::new();
-        let payload = vec![3, 0, 0, 255, 3];
+        let payload = vec![128, 0, 0, 255, 3];
         let compressed = compress_chunks(&[&payload]);
         decoder
             .decode(
@@ -617,7 +617,7 @@ mod tests {
     fn decodes_zrle_packed_palette() {
         let mut framebuffer = Framebuffer::new(2, 2);
         let mut decoder = Decoder::new();
-        let mut payload = vec![2, 2];
+        let mut payload = vec![2];
         payload.extend_from_slice(&[0, 0, 0]);
         payload.extend_from_slice(&[255, 255, 255]);
         payload.extend_from_slice(&[0x40, 0x40]);
@@ -643,7 +643,7 @@ mod tests {
     fn decodes_zrle_palette_rle() {
         let mut framebuffer = Framebuffer::new(2, 2);
         let mut decoder = Decoder::new();
-        let mut payload = vec![4, 2];
+        let mut payload = vec![130];
         payload.extend_from_slice(&[0, 0, 0]);
         payload.extend_from_slice(&[255, 255, 255]);
         payload.extend_from_slice(&[0x80, 3]);

@@ -99,7 +99,7 @@ fn desktop_layout_message(
     update.extend_from_slice(&0u16.to_be_bytes());
     update.extend_from_slice(&(-308i32).to_be_bytes());
     update.push(declared_screens);
-    update.push(0); // server-side resize reason
+    update.extend_from_slice(&[0, 0, 0]); // padding before the screen records
     for &(id, x, y, w, h, flags) in screens {
         update.extend_from_slice(&id.to_be_bytes());
         update.extend_from_slice(&x.to_be_bytes());
@@ -930,4 +930,66 @@ async fn adaptive_dct_type1_falls_back_to_standard_encodings() {
         .unwrap();
     assert!(matches!(frame, Event::Frame { .. }), "got {frame:?}");
     task.await.unwrap();
+}
+
+#[tokio::test]
+async fn libvncserver_extended_desktop_size_uses_screen_bounds() {
+    let (client, mut server) = duplex(64 * 1024);
+
+    let task = tokio::spawn(async move {
+        Session::connect_stream(client, SessionConfig::new("mock", 5900))
+            .await
+            .unwrap()
+    });
+    perform_handshake(&mut server).await;
+    let _ = read_setup(&mut server).await;
+    let session = task.await.unwrap();
+    let connected = timeout(Duration::from_secs(1), session.next_event())
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(matches!(connected, Event::Connected { .. }));
+
+    // libvncserver (x11vnc/QEMU) leaves x/y zero and carries the size in the
+    // rectangle's width/height plus the screen records.
+    let mut update = vec![0, 0];
+    update.extend_from_slice(&1u16.to_be_bytes());
+    update.extend_from_slice(&0u16.to_be_bytes());
+    update.extend_from_slice(&0u16.to_be_bytes());
+    update.extend_from_slice(&WIDTH.to_be_bytes());
+    update.extend_from_slice(&HEIGHT.to_be_bytes());
+    update.extend_from_slice(&(-308i32).to_be_bytes());
+    update.push(1);
+    update.extend_from_slice(&[0, 0, 0]);
+    update.extend_from_slice(&7u32.to_be_bytes());
+    update.extend_from_slice(&0u16.to_be_bytes());
+    update.extend_from_slice(&0u16.to_be_bytes());
+    update.extend_from_slice(&WIDTH.to_be_bytes());
+    update.extend_from_slice(&HEIGHT.to_be_bytes());
+    update.extend_from_slice(&0u32.to_be_bytes());
+    server.write_all(&update).await.unwrap();
+
+    let event = timeout(Duration::from_secs(1), session.next_event())
+        .await
+        .unwrap()
+        .unwrap();
+    let Event::DesktopLayout {
+        width,
+        height,
+        screens,
+    } = event
+    else {
+        panic!("unexpected event: {event:?}");
+    };
+    assert_eq!((width, height), (WIDTH, HEIGHT));
+    assert_eq!(screens.len(), 1);
+    assert_eq!(screens[0].id, 7);
+    assert_eq!((screens[0].width, screens[0].height), (WIDTH, HEIGHT));
+
+    server.write_all(&raw_update()).await.unwrap();
+    let frame = timeout(Duration::from_secs(1), session.next_event())
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(matches!(frame, Event::Frame { .. }), "got {frame:?}");
 }

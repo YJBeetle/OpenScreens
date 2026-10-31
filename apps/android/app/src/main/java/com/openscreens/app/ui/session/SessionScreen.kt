@@ -1,6 +1,9 @@
 package com.openscreens.app.ui.session
 
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.net.Uri
+import android.os.Environment
 import android.os.SystemClock
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -47,6 +50,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.ContentPaste
+import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.Fullscreen
 import androidx.compose.material.icons.outlined.FullscreenExit
 import androidx.compose.material.icons.outlined.UploadFile
@@ -141,6 +145,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
+import java.io.File
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
@@ -192,6 +197,8 @@ fun SessionScreen(
     var trackpadMode by rememberSaveable { mutableStateOf(false) }
     var desktopScreens by remember { mutableStateOf<List<DisplayScreen>>(emptyList()) }
     var displayMenuExpanded by remember { mutableStateOf(false) }
+    var showDownloadDialog by remember { mutableStateOf(false) }
+    var downloadRoot by remember { mutableStateOf<String?>(null) }
     var trackpadPointer by remember { mutableStateOf<IntOffset?>(null) }
     var pendingUpload by remember { mutableStateOf<PendingUpload?>(null) }
     var transferLabel by remember { mutableStateOf<String?>(null) }
@@ -375,6 +382,39 @@ fun SessionScreen(
                     event.name?.let { transferLabel = it }
                 }
                 is SessionEvent.TransferComplete -> transferLabel = null
+                is SessionEvent.RemoteClipboard -> {
+                    context.getSystemService(ClipboardManager::class.java)
+                        ?.setPrimaryClip(ClipData.newPlainText("OpenScreens", event.text))
+                    lastAction = context.getString(
+                        R.string.session_action_prefix,
+                        context.getString(R.string.session_clipboard_received),
+                    )
+                }
+                is SessionEvent.DownloadProgress -> {
+                    transferLabel = buildString {
+                        append(event.name ?: "download")
+                        if (event.total > 0) {
+                            append(' ')
+                            append(event.bytes * 100 / event.total)
+                            append('%')
+                        }
+                    }
+                }
+                is SessionEvent.DownloadComplete -> {
+                    transferLabel = null
+                    val root = downloadRoot
+                    scope.launch {
+                        if (event.error == null && root != null) {
+                            snackbarHostState.showSnackbar(
+                                context.getString(R.string.session_download_saved, root),
+                            )
+                        } else if (event.error != null) {
+                            snackbarHostState.showSnackbar(
+                                context.getString(R.string.session_download_failed, event.error),
+                            )
+                        }
+                    }
+                }
                 is SessionEvent.DragInfo,
                 is SessionEvent.FileTransfer,
                 -> Unit
@@ -1025,6 +1065,7 @@ fun SessionScreen(
                 onKeyboard = { keyboardActive = true },
                 onClipboard = { showClipboardDialog = true },
                 onUpload = { sendFilePicker.launch(arrayOf("*/*")) },
+                onDownload = { showDownloadDialog = true },
                 onToggleFullscreen = { isFullscreen = !isFullscreen },
                 onHideChrome = { chromeVisible = false },
                 modifier = Modifier
@@ -1070,6 +1111,33 @@ fun SessionScreen(
                 .align(Alignment.BottomCenter)
                 .windowInsetsPadding(WindowInsets.safeDrawing)
                 .padding(start = 16.dp, end = 16.dp, bottom = 76.dp),
+        )
+    }
+
+    if (showDownloadDialog) {
+        DownloadDialog(
+            onDismiss = { showDownloadDialog = false },
+            onDownload = { path ->
+                val root = context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
+                    ?: File(context.filesDir, "downloads")
+                root.mkdirs()
+                downloadRoot = root.absolutePath
+                transferLabel = context.getString(R.string.session_download_preparing)
+                showDownloadDialog = false
+                scope.launch {
+                    runCatching {
+                        session.startDownload(session.nextTransferHandle(), path, root.absolutePath)
+                    }.onFailure { error ->
+                        transferLabel = null
+                        snackbarHostState.showSnackbar(
+                            context.getString(
+                                R.string.session_download_failed,
+                                error.message ?: error.javaClass.simpleName,
+                            ),
+                        )
+                    }
+                }
+            },
         )
     }
 
@@ -1297,6 +1365,7 @@ private fun SessionToolbar(
     onKeyboard: () -> Unit,
     onClipboard: () -> Unit,
     onUpload: () -> Unit,
+    onDownload: () -> Unit,
     onToggleFullscreen: () -> Unit,
     onHideChrome: () -> Unit,
     modifier: Modifier = Modifier,
@@ -1376,6 +1445,11 @@ private fun SessionToolbar(
                 icon = Icons.Outlined.UploadFile,
                 label = stringResource(R.string.session_send_file),
                 onClick = onUpload,
+            )
+            ToolbarButton(
+                icon = Icons.Outlined.Download,
+                label = stringResource(R.string.session_download),
+                onClick = onDownload,
             )
             Box {
                 ToolbarButton(
@@ -1663,6 +1737,40 @@ private fun ChromeRestoreButton(
             )
         }
     }
+}
+
+@Composable
+private fun DownloadDialog(
+    onDismiss: () -> Unit,
+    onDownload: (String) -> Unit,
+) {
+    var path by rememberSaveable { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.session_download)) },
+        text = {
+            OutlinedTextField(
+                value = path,
+                onValueChange = { path = it },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text(stringResource(R.string.session_download_hint)) },
+                singleLine = true,
+            )
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onDownload(path.trim()) },
+                enabled = path.isNotBlank(),
+            ) {
+                Text(stringResource(R.string.session_download_start))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.editor_cancel))
+            }
+        },
+    )
 }
 
 @Composable

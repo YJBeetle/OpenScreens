@@ -66,6 +66,8 @@ interface RemoteSession {
 
     suspend fun requestDownload(handle: Int, path: String)
 
+    suspend fun startDownload(handle: Int, path: String, root: String)
+
     suspend fun selectDisplay(displayId: Int?)
 }
 
@@ -140,6 +142,24 @@ sealed interface SessionEvent {
     ) : SessionEvent
 
     data class TransferComplete(val handle: Int, val message: String) : SessionEvent
+
+    /** Text copied on the remote machine, to mirror into the local clipboard. */
+    data class RemoteClipboard(val text: String) : SessionEvent
+
+    data class DownloadProgress(
+        val handle: Int,
+        val name: String?,
+        val bytes: Long,
+        val total: Long,
+    ) : SessionEvent
+
+    data class DownloadComplete(
+        val handle: Int,
+        val files: Int,
+        val directories: Int,
+        val bytes: Long,
+        val error: String?,
+    ) : SessionEvent
 
     /** A raw Apple transfer container, kept for the download flow. */
     class FileTransfer(

@@ -323,6 +323,12 @@ class UniFfiRemoteSession(
         session?.requestDownload(handle.toUInt(), path)
     }
 
+    override suspend fun startDownload(handle: Int, path: String, root: String) {
+        Log.i(TAG, "startDownload handle=$handle path=$path root=$root")
+        runCatching { session?.startDownload(handle.toUInt(), path, root) }
+            .onFailure { error -> Log.w(TAG, "startDownload failed", error) }
+    }
+
     override suspend fun selectDisplay(displayId: Int?) {
         session?.selectDisplay(displayId?.toUInt())
     }
@@ -449,7 +455,8 @@ class UniFfiRemoteSession(
                             ),
                         )
                     }
-                    is NativeEvent.Clipboard -> Log.d(TAG, "remote clipboard: ${event.text.length} chars")
+                    is NativeEvent.Clipboard ->
+                        _events.emit(SessionEvent.RemoteClipboard(event.text))
                     NativeEvent.Bell -> Log.d(TAG, "remote bell")
                     is NativeEvent.Cursor -> renderCursor(event)
                     is NativeEvent.PointerPosition -> Unit
@@ -465,9 +472,25 @@ class UniFfiRemoteSession(
                             ),
                         )
                     is NativeEvent.FileTransfer -> handleFileTransfer(event)
-                    is NativeEvent.DownloadProgress,
-                    is NativeEvent.DownloadComplete,
-                    -> Unit
+                    is NativeEvent.DownloadProgress ->
+                        _events.emit(
+                            SessionEvent.DownloadProgress(
+                                handle = event.handle.toInt(),
+                                name = event.name,
+                                bytes = event.bytes.toLong(),
+                                total = event.total.toLong(),
+                            ),
+                        )
+                    is NativeEvent.DownloadComplete ->
+                        _events.emit(
+                            SessionEvent.DownloadComplete(
+                                handle = event.handle.toInt(),
+                                files = event.files.toInt(),
+                                directories = event.directories.toInt(),
+                                bytes = event.bytes.toLong(),
+                                error = event.error,
+                            ),
+                        )
                     is NativeEvent.Disconnected -> {
                         Log.i(TAG, "remote closed the session: ${event.reason}")
                         break

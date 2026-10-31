@@ -49,6 +49,8 @@ jobs:
           distribution: temurin
           java-version: "17"
       - uses: android-actions/setup-android@v3
+        with:
+          packages: "platform-tools platforms;android-36 build-tools;35.0.0"
       - name: Build release APK
         working-directory: apps/android
         run: |

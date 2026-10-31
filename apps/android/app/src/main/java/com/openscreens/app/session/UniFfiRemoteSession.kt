@@ -37,7 +37,6 @@ import uniffi.rfb_ffi.RemoteSession as NativeSession
 import uniffi.rfb_ffi.TransferEntry as NativeTransferEntry
 import uniffi.rfb_ffi.TransferEntryKind as NativeKind
 import uniffi.rfb_ffi.TransferProgress as NativeProgress
-import uniffi.rfb_ffi.parsePasteboardFileUrls
 import uniffi.rfb_ffi.parseTransferAck
 import uniffi.rfb_ffi.parseTransferProgress
 
@@ -154,6 +153,7 @@ class UniFfiRemoteSession(
             frameIntervalMs = 16u,
             wireguardConfig = connection.wireGuardConfig,
             wireguardDnsFallback = true,
+            openvpnConfig = connection.openVpnConfig,
             sshHost = ssh?.let { it.host.ifBlank { connection.host } },
             sshPort = ssh?.let { it.port.toUShort() },
             sshUsername = ssh?.username?.ifBlank { null },
@@ -483,13 +483,8 @@ class UniFfiRemoteSession(
                         _events.emit(
                             SessionEvent.UploadRequest(event.handle.toInt(), event.path),
                         )
-                    is NativeEvent.DragInfo ->
-                        _events.emit(
-                            SessionEvent.DragInfo(
-                                event.handle.toInt(),
-                                parsePasteboardFileUrls(event.pasteboard),
-                            ),
-                        )
+                    NativeEvent.ClipboardRequest -> Unit
+                    is NativeEvent.DragOutInfo -> Unit
                     is NativeEvent.FileTransfer -> handleFileTransfer(event)
                     is NativeEvent.DownloadProgress ->
                         _events.emit(

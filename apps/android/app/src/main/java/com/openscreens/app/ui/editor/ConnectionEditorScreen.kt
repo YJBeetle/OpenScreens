@@ -52,6 +52,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -91,6 +92,7 @@ import com.openscreens.app.ui.theme.labelRes
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import uniffi.rfb_ffi.validateOpenvpnProfile
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -147,6 +149,14 @@ fun ConnectionEditorScreen(
         mutableStateOf<String?>(null)
     }
     var wireGuardImportFailed by remember { mutableStateOf(false) }
+    var openVpnConfig by rememberSaveable(editorKey) {
+        mutableStateOf<String?>(connection?.openVpnConfig)
+    }
+    var openVpnFileName by rememberSaveable(editorKey) {
+        mutableStateOf<String?>(null)
+    }
+    var openVpnSummary by rememberSaveable(editorKey) { mutableStateOf<String?>(null) }
+    var openVpnImportError by rememberSaveable(editorKey) { mutableStateOf<String?>(null) }
     var keyMenuExpanded by remember { mutableStateOf(false) }
     var validate by rememberSaveable { mutableStateOf(false) }
 
@@ -168,6 +178,51 @@ fun ConnectionEditorScreen(
                     ?.take(64)
                     ?.takeIf { it.isNotBlank() }
                 wireGuardImportFailed = false
+            }
+        }
+    }
+
+    val openVpnPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            val text = withContext(Dispatchers.IO) { readOpenVpnConfig(context, uri) }
+            if (text == null) {
+                openVpnImportError = context.getString(R.string.editor_openvpn_import_failed)
+                return@launch
+            }
+            val result = withContext(Dispatchers.IO) { runCatching { validateOpenvpnProfile(text) } }
+            result.fold(
+                onSuccess = {
+                    openVpnConfig = text
+                    openVpnFileName = uri.lastPathSegment
+                        ?.substringAfterLast('/')
+                        ?.take(64)
+                        ?.takeIf { it.isNotBlank() }
+                    openVpnImportError = null
+                },
+                onFailure = { error ->
+                    openVpnImportError = error.message
+                        ?.takeIf { it.isNotBlank() }
+                        ?: context.getString(R.string.editor_openvpn_import_failed)
+                },
+            )
+        }
+    }
+
+    LaunchedEffect(openVpnConfig) {
+        openVpnSummary = null
+        val text = openVpnConfig
+        if (text.isNullOrBlank()) return@LaunchedEffect
+        openVpnSummary = withContext(Dispatchers.IO) {
+            runCatching { validateOpenvpnProfile(text) }.getOrNull()?.let { summary ->
+                buildList {
+                    add(summary.remote)
+                    add(summary.proto)
+                    add(summary.cipher)
+                    summary.tlsWrap?.let(::add)
+                }.joinToString(" · ")
             }
         }
     }
@@ -201,18 +256,22 @@ fun ConnectionEditorScreen(
     } else {
         null
     }
-    val wireGuardConflict = sshEnabled && !wireGuardConfig.isNullOrBlank()
+    val hasWireGuard = !wireGuardConfig.isNullOrBlank()
+    val hasOpenVpn = !openVpnConfig.isNullOrBlank()
+    val wireGuardConflict = hasWireGuard && (sshEnabled || hasOpenVpn)
+    val openVpnConflict = hasOpenVpn && (sshEnabled || hasWireGuard)
+    val tunnelConflict = wireGuardConflict || openVpnConflict
 
     val onSaveClick: () -> Unit = {
         validate = true
-        if (wireGuardConflict) {
+        if (tunnelConflict) {
             scope.launch {
-                snackbarHostState.showSnackbar(context.getString(R.string.editor_wireguard_conflict))
+                snackbarHostState.showSnackbar(context.getString(R.string.editor_tunnel_conflict))
             }
         }
         if (nameError == null && hostError == null && portError == null &&
             sshUsernameError == null && sshPortError == null && sshKeyError == null &&
-            !wireGuardConflict
+            !tunnelConflict
         ) {
             val ssh = if (sshEnabled) {
                 SshCredentials(
@@ -237,6 +296,7 @@ fun ConnectionEditorScreen(
                 quality = quality,
                 ssh = ssh,
                 wireGuardConfig = wireGuardConfig?.takeIf { it.isNotBlank() },
+                openVpnConfig = openVpnConfig?.takeIf { it.isNotBlank() },
             )
             onSave(draft)
         }
@@ -697,6 +757,89 @@ fun ConnectionEditorScreen(
                     }
                 }
 
+                HorizontalDivider(Modifier.padding(vertical = 4.dp))
+
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = stringResource(R.string.editor_openvpn_title),
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    Text(
+                        text = stringResource(R.string.editor_openvpn_description),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    val selectedOpenVpn = openVpnConfig
+                    if (selectedOpenVpn.isNullOrBlank()) {
+                        OutlinedButton(
+                            onClick = {
+                                openVpnImportError = null
+                                openVpnPicker.launch(arrayOf("*/*"))
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text(stringResource(R.string.editor_openvpn_import))
+                        }
+                    } else {
+                        OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+                            Row(
+                                modifier = Modifier.padding(start = 16.dp, top = 8.dp, end = 8.dp, bottom = 8.dp),
+                                verticalAlignment = Alignment.Top,
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .padding(top = 4.dp),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                                ) {
+                                    Text(
+                                        text = openVpnFileName
+                                            ?: stringResource(R.string.editor_openvpn_loaded),
+                                        style = MaterialTheme.typography.titleSmall,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                    val summary = openVpnSummary
+                                    if (!summary.isNullOrBlank()) {
+                                        Text(
+                                            text = summary,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            fontFamily = FontFamily.Monospace,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            maxLines = 2,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                    }
+                                }
+                                TextButton(
+                                    onClick = {
+                                        openVpnConfig = null
+                                        openVpnFileName = null
+                                        openVpnSummary = null
+                                        openVpnImportError = null
+                                    },
+                                ) {
+                                    Text(stringResource(R.string.editor_openvpn_remove))
+                                }
+                            }
+                        }
+                    }
+                    openVpnImportError?.let { message ->
+                        Text(
+                            text = message,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                    if (openVpnConflict) {
+                        Text(
+                            text = stringResource(R.string.editor_openvpn_conflict),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                }
+
                 Spacer(Modifier.height(24.dp))
             }
         }
@@ -754,6 +897,23 @@ private fun readWireGuardConfig(context: Context, uri: Uri): String? = runCatchi
             total += count
         }
         check(total <= WIREGUARD_CONFIG_MAX_BYTES) { "WireGuard config exceeds 64 KiB" }
+        String(bytes, 0, total, Charsets.UTF_8)
+    }
+}.getOrNull()?.takeIf { it.isNotBlank() }
+
+private const val OPENVPN_CONFIG_MAX_BYTES = 256 * 1024
+
+/** Reads a picked .ovpn profile; null when it is unreadable, empty, or over 256 KiB. */
+private fun readOpenVpnConfig(context: Context, uri: Uri): String? = runCatching {
+    context.contentResolver.openInputStream(uri)?.use { stream ->
+        val bytes = ByteArray(OPENVPN_CONFIG_MAX_BYTES + 1)
+        var total = 0
+        while (total < bytes.size) {
+            val count = stream.read(bytes, total, bytes.size - total)
+            if (count < 0) break
+            total += count
+        }
+        check(total <= OPENVPN_CONFIG_MAX_BYTES) { "OpenVPN profile exceeds 256 KiB" }
         String(bytes, 0, total, Charsets.UTF_8)
     }
 }.getOrNull()?.takeIf { it.isNotBlank() }

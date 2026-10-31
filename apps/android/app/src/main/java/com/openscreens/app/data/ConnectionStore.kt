@@ -89,6 +89,7 @@ class ConnectionStore(
                 .put("quality", connection.quality.name)
             connection.accent?.let { item.put("accent", it.name) }
             connection.wireGuardConfig?.let { item.put("wireGuardConfig", it) }
+            connection.openVpnConfig?.let { item.put("openVpnConfig", it) }
             connection.ssh?.let { ssh ->
                 item.put(
                     "ssh",
@@ -141,6 +142,7 @@ class ConnectionStore(
                         username = item.optString("username"),
                         vncPassword = item.optString("vncPassword"),
                         wireGuardConfig = item.optString("wireGuardConfig").takeIf { it.isNotBlank() },
+                        openVpnConfig = item.optString("openVpnConfig").takeIf { it.isNotBlank() },
                         quality = runCatching {
                             QualityPreset.valueOf(
                                 item.optString("quality", QualityPreset.Balanced.name),

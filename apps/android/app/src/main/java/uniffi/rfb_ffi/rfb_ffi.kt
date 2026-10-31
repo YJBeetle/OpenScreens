@@ -696,7 +696,11 @@ internal object IntegrityCheckingUniffiLib {
     ): Int
     external fun uniffi_rfb_ffi_checksum_func_transfer_timestamp_1904(
     ): Int
+    external fun uniffi_rfb_ffi_checksum_func_validate_openvpn_profile(
+    ): Int
     external fun uniffi_rfb_ffi_checksum_method_remotesession_announce_upload(
+    ): Int
+    external fun uniffi_rfb_ffi_checksum_method_remotesession_begin_drag_out(
     ): Int
     external fun uniffi_rfb_ffi_checksum_method_remotesession_cancel_transfer(
     ): Int
@@ -770,6 +774,8 @@ internal object UniffiLib {
     ): Long
     external fun uniffi_rfb_ffi_fn_method_remotesession_announce_upload(`ptr`: Long,`handle`: Int,`fileUrls`: RustBuffer.ByValue,
     ): Long
+    external fun uniffi_rfb_ffi_fn_method_remotesession_begin_drag_out(`ptr`: Long,`handle`: RustBuffer.ByValue,
+    ): Long
     external fun uniffi_rfb_ffi_fn_method_remotesession_cancel_transfer(`ptr`: Long,`handle`: Int,
     ): Long
     external fun uniffi_rfb_ffi_fn_method_remotesession_copy_region(`ptr`: Long,`rect`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -826,6 +832,8 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_rfb_ffi_fn_func_transfer_timestamp_1904(`unixSeconds`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Int
+    external fun uniffi_rfb_ffi_fn_func_validate_openvpn_profile(`text`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
     external fun ffi_rfb_ffi_rustbuffer_alloc(`size`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun ffi_rfb_ffi_rustbuffer_from_bytes(`bytes`: ForeignBytes.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -966,7 +974,13 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if ((lib.uniffi_rfb_ffi_checksum_func_transfer_timestamp_1904() and 0xFFFF) != 40683) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if ((lib.uniffi_rfb_ffi_checksum_func_validate_openvpn_profile() and 0xFFFF) != 34946) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if ((lib.uniffi_rfb_ffi_checksum_method_remotesession_announce_upload() and 0xFFFF) != 54961) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_rfb_ffi_checksum_method_remotesession_begin_drag_out() and 0xFFFF) != 61368) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_rfb_ffi_checksum_method_remotesession_cancel_transfer() and 0xFFFF) != 22553) {
@@ -1558,6 +1572,12 @@ public interface RemoteSessionInterface {
      */
     suspend fun `announceUpload`(`handle`: kotlin.UInt, `fileUrls`: List<kotlin.String>)
     
+    /**
+     * Starts an Apple drag-out sequence (message 0x0E) and returns the handle
+     * used. The server answers with `SessionEvent.DragOutInfo`.
+     */
+    suspend fun `beginDragOut`(`handle`: kotlin.UInt?): kotlin.UInt
+    
     suspend fun `cancelTransfer`(`handle`: kotlin.UInt)
     
     /**
@@ -1744,6 +1764,32 @@ open class RemoteSession: Disposable, AutoCloseable, RemoteSessionInterface
         // lift function
         { },
         
+        // Error FFI converter
+        SessionFailure.ErrorHandler,
+    )
+    }
+
+    
+    /**
+     * Starts an Apple drag-out sequence (message 0x0E) and returns the handle
+     * used. The server answers with `SessionEvent.DragOutInfo`.
+     */
+    @Throws(SessionFailure::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `beginDragOut`(`handle`: kotlin.UInt?) : kotlin.UInt {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_rfb_ffi_fn_method_remotesession_begin_drag_out(
+                uniffiHandle,
+                
+        FfiConverterOptionalUInt.lower(`handle`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_rfb_ffi_rust_future_poll_u32(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_rfb_ffi_rust_future_complete_u32(future, continuation) },
+        { future -> UniffiLib.ffi_rfb_ffi_rust_future_free_u32(future) },
+        // lift function
+        { FfiConverterUInt.lift(it) },
         // Error FFI converter
         SessionFailure.ErrorHandler,
     )
@@ -2372,6 +2418,57 @@ public object FfiConverterTypeGeneratedSshKey: FfiConverterRustBuffer<GeneratedS
 
 
 
+/**
+ * Summary of a validated `.ovpn` profile, shown before saving a connection.
+ */
+data class OpenVpnProfileSummary (
+    var `remote`: kotlin.String
+    , 
+    var `proto`: kotlin.String
+    , 
+    var `cipher`: kotlin.String
+    , 
+    var `tlsWrap`: kotlin.String?
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeOpenVpnProfileSummary: FfiConverterRustBuffer<OpenVpnProfileSummary> {
+    override fun read(buf: ByteBuffer): OpenVpnProfileSummary {
+        return OpenVpnProfileSummary(
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterOptionalString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: OpenVpnProfileSummary) = (
+            FfiConverterString.allocationSize(value.`remote`) +
+            FfiConverterString.allocationSize(value.`proto`) +
+            FfiConverterString.allocationSize(value.`cipher`) +
+            FfiConverterOptionalString.allocationSize(value.`tlsWrap`)
+    )
+
+    override fun write(value: OpenVpnProfileSummary, buf: ByteBuffer) {
+            FfiConverterString.write(value.`remote`, buf)
+            FfiConverterString.write(value.`proto`, buf)
+            FfiConverterString.write(value.`cipher`, buf)
+            FfiConverterOptionalString.write(value.`tlsWrap`, buf)
+    }
+}
+
+
+
 data class Rect (
     var `x`: kotlin.UShort
     , 
@@ -2420,6 +2517,61 @@ public object FfiConverterTypeRect: FfiConverterRustBuffer<Rect> {
 
 
 
+/**
+ * One remote item offered by a drag-out (Apple message 0x20).
+ */
+data class RemoteFileInfo (
+    /**
+     * Original `file://` URL from the remote pasteboard.
+     */
+    var `url`: kotlin.String
+    , 
+    /**
+     * Absolute POSIX path on the remote computer.
+     */
+    var `path`: kotlin.String
+    , 
+    /**
+     * Last path component, suitable as a local file name.
+     */
+    var `name`: kotlin.String
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeRemoteFileInfo: FfiConverterRustBuffer<RemoteFileInfo> {
+    override fun read(buf: ByteBuffer): RemoteFileInfo {
+        return RemoteFileInfo(
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: RemoteFileInfo) = (
+            FfiConverterString.allocationSize(value.`url`) +
+            FfiConverterString.allocationSize(value.`path`) +
+            FfiConverterString.allocationSize(value.`name`)
+    )
+
+    override fun write(value: RemoteFileInfo, buf: ByteBuffer) {
+            FfiConverterString.write(value.`url`, buf)
+            FfiConverterString.write(value.`path`, buf)
+            FfiConverterString.write(value.`name`, buf)
+    }
+}
+
+
+
 data class SessionConfig (
     var `host`: kotlin.String
     , 
@@ -2439,11 +2591,17 @@ data class SessionConfig (
     , 
     /**
      * Full wg-quick text; when set the target is dialled through a userspace
-     * WireGuard tunnel (mutually exclusive with SSH).
+     * WireGuard tunnel (mutually exclusive with OpenVPN and SSH).
      */
     var `wireguardConfig`: kotlin.String?
     , 
     var `wireguardDnsFallback`: kotlin.Boolean
+    , 
+    /**
+     * Full `.ovpn` text; when set the target is dialled through a userspace
+     * OpenVPN tunnel (mutually exclusive with WireGuard and SSH).
+     */
+    var `openvpnConfig`: kotlin.String?
     , 
     var `sshHost`: kotlin.String?
     , 
@@ -2481,6 +2639,7 @@ public object FfiConverterTypeSessionConfig: FfiConverterRustBuffer<SessionConfi
             FfiConverterOptionalString.read(buf),
             FfiConverterBoolean.read(buf),
             FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalString.read(buf),
             FfiConverterOptionalUShort.read(buf),
             FfiConverterOptionalString.read(buf),
             FfiConverterOptionalTypeSshAuthConfig.read(buf),
@@ -2499,6 +2658,7 @@ public object FfiConverterTypeSessionConfig: FfiConverterRustBuffer<SessionConfi
             FfiConverterUShort.allocationSize(value.`frameIntervalMs`) +
             FfiConverterOptionalString.allocationSize(value.`wireguardConfig`) +
             FfiConverterBoolean.allocationSize(value.`wireguardDnsFallback`) +
+            FfiConverterOptionalString.allocationSize(value.`openvpnConfig`) +
             FfiConverterOptionalString.allocationSize(value.`sshHost`) +
             FfiConverterOptionalUShort.allocationSize(value.`sshPort`) +
             FfiConverterOptionalString.allocationSize(value.`sshUsername`) +
@@ -2517,6 +2677,7 @@ public object FfiConverterTypeSessionConfig: FfiConverterRustBuffer<SessionConfi
             FfiConverterUShort.write(value.`frameIntervalMs`, buf)
             FfiConverterOptionalString.write(value.`wireguardConfig`, buf)
             FfiConverterBoolean.write(value.`wireguardDnsFallback`, buf)
+            FfiConverterOptionalString.write(value.`openvpnConfig`, buf)
             FfiConverterOptionalString.write(value.`sshHost`, buf)
             FfiConverterOptionalUShort.write(value.`sshPort`, buf)
             FfiConverterOptionalString.write(value.`sshUsername`, buf)
@@ -2653,6 +2814,68 @@ public object FfiConverterTypeTransferEntry: FfiConverterRustBuffer<TransferEntr
 
 
 
+
+
+sealed class OpenVpnProfileException: kotlin.Exception() {
+    
+    class Invalid(
+        
+        val `reason`: kotlin.String
+        ) : OpenVpnProfileException() {
+        override val message
+            get() = "reason=${ `reason` }"
+    }
+    
+
+    
+
+
+    companion object ErrorHandler : UniffiRustCallStatusErrorHandler<OpenVpnProfileException> {
+        override fun lift(error_buf: RustBuffer.ByValue): OpenVpnProfileException = FfiConverterTypeOpenVpnProfileError.lift(error_buf)
+    }
+
+    
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeOpenVpnProfileError : FfiConverterRustBuffer<OpenVpnProfileException> {
+    override fun read(buf: ByteBuffer): OpenVpnProfileException {
+        
+
+        return when(buf.getInt()) {
+            1 -> OpenVpnProfileException.Invalid(
+                FfiConverterString.read(buf),
+                )
+            else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: OpenVpnProfileException): ULong {
+        return when(value) {
+            is OpenVpnProfileException.Invalid -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterString.allocationSize(value.`reason`)
+            )
+        }
+    }
+
+    override fun write(value: OpenVpnProfileException, buf: ByteBuffer) {
+        when(value) {
+            is OpenVpnProfileException.Invalid -> {
+                buf.putInt(1)
+                FfiConverterString.write(value.`reason`, buf)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+
+}
+
+
+
 sealed class SessionEvent {
     
     data class Connected(
@@ -2706,6 +2929,12 @@ sealed class SessionEvent {
         companion object
     }
     
+    /**
+     * The Apple server asked for the local clipboard (message 0x14 subtype 2).
+     */
+    object ClipboardRequest : SessionEvent()
+    
+    
     object Bell : SessionEvent()
     
     
@@ -2742,9 +2971,12 @@ sealed class SessionEvent {
         companion object
     }
     
-    data class DragInfo(
+    /**
+     * Remote file URLs offered by an Apple drag-out sequence.
+     */
+    data class DragOutInfo(
         val `handle`: kotlin.UInt, 
-        val `pasteboard`: kotlin.ByteArray) : SessionEvent()
+        val `files`: List<uniffi.rfb_ffi.RemoteFileInfo>) : SessionEvent()
         
     {
         
@@ -2834,45 +3066,46 @@ public object FfiConverterTypeSessionEvent : FfiConverterRustBuffer<SessionEvent
             5 -> SessionEvent.Clipboard(
                 FfiConverterString.read(buf),
                 )
-            6 -> SessionEvent.Bell
-            7 -> SessionEvent.Cursor(
+            6 -> SessionEvent.ClipboardRequest
+            7 -> SessionEvent.Bell
+            8 -> SessionEvent.Cursor(
                 FfiConverterUShort.read(buf),
                 FfiConverterUShort.read(buf),
                 FfiConverterUShort.read(buf),
                 FfiConverterUShort.read(buf),
                 FfiConverterByteArray.read(buf),
                 )
-            8 -> SessionEvent.PointerPosition(
+            9 -> SessionEvent.PointerPosition(
                 FfiConverterUShort.read(buf),
                 FfiConverterUShort.read(buf),
                 )
-            9 -> SessionEvent.UploadRequest(
+            10 -> SessionEvent.UploadRequest(
                 FfiConverterUInt.read(buf),
                 FfiConverterString.read(buf),
                 )
-            10 -> SessionEvent.DragInfo(
+            11 -> SessionEvent.DragOutInfo(
                 FfiConverterUInt.read(buf),
-                FfiConverterByteArray.read(buf),
+                FfiConverterSequenceTypeRemoteFileInfo.read(buf),
                 )
-            11 -> SessionEvent.FileTransfer(
+            12 -> SessionEvent.FileTransfer(
                 FfiConverterUShort.read(buf),
                 FfiConverterUInt.read(buf),
                 FfiConverterByteArray.read(buf),
                 )
-            12 -> SessionEvent.DownloadProgress(
+            13 -> SessionEvent.DownloadProgress(
                 FfiConverterUInt.read(buf),
                 FfiConverterOptionalString.read(buf),
                 FfiConverterULong.read(buf),
                 FfiConverterULong.read(buf),
                 )
-            13 -> SessionEvent.DownloadComplete(
+            14 -> SessionEvent.DownloadComplete(
                 FfiConverterUInt.read(buf),
                 FfiConverterUInt.read(buf),
                 FfiConverterUInt.read(buf),
                 FfiConverterULong.read(buf),
                 FfiConverterOptionalString.read(buf),
                 )
-            14 -> SessionEvent.Disconnected(
+            15 -> SessionEvent.Disconnected(
                 FfiConverterString.read(buf),
                 )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
@@ -2921,6 +3154,12 @@ public object FfiConverterTypeSessionEvent : FfiConverterRustBuffer<SessionEvent
                 + FfiConverterString.allocationSize(value.`text`)
             )
         }
+        is SessionEvent.ClipboardRequest -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
         is SessionEvent.Bell -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
@@ -2954,12 +3193,12 @@ public object FfiConverterTypeSessionEvent : FfiConverterRustBuffer<SessionEvent
                 + FfiConverterString.allocationSize(value.`path`)
             )
         }
-        is SessionEvent.DragInfo -> {
+        is SessionEvent.DragOutInfo -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
                 + FfiConverterUInt.allocationSize(value.`handle`)
-                + FfiConverterByteArray.allocationSize(value.`pasteboard`)
+                + FfiConverterSequenceTypeRemoteFileInfo.allocationSize(value.`files`)
             )
         }
         is SessionEvent.FileTransfer -> {
@@ -3034,12 +3273,16 @@ public object FfiConverterTypeSessionEvent : FfiConverterRustBuffer<SessionEvent
                 FfiConverterString.write(value.`text`, buf)
                 Unit
             }
-            is SessionEvent.Bell -> {
+            is SessionEvent.ClipboardRequest -> {
                 buf.putInt(6)
                 Unit
             }
-            is SessionEvent.Cursor -> {
+            is SessionEvent.Bell -> {
                 buf.putInt(7)
+                Unit
+            }
+            is SessionEvent.Cursor -> {
+                buf.putInt(8)
                 FfiConverterUShort.write(value.`hotspotX`, buf)
                 FfiConverterUShort.write(value.`hotspotY`, buf)
                 FfiConverterUShort.write(value.`width`, buf)
@@ -3048,32 +3291,32 @@ public object FfiConverterTypeSessionEvent : FfiConverterRustBuffer<SessionEvent
                 Unit
             }
             is SessionEvent.PointerPosition -> {
-                buf.putInt(8)
+                buf.putInt(9)
                 FfiConverterUShort.write(value.`x`, buf)
                 FfiConverterUShort.write(value.`y`, buf)
                 Unit
             }
             is SessionEvent.UploadRequest -> {
-                buf.putInt(9)
+                buf.putInt(10)
                 FfiConverterUInt.write(value.`handle`, buf)
                 FfiConverterString.write(value.`path`, buf)
                 Unit
             }
-            is SessionEvent.DragInfo -> {
-                buf.putInt(10)
+            is SessionEvent.DragOutInfo -> {
+                buf.putInt(11)
                 FfiConverterUInt.write(value.`handle`, buf)
-                FfiConverterByteArray.write(value.`pasteboard`, buf)
+                FfiConverterSequenceTypeRemoteFileInfo.write(value.`files`, buf)
                 Unit
             }
             is SessionEvent.FileTransfer -> {
-                buf.putInt(11)
+                buf.putInt(12)
                 FfiConverterUShort.write(value.`subtype`, buf)
                 FfiConverterUInt.write(value.`handle`, buf)
                 FfiConverterByteArray.write(value.`payload`, buf)
                 Unit
             }
             is SessionEvent.DownloadProgress -> {
-                buf.putInt(12)
+                buf.putInt(13)
                 FfiConverterUInt.write(value.`handle`, buf)
                 FfiConverterOptionalString.write(value.`name`, buf)
                 FfiConverterULong.write(value.`bytes`, buf)
@@ -3081,7 +3324,7 @@ public object FfiConverterTypeSessionEvent : FfiConverterRustBuffer<SessionEvent
                 Unit
             }
             is SessionEvent.DownloadComplete -> {
-                buf.putInt(13)
+                buf.putInt(14)
                 FfiConverterUInt.write(value.`handle`, buf)
                 FfiConverterUInt.write(value.`files`, buf)
                 FfiConverterUInt.write(value.`directories`, buf)
@@ -3090,7 +3333,7 @@ public object FfiConverterTypeSessionEvent : FfiConverterRustBuffer<SessionEvent
                 Unit
             }
             is SessionEvent.Disconnected -> {
-                buf.putInt(14)
+                buf.putInt(15)
                 FfiConverterString.write(value.`reason`, buf)
                 Unit
             }
@@ -3710,6 +3953,34 @@ public object FfiConverterSequenceTypeRect: FfiConverterRustBuffer<List<Rect>> {
 
 
 
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceTypeRemoteFileInfo: FfiConverterRustBuffer<List<RemoteFileInfo>> {
+    override fun read(buf: ByteBuffer): List<RemoteFileInfo> {
+        val len = buf.getInt()
+        return List<RemoteFileInfo>(len) {
+            FfiConverterTypeRemoteFileInfo.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<RemoteFileInfo>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeRemoteFileInfo.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<RemoteFileInfo>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeRemoteFileInfo.write(it, buf)
+        }
+    }
+}
+
+
+
+
 
 
 
@@ -3799,6 +4070,25 @@ public object FfiConverterSequenceTypeRect: FfiConverterRustBuffer<List<Rect>> {
     
         
         FfiConverterULong.lower(`unixSeconds`),_status)
+}
+    )
+    }
+    
+
+        /**
+         * Parses an `.ovpn` profile without touching the network.
+         *
+         * Profiles must embed the CA, certificate, key and optional tls-auth/tls-crypt
+         * material: frontends persist only the text, so external file references
+         * would break after import.
+         */
+    @Throws(OpenVpnProfileException::class) fun `validateOpenvpnProfile`(`text`: kotlin.String): OpenVpnProfileSummary {
+            return FfiConverterTypeOpenVpnProfileSummary.lift(
+    uniffiRustCallWithError(OpenVpnProfileException) { _status ->
+    UniffiLib.uniffi_rfb_ffi_fn_func_validate_openvpn_profile(
+    
+        
+        FfiConverterString.lower(`text`),_status)
 }
     )
     }

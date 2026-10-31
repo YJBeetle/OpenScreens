@@ -243,6 +243,9 @@ public protocol RemoteSessionProtocol: Sendable {
     func connect(profile: ConnectionProfile) async throws
     func disconnect() async
     func sendPointer(_ event: PointerEvent) async
+    /// Sends wheel clicks at a normalized remote position. Positive Y scrolls
+    /// the remote content down; positive X scrolls it right.
+    func sendScroll(at point: CGPoint, stepsX: Int32, stepsY: Int32) async
     func sendKey(_ event: RemoteKeyEvent) async
     func sendClipboard(_ text: String) async
     func requestClipboard() async
@@ -266,6 +269,8 @@ public protocol RemoteSessionProtocol: Sendable {
 }
 
 public extension RemoteSessionProtocol {
+    /// Transports without wheel support ignore the request.
+    func sendScroll(at point: CGPoint, stepsX: Int32, stepsY: Int32) async {}
     /// Transports without display selection ignore the request.
     func selectDisplay(_ id: Int?) async {}
     /// Transports without file transfer support ignore the request.

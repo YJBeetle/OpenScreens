@@ -513,6 +513,22 @@ fileprivate struct FfiConverterUInt32: FfiConverterPrimitive {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterInt32: FfiConverterPrimitive {
+    typealias FfiType = Int32
+    typealias SwiftType = Int32
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Int32 {
+        return try lift(readInt(&buf))
+    }
+
+    public static func write(_ value: Int32, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterUInt64: FfiConverterPrimitive {
     typealias FfiType = UInt64
     typealias SwiftType = UInt64
@@ -677,6 +693,8 @@ public protocol RemoteSessionProtocol: AnyObject, Sendable {
     func sendKey(down: Bool, keysym: UInt32) async throws 
     
     func sendPointer(mask: UInt8, x: UInt16, y: UInt16) async throws 
+    
+    func sendScroll(x: UInt16, y: UInt16, stepsX: Int32, stepsY: Int32) async throws 
     
     func serverName()  -> String
     
@@ -973,6 +991,22 @@ open func sendPointer(mask: UInt8, x: UInt16, y: UInt16)async throws   {
             rustFutureFunc: {
                 uniffi_rfb_ffi_fn_method_remotesession_send_pointer(
                         self.uniffiCloneHandle(),FfiConverterUInt8.lower(mask),FfiConverterUInt16.lower(x),FfiConverterUInt16.lower(y)
+                )
+            },
+            pollFunc: ffi_rfb_ffi_rust_future_poll_void,
+            completeFunc: ffi_rfb_ffi_rust_future_complete_void,
+            freeFunc: ffi_rfb_ffi_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeSessionFailure_lift
+        )
+}
+    
+open func sendScroll(x: UInt16, y: UInt16, stepsX: Int32, stepsY: Int32)async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_rfb_ffi_fn_method_remotesession_send_scroll(
+                        self.uniffiCloneHandle(),FfiConverterUInt16.lower(x),FfiConverterUInt16.lower(y),FfiConverterInt32.lower(stepsX),FfiConverterInt32.lower(stepsY)
                 )
             },
             pollFunc: ffi_rfb_ffi_rust_future_poll_void,
@@ -2884,6 +2918,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_rfb_ffi_checksum_method_remotesession_send_pointer() != 40220) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_rfb_ffi_checksum_method_remotesession_send_scroll() != 30956) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_rfb_ffi_checksum_method_remotesession_server_name() != 53654) {

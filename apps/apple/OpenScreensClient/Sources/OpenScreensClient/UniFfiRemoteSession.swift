@@ -26,6 +26,7 @@ public struct UniFfiSessionService: OpenScreensUI.RemoteSessionService {
 
 private enum InputCommand: Sendable {
     case pointer(mask: UInt8, x: UInt16, y: UInt16)
+    case scroll(x: UInt16, y: UInt16, stepsX: Int32, stepsY: Int32)
     case key(down: Bool, keysym: UInt32)
     case clipboard(String)
 }
@@ -215,6 +216,9 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
             startInputPump(session)
         } catch {
             logger.error("connect failed: \(error.localizedDescription, privacy: .public)")
+            if case let OpenScreensCore.SessionFailure.Session(reason) = error {
+                throw SessionSetupError(reason)
+            }
             throw error
         }
     }
@@ -248,6 +252,13 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
         let x = UInt16(clamping: min(Int(cursor.x * Double(width)), Int(width) - 1))
         let y = UInt16(clamping: min(Int(cursor.y * Double(height)), Int(height) - 1))
         inputContinuation.yield(.pointer(mask: buttonMask, x: x, y: y))
+    }
+
+    public func sendScroll(at point: CGPoint, stepsX: Int32, stepsY: Int32) async {
+        guard !observing, width > 0, height > 0, stepsX != 0 || stepsY != 0 else { return }
+        let x = UInt16(clamping: min(Int(point.x * Double(width)), Int(width) - 1))
+        let y = UInt16(clamping: min(Int(point.y * Double(height)), Int(height) - 1))
+        inputContinuation.yield(.scroll(x: x, y: y, stepsX: stepsX, stepsY: stepsY))
     }
 
     public func sendKey(_ event: RemoteKeyEvent) async {
@@ -879,6 +890,8 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
                     switch command {
                     case .pointer(let mask, let x, let y):
                         try await session.sendPointer(mask: mask, x: x, y: y)
+                    case .scroll(let x, let y, let stepsX, let stepsY):
+                        try await session.sendScroll(x: x, y: y, stepsX: stepsX, stepsY: stepsY)
                     case .key(let down, let keysym):
                         try await session.sendKey(down: down, keysym: keysym)
                     case .clipboard(let text):

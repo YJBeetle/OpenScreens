@@ -43,6 +43,10 @@ public final class SessionViewModel {
     public private(set) var downloadSavedPath: String?
     /// Last known pointer position, normalized to the remote framebuffer.
     public private(set) var remoteCursor = CGPoint(x: 0.5, y: 0.55)
+    /// Magnification applied to the remote image; 1 shows the whole desktop.
+    public private(set) var zoom: CGFloat = 1
+    /// On-screen translation of the zoomed image, in points.
+    public private(set) var pan: CGSize = .zero
 
     @ObservationIgnored private let service: any RemoteSessionService
     @ObservationIgnored private var session: (any RemoteSessionProtocol)?
@@ -55,8 +59,12 @@ public final class SessionViewModel {
     @ObservationIgnored private var reconnectAttempts = 0
     @ObservationIgnored private var lastHoverPixel: CGPoint?
     @ObservationIgnored private var backgroundedAt: Date?
+    @ObservationIgnored private var scrollRemainder = CGSize.zero
 
     private static let resumeReconnectDelay: TimeInterval = 5
+    private static let maxZoom: CGFloat = 6
+    /// Points of two-finger travel that make one wheel click.
+    private static let scrollStepPoints: CGFloat = 24
 
     public init(
         profile: ConnectionProfile,
@@ -378,6 +386,106 @@ public final class SessionViewModel {
         queuePointer([PointerEvent(action: .move, x: normalized.x, y: normalized.y)])
     }
 
+    /// Two-finger tap. In touch mode the click lands under the fingers; in
+    /// trackpad mode it clicks whatever the virtual cursor points at.
+    public func rightClick(at point: CGPoint? = nil, in size: CGSize) {
+        click(button: .right, at: point, in: size)
+    }
+
+    /// Three-finger tap.
+    public func middleClick(at point: CGPoint? = nil, in size: CGSize) {
+        click(button: .middle, at: point, in: size)
+    }
+
+    private func click(button: PointerButton, at point: CGPoint?, in size: CGSize) {
+        guard state.isConnected, !isObserving else { return }
+        let target: CGPoint
+        if let point, cursorMode != .trackpad, size.width > 0, size.height > 0 {
+            target = normalized(point, in: size)
+            remoteCursor = target
+        } else {
+            target = remoteCursor
+        }
+        queuePointer([
+            PointerEvent(action: .move, x: target.x, y: target.y),
+            PointerEvent(action: .down, button: button, x: target.x, y: target.y),
+            PointerEvent(action: .up, button: button, x: target.x, y: target.y)
+        ])
+    }
+
+    /// Translates two-finger travel into wheel clicks. Callers pass natural
+    /// deltas: dragging fingers down scrolls the remote content down.
+    public func scroll(by delta: CGSize) {
+        guard state.isConnected, !isObserving, let session,
+              delta.width != 0 || delta.height != 0
+        else { return }
+        scrollRemainder.width += delta.width
+        scrollRemainder.height += delta.height
+        let stepsX = Int(scrollRemainder.width / Self.scrollStepPoints)
+        let stepsY = Int(scrollRemainder.height / Self.scrollStepPoints)
+        guard stepsX != 0 || stepsY != 0 else { return }
+        scrollRemainder.width -= CGFloat(stepsX) * Self.scrollStepPoints
+        scrollRemainder.height -= CGFloat(stepsY) * Self.scrollStepPoints
+        let point = remoteCursor
+        Task { await session.sendScroll(at: point, stepsX: Int32(stepsX), stepsY: Int32(stepsY)) }
+    }
+
+    /// Moves the zoomed image while two fingers drag it.
+    public func panZoom(by delta: CGSize, in size: CGSize) {
+        guard zoom > 1.001 else { return }
+        pan = clampedPan(
+            CGSize(width: pan.width + delta.width, height: pan.height + delta.height),
+            in: size
+        )
+    }
+
+    /// Applies a pinch around the touches' midpoint. The remote point under
+    /// `startFocal` stays under `currentFocal`, so the content follows fingers.
+    public func applyPinch(
+        scale: CGFloat,
+        startZoom: CGFloat,
+        startPan: CGSize,
+        startFocal: CGPoint,
+        currentFocal: CGPoint,
+        in size: CGSize
+    ) {
+        guard let base = remoteImageRect(in: size) else { return }
+        let newZoom = min(max(startZoom * scale, 1), Self.maxZoom)
+        guard newZoom > 1.001 else {
+            zoom = 1
+            pan = .zero
+            return
+        }
+        let center = CGPoint(x: base.midX, y: base.midY)
+        let content = CGPoint(
+            x: center.x + (startFocal.x - center.x - startPan.width) / startZoom,
+            y: center.y + (startFocal.y - center.y - startPan.height) / startZoom
+        )
+        zoom = newZoom
+        pan = clampedPan(
+            CGSize(
+                width: currentFocal.x - center.x - (content.x - center.x) * newZoom,
+                height: currentFocal.y - center.y - (content.y - center.y) * newZoom
+            ),
+            in: size
+        )
+    }
+
+    public func resetZoom() {
+        zoom = 1
+        pan = .zero
+    }
+
+    private func clampedPan(_ value: CGSize, in size: CGSize) -> CGSize {
+        guard let base = remoteImageRect(in: size) else { return .zero }
+        let maxX = max(0, (base.width * zoom - size.width) / 2)
+        let maxY = max(0, (base.height * zoom - size.height) / 2)
+        return CGSize(
+            width: min(max(value.width, -maxX), maxX),
+            height: min(max(value.height, -maxY), maxY)
+        )
+    }
+
     private func queuePointer(_ events: [PointerEvent]) {
         guard let session else { return }
         Task {
@@ -417,8 +525,21 @@ public final class SessionViewModel {
         )
     }
 
+    /// Rect the remote image occupies after the current zoom and pan.
+    public func displayedImageRect(in size: CGSize) -> CGRect? {
+        guard let base = remoteImageRect(in: size) else { return nil }
+        let width = base.width * zoom
+        let height = base.height * zoom
+        return CGRect(
+            x: base.midX + pan.width - width / 2,
+            y: base.midY + pan.height - height / 2,
+            width: width,
+            height: height
+        )
+    }
+
     private func normalized(_ point: CGPoint, in size: CGSize) -> CGPoint {
-        guard let rect = remoteImageRect(in: size) else {
+        guard let rect = displayedImageRect(in: size), rect.width > 0, rect.height > 0 else {
             return CGPoint(x: 0.5, y: 0.5)
         }
         return CGPoint(

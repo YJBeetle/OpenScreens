@@ -18,6 +18,7 @@ public struct SessionScreen: View {
     @State private var isDropTargeted = false
     @State private var showingDownloadDialog = false
     @State private var downloadPath = ""
+    @State private var pinchStart: (zoom: CGFloat, pan: CGSize, focal: CGPoint)?
 
     #if os(macOS)
     @FocusState private var keyboardFocused: Bool
@@ -37,7 +38,7 @@ public struct SessionScreen: View {
             Theme.Colors.canvas
                 .ignoresSafeArea()
 
-            RemoteCanvasView(renderer: model.renderer, contentMode: model.scaling)
+            remoteCanvas
                 .ignoresSafeArea()
                 .accessibilityHidden(true)
                 .alert(
@@ -134,6 +135,29 @@ public struct SessionScreen: View {
         }
     }
 
+    @ViewBuilder
+    private var remoteCanvas: some View {
+        #if os(iOS)
+        GeometryReader { proxy in
+            if let rect = model.remoteImageRect(in: proxy.size) {
+                RemoteCanvasView(
+                    renderer: model.renderer,
+                    contentMode: model.scaling == .stretch ? .stretch : .fit
+                )
+                .frame(width: rect.width, height: rect.height)
+                .scaleEffect(model.zoom)
+                .offset(model.pan)
+                .position(
+                    x: rect.midX + model.pan.width,
+                    y: rect.midY + model.pan.height
+                )
+            }
+        }
+        #else
+        RemoteCanvasView(renderer: model.renderer, contentMode: model.scaling)
+        #endif
+    }
+
     private var downloadCompleteBinding: Binding<Bool> {
         Binding(
             get: { model.downloadSavedPath != nil },
@@ -170,7 +194,7 @@ public struct SessionScreen: View {
         guard model.state.isConnected,
               let image = model.remoteCursorImage,
               let shape = model.remoteCursorShape,
-              let rect = model.remoteImageRect(in: viewSize),
+              let rect = model.displayedImageRect(in: viewSize),
               let frame = model.frameSize,
               frame.width > 0, frame.height > 0
         else { return nil }
@@ -193,14 +217,48 @@ public struct SessionScreen: View {
 
     private var pointerSurface: some View {
         GeometryReader { proxy in
+            #if os(macOS)
             Color.clear
                 .contentShape(Rectangle())
                 .gesture(dragGesture(in: proxy.size))
-                #if os(macOS)
                 .onContinuousHover { phase in
                     handleHover(phase, in: proxy.size)
                 }
-                #endif
+            #else
+            RemoteTouchSurface(
+                onTap: { model.tap(at: $0, in: proxy.size) },
+                onDrag: { model.drag(to: $0, in: proxy.size) },
+                onDragEnd: {
+                    model.endDrag()
+                    focusHardwareKeyboard()
+                },
+                onRightClick: { model.rightClick(at: $0, in: proxy.size) },
+                onMiddleClick: { model.middleClick(in: proxy.size) },
+                onToggleChrome: {
+                    withAnimation(.easeInOut(duration: 0.18)) {
+                        model.showsChrome.toggle()
+                    }
+                },
+                onScroll: { model.scroll(by: $0) },
+                onDragZoomed: { model.panZoom(by: $0, in: proxy.size) },
+                isZoomed: { model.zoom > 1.001 },
+                onPinchBegan: { focal in
+                    pinchStart = (model.zoom, model.pan, focal)
+                },
+                onPinchChanged: { scale, focal in
+                    guard let start = pinchStart else { return }
+                    model.applyPinch(
+                        scale: scale,
+                        startZoom: start.zoom,
+                        startPan: start.pan,
+                        startFocal: start.focal,
+                        currentFocal: focal,
+                        in: proxy.size
+                    )
+                },
+                onPinchEnded: { pinchStart = nil }
+            )
+            #endif
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Remote screen for \(model.profile.name)")

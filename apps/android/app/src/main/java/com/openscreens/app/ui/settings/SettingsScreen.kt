@@ -49,6 +49,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.openscreens.app.BuildConfig
@@ -230,6 +231,7 @@ fun SettingsScreen(
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         UpdateChannel.entries.forEach { channel ->
                             FilterChip(
+                                modifier = Modifier.weight(1f),
                                 selected = updateChannel == channel,
                                 onClick = {
                                     if (updateChannel != channel) {
@@ -239,7 +241,7 @@ fun SettingsScreen(
                                 },
                                 label = {
                                     Text(
-                                        stringResource(
+                                        text = stringResource(
                                             when (channel) {
                                                 UpdateChannel.Release ->
                                                     R.string.settings_channel_release
@@ -249,6 +251,8 @@ fun SettingsScreen(
                                                     R.string.settings_channel_snapshot
                                             },
                                         ),
+                                        modifier = Modifier.fillMaxWidth(),
+                                        textAlign = TextAlign.Center,
                                     )
                                 },
                             )

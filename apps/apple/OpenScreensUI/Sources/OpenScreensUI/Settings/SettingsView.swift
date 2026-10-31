@@ -142,7 +142,7 @@ public struct SettingsView: View {
                 LabeledContent("Protocol", value: "RFB (VNC)")
                 LabeledContent("Transport", value: "Direct connection")
 
-                Text("OpenScreens is open source software, licensed under Apache-2.0. This build uses a local mock session; the Rust RFB engine plugs in behind the same session interface.")
+                Text("OpenScreens is open source software, licensed under AGPL-3.0. This build uses a local mock session; the Rust RFB engine plugs in behind the same session interface.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } header: {

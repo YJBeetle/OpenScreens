@@ -158,10 +158,49 @@ public enum RemoteTransferError: LocalizedError, Sendable {
     }
 }
 
+/// Crop of the framebuffer currently delivered to the canvas. `x`, `y`,
+/// `width` and `height` are framebuffer pixels; the delivered texture is this
+/// crop sampled by `scale` (`bufferWidth` × `bufferHeight`).
+public struct RemoteViewport: Sendable, Equatable {
+    public var x: Int
+    public var y: Int
+    public var width: Int
+    public var height: Int
+    public var scale: Int
+    public var bufferWidth: Int
+    public var bufferHeight: Int
+    public var framebufferWidth: Int
+    public var framebufferHeight: Int
+
+    public init(
+        x: Int,
+        y: Int,
+        width: Int,
+        height: Int,
+        scale: Int,
+        bufferWidth: Int,
+        bufferHeight: Int,
+        framebufferWidth: Int,
+        framebufferHeight: Int
+    ) {
+        self.x = x
+        self.y = y
+        self.width = width
+        self.height = height
+        self.scale = scale
+        self.bufferWidth = bufferWidth
+        self.bufferHeight = bufferHeight
+        self.framebufferWidth = framebufferWidth
+        self.framebufferHeight = framebufferHeight
+    }
+}
+
 public enum RemoteSessionEvent: Sendable {
     case state(RemoteSessionState)
     case displays([RemoteDisplay])
     case frame(RemoteFrame)
+    /// The client now receives only this framebuffer crop, sampled by `scale`.
+    case viewport(RemoteViewport)
     case cursor(RemoteCursorShape)
     /// Pointer position reported by the server, normalized to 0...1.
     case pointerPosition(x: Double, y: Double)
@@ -288,7 +327,8 @@ public protocol RemoteSessionProtocol: Sendable {
     func selectDisplay(_ id: Int?) async
     /// Restricts framebuffer updates to a normalized rect (0...1 in framebuffer
     /// coordinates) and picks a sampling density that keeps the visible crop at
-    /// screen resolution. `nil` restores full-frame updates.
+    /// screen resolution. `nil` restores full-frame updates. The client sends a
+    /// `viewport` event once frames for the new crop start arriving.
     func setViewport(_ normalizedRect: CGRect?, screenPixelWidth: Int) async
     /// Sends local files to the remote desktop through Apple's drag-and-drop
     /// file transfer protocol. Progress and completion arrive as events.

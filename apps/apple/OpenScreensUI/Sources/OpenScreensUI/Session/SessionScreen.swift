@@ -154,7 +154,8 @@ public struct SessionScreen: View {
             RemoteCanvasView(
                 renderer: model.renderer,
                 contentMode: model.scaling == .stretch ? .stretch : .fit,
-                imageRect: model.displayedImageRect(in: proxy.size),
+                imageRect: model.displayedViewportRect(in: proxy.size)
+                    ?? model.displayedImageRect(in: proxy.size),
                 containerSize: proxy.size
             )
             .frame(width: proxy.size.width, height: proxy.size.height)
@@ -207,7 +208,7 @@ public struct SessionScreen: View {
               let image = model.remoteCursorImage,
               let shape = model.remoteCursorShape,
               let rect = model.displayedImageRect(in: viewSize),
-              let frame = model.frameSize,
+              let frame = model.framebufferSize,
               frame.width > 0, frame.height > 0
         else { return nil }
 
@@ -677,7 +678,7 @@ public struct SessionScreen: View {
     }
 
     private var connectionDetail: String {
-        if let size = model.serverSize ?? model.frameSize {
+        if let size = model.serverSize ?? model.framebufferSize {
             return "\(Int(size.width)) × \(Int(size.height)) · \(model.cursorMode.title)"
         }
         return model.state.label

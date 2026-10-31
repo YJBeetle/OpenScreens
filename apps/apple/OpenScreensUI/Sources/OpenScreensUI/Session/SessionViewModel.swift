@@ -18,6 +18,16 @@ public final class SessionViewModel {
     /// Size of the server framebuffer; frames may be sampled down from this.
     public private(set) var serverSize: CGSize?
     public private(set) var frameSize: CGSize?
+    /// Crop of the framebuffer currently delivered to the canvas.
+    public private(set) var viewport: RemoteViewport?
+
+    /// Full framebuffer size in pixels, independent of the delivered crop.
+    public var framebufferSize: CGSize? {
+        if let viewport {
+            return CGSize(width: viewport.framebufferWidth, height: viewport.framebufferHeight)
+        }
+        return frameSize
+    }
 
     public var cursorMode: CursorMode
     public var isObserving: Bool
@@ -161,6 +171,7 @@ public final class SessionViewModel {
         let session = service.makeSession()
         self.session = session
         lastViewportRect = nil
+        viewport = nil
         state = isReconnect ? .reconnecting(attempt: reconnectAttempts) : .connecting
         remoteCursorShape = nil
         remoteCursorImage = nil
@@ -195,6 +206,7 @@ public final class SessionViewModel {
         viewportTask?.cancel()
         viewportTask = nil
         lastViewportRect = nil
+        viewport = nil
         clearUploadState()
         clearDownloadState()
         if let active {
@@ -243,6 +255,9 @@ public final class SessionViewModel {
             } else {
                 renderer.updateFullFrame(width: frame.width, height: frame.height, pixels: frame.data)
             }
+
+        case .viewport(let viewport):
+            self.viewport = viewport
 
         case .cursor(let shape):
             if shape.isEmpty {
@@ -414,10 +429,10 @@ public final class SessionViewModel {
         let normalized = normalized(point, in: size)
         remoteCursor = normalized
 
-        if let frameSize, frameSize.width >= 1, frameSize.height >= 1 {
+        if let framebufferSize, framebufferSize.width >= 1, framebufferSize.height >= 1 {
             let pixel = CGPoint(
-                x: (normalized.x * frameSize.width).rounded(.down),
-                y: (normalized.y * frameSize.height).rounded(.down)
+                x: (normalized.x * framebufferSize.width).rounded(.down),
+                y: (normalized.y * framebufferSize.height).rounded(.down)
             )
             if pixel == lastHoverPixel { return }
             lastHoverPixel = pixel
@@ -578,11 +593,11 @@ public final class SessionViewModel {
     /// Rect the remote framebuffer occupies inside the view, mirroring the
     /// canvas renderer's fit/fill layout.
     public func remoteImageRect(in size: CGSize) -> CGRect? {
-        guard let frameSize, frameSize.width > 0, frameSize.height > 0,
+        guard let framebufferSize, framebufferSize.width > 0, framebufferSize.height > 0,
               size.width > 0, size.height > 0
         else { return nil }
 
-        let imageAspect = frameSize.width / frameSize.height
+        let imageAspect = framebufferSize.width / framebufferSize.height
         let viewAspect = size.width / size.height
         let imageSize: CGSize
         switch scaling {
@@ -615,6 +630,23 @@ public final class SessionViewModel {
             y: base.midY + pan.height - height / 2,
             width: width,
             height: height
+        )
+    }
+
+    /// Rect the currently delivered crop occupies on screen.
+    public func displayedViewportRect(in size: CGSize) -> CGRect? {
+        guard let viewport,
+              let displayed = displayedImageRect(in: size),
+              let framebuffer = framebufferSize,
+              framebuffer.width > 0, framebuffer.height > 0
+        else { return nil }
+        let scaleX = displayed.width / framebuffer.width
+        let scaleY = displayed.height / framebuffer.height
+        return CGRect(
+            x: displayed.minX + CGFloat(viewport.x) * scaleX,
+            y: displayed.minY + CGFloat(viewport.y) * scaleY,
+            width: CGFloat(viewport.width) * scaleX,
+            height: CGFloat(viewport.height) * scaleY
         )
     }
 

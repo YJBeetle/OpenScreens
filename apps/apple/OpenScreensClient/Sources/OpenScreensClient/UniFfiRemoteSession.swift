@@ -73,11 +73,15 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
 
     private var width: UInt16 = 0
     private var height: UInt16 = 0
-    // Framebuffer pixels are sampled down so a 6K host does not allocate a
-    // full-resolution texture (and a 268 MB frame buffer copy) per frame.
+    // Frames delivered before the first viewport are sampled down so a 6K host
+    // does not allocate a full-resolution texture per frame. Once a viewport is
+    // active the renderer only holds the visible crop.
     private var displayScale: UInt16 = 1
     private var scaledWidth = 0
     private var scaledHeight = 0
+    /// Crop currently subscribed for this session.
+    private var viewport: OpenScreensUI.RemoteViewport?
+    private var announceViewport = false
     private var cursor = CGPoint(x: 0.5, y: 0.5)
     private var buttonMask: UInt8 = 0
     private var observing = false
@@ -108,6 +112,7 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
     /// supported device inside `maxTextureDimension2D`.
     private static let maxTextureDimension = 8192
     private static let maxSamplingScale = 16
+    private static let maxViewportPixels = 6_000_000
     private static let uploadChunkSize = 64 * 1024
     /// POSIX 0100644: a plain file owned by the uploading user.
     private static let uploadFileMode: UInt16 = 0o100644
@@ -134,6 +139,8 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
         sharedClipboard = profile.controls.sharedClipboard
         cursor = CGPoint(x: 0.5, y: 0.5)
         buttonMask = 0
+        viewport = nil
+        announceViewport = false
         continuation.yield(.state(.connecting))
 
         let storedPassword = OpenScreensCredentials.password(for: profile.id)
@@ -359,52 +366,81 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
 
     /// Subscribes only to the visible framebuffer region and samples it at
     /// roughly one stored pixel per screen pixel, so a zoomed crop stays sharp
-    /// without transferring the whole desktop.
+    /// without transferring or retaining the whole desktop.
     public func setViewport(_ normalizedRect: CGRect?, screenPixelWidth: Int) async {
         guard let session, !finished, width > 0, height > 0 else { return }
         let unit = CGRect(x: 0, y: 0, width: 1, height: 1)
         let fraction = (normalizedRect ?? unit).intersection(unit)
         guard fraction.width > 0, fraction.height > 0 else { return }
 
-        let full = CGRect(x: 0, y: 0, width: Int(width), height: Int(height))
+        let fullWidth = Int(width)
+        let fullHeight = Int(height)
         let visible = CGRect(
-            x: (fraction.minX * CGFloat(width)).rounded(.down),
-            y: (fraction.minY * CGFloat(height)).rounded(.down),
-            width: (fraction.width * CGFloat(width)).rounded(.up),
-            height: (fraction.height * CGFloat(height)).rounded(.up)
-        ).integral.intersection(full)
+            x: (fraction.minX * CGFloat(fullWidth)).rounded(.down),
+            y: (fraction.minY * CGFloat(fullHeight)).rounded(.down),
+            width: (fraction.width * CGFloat(fullWidth)).rounded(.up),
+            height: (fraction.height * CGFloat(fullHeight)).rounded(.up)
+        ).integral.intersection(CGRect(x: 0, y: 0, width: fullWidth, height: fullHeight))
         guard visible.width >= 1, visible.height >= 1 else { return }
 
-        var density = max(1, Int(visible.width) / max(1, screenPixelWidth))
-        density = max(
-            density,
-            (Int(width) + Self.maxTextureDimension - 1) / Self.maxTextureDimension,
-            (Int(height) + Self.maxTextureDimension - 1) / Self.maxTextureDimension
+        // Keep a little slack around the visible area for panning.
+        let margin = max(64, Int(visible.width) / 12)
+        let expandedLeft = max(0, Int(visible.minX) - margin)
+        let expandedTop = max(0, Int(visible.minY) - margin)
+        let expandedRight = min(fullWidth, Int(visible.maxX) + margin)
+        let expandedBottom = min(fullHeight, Int(visible.maxY) + margin)
+        guard expandedRight > expandedLeft, expandedBottom > expandedTop else { return }
+
+        var scale = max(1, Int(visible.width) / max(1, screenPixelWidth))
+        scale = max(
+            scale,
+            (fullWidth + Self.maxTextureDimension - 1) / Self.maxTextureDimension,
+            (fullHeight + Self.maxTextureDimension - 1) / Self.maxTextureDimension
         )
-        density = min(Self.maxSamplingScale, density)
-        if displayScale != UInt16(density) {
-            displayScale = UInt16(density)
-            scaledWidth = (Int(width) + density - 1) / density
-            scaledHeight = (Int(height) + density - 1) / density
-            logger.info(
-                "viewport sampling 1/\(density) (\(self.scaledWidth)x\(self.scaledHeight))"
-            )
+        scale = min(Self.maxSamplingScale, scale)
+        func bufferPixels(_ divisor: Int) -> Int {
+            let w = (expandedRight - expandedLeft + divisor - 1) / divisor
+            let h = (expandedBottom - expandedTop + divisor - 1) / divisor
+            return w * h
+        }
+        while scale < Self.maxSamplingScale && bufferPixels(scale) > Self.maxViewportPixels {
+            scale += 1
         }
 
-        let margin = max(64, Int(visible.width) / 12)
-        let target = CGRect(
-            x: visible.minX - CGFloat(margin),
-            y: visible.minY - CGFloat(margin),
-            width: visible.width + CGFloat(margin * 2),
-            height: visible.height + CGFloat(margin * 2)
-        ).integral.intersection(full)
+        // Align outward to the sampling grid so server rects map to the crop
+        // without gaps.
+        let alignedLeft = (expandedLeft / scale) * scale
+        let alignedTop = (expandedTop / scale) * scale
+        let alignedRight = min(fullWidth, ((expandedRight + scale - 1) / scale) * scale)
+        let alignedBottom = min(fullHeight, ((expandedBottom + scale - 1) / scale) * scale)
+        let alignedWidth = alignedRight - alignedLeft
+        let alignedHeight = alignedBottom - alignedTop
+        guard alignedWidth > 0, alignedHeight > 0 else { return }
+
+        let next = OpenScreensUI.RemoteViewport(
+            x: alignedLeft,
+            y: alignedTop,
+            width: alignedWidth,
+            height: alignedHeight,
+            scale: scale,
+            bufferWidth: (alignedWidth + scale - 1) / scale,
+            bufferHeight: (alignedHeight + scale - 1) / scale,
+            framebufferWidth: fullWidth,
+            framebufferHeight: fullHeight
+        )
+        guard next != viewport else { return }
+        viewport = next
+        announceViewport = true
+        logger.info(
+            "viewport \(next.x),\(next.y) \(next.width)x\(next.height) sampling 1/\(next.scale)"
+        )
 
         do {
             try await session.setViewport(
-                x: UInt16(target.minX),
-                y: UInt16(target.minY),
-                width: UInt16(target.width),
-                height: UInt16(target.height)
+                x: UInt16(alignedLeft),
+                y: UInt16(alignedTop),
+                width: UInt16(alignedWidth),
+                height: UInt16(alignedHeight)
             )
         } catch {
             logger.warning("set viewport failed: \(error.localizedDescription, privacy: .public)")
@@ -816,7 +852,58 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
             continuation.yield(.state(.connected))
 
         case .frame(_, let rects):
-            guard width > 0, height > 0, displayScale > 0 else { return }
+            guard width > 0, height > 0 else { return }
+            if let viewport {
+                if announceViewport {
+                    continuation.yield(.viewport(viewport))
+                    announceViewport = false
+                }
+                let scale = viewport.scale
+                for rect in rects where rect.width > 0 && rect.height > 0 {
+                    let left = max(Int(rect.x), viewport.x)
+                    let top = max(Int(rect.y), viewport.y)
+                    let right = min(Int(rect.x) + Int(rect.width), viewport.x + viewport.width)
+                    let bottom = min(Int(rect.y) + Int(rect.height), viewport.y + viewport.height)
+                    guard right > left, bottom > top else { continue }
+
+                    let destLeft = left / scale - viewport.x / scale
+                    let destTop = top / scale - viewport.y / scale
+                    let destRight = (right - 1) / scale - viewport.x / scale
+                    let destBottom = (bottom - 1) / scale - viewport.y / scale
+                    let destWidth = destRight - destLeft + 1
+                    let destHeight = destBottom - destTop + 1
+                    guard destWidth > 0, destHeight > 0 else { continue }
+
+                    guard let data = session.copyRegionScaled(
+                        rect: OpenScreensCore.Rect(
+                            x: UInt16(left),
+                            y: UInt16(top),
+                            width: UInt16(right - left),
+                            height: UInt16(bottom - top)
+                        ),
+                        scale: UInt16(scale)
+                    ) else { continue }
+
+                    let coversViewport = left <= viewport.x && top <= viewport.y
+                        && right >= viewport.x + viewport.width
+                        && bottom >= viewport.y + viewport.height
+                    let region: RemoteRegion? = coversViewport ? nil : RemoteRegion(
+                        x: destLeft,
+                        y: destTop,
+                        width: destWidth,
+                        height: destHeight
+                    )
+                    continuation.yield(.frame(RemoteFrame(
+                        width: viewport.bufferWidth,
+                        height: viewport.bufferHeight,
+                        region: region,
+                        data: data
+                    )))
+                }
+                return
+            }
+
+            guard displayScale > 0 else { return }
             let scale = Int(displayScale)
             for rect in rects where rect.width > 0 && rect.height > 0 {
                 guard let data = session.copyRegionScaled(rect: rect, scale: displayScale)
@@ -851,6 +938,8 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
         case .resized(let width, let height):
             self.width = width
             self.height = height
+            viewport = nil
+            announceViewport = false
             updateDisplayScale()
             continuation.yield(.displays([
                 RemoteDisplay(
@@ -986,6 +1075,8 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
     private func finish(reason: String?, kind: RemoteFailureKind = .unknown) {
         guard !finished else { return }
         finished = true
+        viewport = nil
+        announceViewport = false
         pendingUploads.removeAll()
         uploadFileNames.removeAll()
         downloadRoots.removeAll()

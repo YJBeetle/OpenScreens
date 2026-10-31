@@ -343,6 +343,17 @@ pub fn download_request(handle: u32, path: &str) -> Container {
     }
 }
 
+/// Apple display selection (message 13). `None` selects all displays.
+/// Layout verified from VNCKit: `[0]=13, [1]=1` for all, `[4..8]=u32 BE id`.
+pub fn select_display_message(display_id: Option<u32>) -> [u8; 8] {
+    let id = display_id.unwrap_or(u32::MAX);
+    let mut message = [0u8; 8];
+    message[0] = 13;
+    message[1] = u8::from(display_id.is_none());
+    message[4..].copy_from_slice(&id.to_be_bytes());
+    message
+}
+
 /// Start of a drag-out sequence (message 14), asking the server for the remote
 /// pasteboard so the user can drag files from the remote desktop.
 pub fn drag_out_start(handle: u32) -> Vec<u8> {
@@ -925,6 +936,18 @@ mod tests {
         ack.extend_from_slice(b"done");
         assert_eq!(parse_ack(&ack).unwrap(), "done");
         assert_eq!(parse_ack(&[0, 0]), Err(FileTransferError::Truncated));
+    }
+
+    #[test]
+    fn select_display_layout() {
+        assert_eq!(
+            select_display_message(Some(0x1234_5678)),
+            [13, 0, 0, 0, 0x12, 0x34, 0x56, 0x78]
+        );
+        assert_eq!(
+            select_display_message(None),
+            [13, 1, 0, 0, 0xff, 0xff, 0xff, 0xff]
+        );
     }
 
     #[test]

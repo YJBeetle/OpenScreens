@@ -9,7 +9,7 @@ use rfb_codec::Rect as EngineRect;
 use rfb_engine::apple_file_transfer as ft;
 use rfb_engine::session::{
     Event as EngineEvent, Session, SessionConfig as EngineConfig, SshAuthSettings as EngineSshAuth,
-    SshSettings as EngineSshSettings,
+    SshSettings as EngineSshSettings, WireGuardSettings as EngineWireGuardSettings,
 };
 
 uniffi::setup_scaffolding!();
@@ -35,6 +35,10 @@ pub struct SessionConfig {
     pub local_cursor: bool,
     pub quality: u8,
     pub frame_interval_ms: u16,
+    /// Full wg-quick text; when set the target is dialled through a userspace
+    /// WireGuard tunnel (mutually exclusive with SSH).
+    pub wireguard_config: Option<String>,
+    pub wireguard_dns_fallback: bool,
     pub ssh_host: Option<String>,
     pub ssh_port: Option<u16>,
     pub ssh_username: Option<String>,
@@ -77,6 +81,14 @@ impl From<SessionConfig> for EngineConfig {
             // Apple servers are detected during the handshake; non-Apple
             // servers keep the standard 3.8 flow.
             apple_session: true,
+            wireguard: config
+                .wireguard_config
+                .filter(|text| !text.trim().is_empty())
+                .map(|wg_quick| EngineWireGuardSettings {
+                    wg_quick,
+                    dns_fallback: config.wireguard_dns_fallback,
+                    connect_timeout_secs: 30,
+                }),
             ssh,
         }
     }
@@ -118,6 +130,16 @@ pub struct SessionSize {
     pub height: u16,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Record)]
+pub struct DisplayScreen {
+    pub id: u32,
+    pub x: u16,
+    pub y: u16,
+    pub width: u16,
+    pub height: u16,
+    pub flags: u32,
+}
+
 #[derive(Debug, Clone, uniffi::Enum)]
 pub enum SessionEvent {
     Connected {
@@ -132,6 +154,11 @@ pub enum SessionEvent {
     Resized {
         width: u16,
         height: u16,
+    },
+    DesktopLayout {
+        width: u16,
+        height: u16,
+        screens: Vec<DisplayScreen>,
     },
     Clipboard {
         text: String,
@@ -161,6 +188,19 @@ pub enum SessionEvent {
         handle: u32,
         payload: Vec<u8>,
     },
+    DownloadProgress {
+        handle: u32,
+        name: Option<String>,
+        bytes: u64,
+        total: u64,
+    },
+    DownloadComplete {
+        handle: u32,
+        files: u32,
+        directories: u32,
+        bytes: u64,
+        error: Option<String>,
+    },
     Disconnected {
         reason: String,
     },
@@ -183,9 +223,25 @@ impl From<EngineEvent> for SessionEvent {
                 rects: rects.into_iter().map(Rect::from).collect(),
             },
             EngineEvent::Resized { width, height } => Self::Resized { width, height },
-            // Multi-monitor layouts are not exposed by the FFI surface yet;
-            // frontends still need the new framebuffer size.
-            EngineEvent::DesktopLayout { width, height, .. } => Self::Resized { width, height },
+            EngineEvent::DesktopLayout {
+                width,
+                height,
+                screens,
+            } => Self::DesktopLayout {
+                width,
+                height,
+                screens: screens
+                    .into_iter()
+                    .map(|screen| DisplayScreen {
+                        id: screen.id,
+                        x: screen.x,
+                        y: screen.y,
+                        width: screen.width,
+                        height: screen.height,
+                        flags: screen.flags,
+                    })
+                    .collect(),
+            },
             EngineEvent::Clipboard { text } => Self::Clipboard { text },
             EngineEvent::Bell => Self::Bell,
             EngineEvent::Cursor(shape) => Self::Cursor {
@@ -206,6 +262,30 @@ impl From<EngineEvent> for SessionEvent {
                 subtype,
                 handle,
                 payload,
+            },
+            EngineEvent::DownloadProgress {
+                handle,
+                name,
+                bytes,
+                total,
+            } => Self::DownloadProgress {
+                handle,
+                name,
+                bytes,
+                total,
+            },
+            EngineEvent::DownloadComplete {
+                handle,
+                files,
+                directories,
+                bytes,
+                error,
+            } => Self::DownloadComplete {
+                handle,
+                files,
+                directories,
+                bytes,
+                error,
             },
             EngineEvent::Disconnected { reason } => Self::Disconnected { reason },
         }
@@ -417,8 +497,30 @@ impl RemoteSession {
             .map_err(to_failure)
     }
 
+    /// Requests `path` and materialises it below `root`; progress arrives as
+    /// `SessionEvent.DownloadProgress` / `DownloadComplete`.
+    pub async fn start_download(
+        &self,
+        handle: u32,
+        path: String,
+        root: String,
+    ) -> Result<(), SessionFailure> {
+        self.session
+            .start_download(handle, &path, std::path::PathBuf::from(root))
+            .await
+            .map_err(to_failure)
+    }
+
     pub async fn request_refresh(&self) -> Result<(), SessionFailure> {
         self.session.request_refresh().await.map_err(to_failure)
+    }
+
+    /// Selects an Apple display by id; `None` shows all displays.
+    pub async fn select_display(&self, display_id: Option<u32>) -> Result<(), SessionFailure> {
+        self.session
+            .select_display(display_id)
+            .await
+            .map_err(to_failure)
     }
 
     /// Restricts incremental update requests to a region and refreshes it.

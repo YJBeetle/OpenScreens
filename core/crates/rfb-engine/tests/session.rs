@@ -696,3 +696,96 @@ async fn apple_client_version_message_is_sent_verbatim() {
     assert_eq!(&message[1..6], &[0x00, 0x00, 0x3e, 0x00, 0x01]);
     assert_eq!(&message[34..39], &[0xb0, 0x00, 0x08, 0x03, 0xa0]);
 }
+
+#[tokio::test]
+async fn download_receives_file() {
+    let (client, mut server) = duplex(64 * 1024);
+    let task = tokio::spawn(async move {
+        Session::connect_stream(client, SessionConfig::new("mock", 5900))
+            .await
+            .unwrap()
+    });
+    perform_handshake(&mut server).await;
+    let _ = read_setup(&mut server).await;
+    let session = task.await.unwrap();
+    let connected = timeout(Duration::from_secs(1), session.next_event())
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(matches!(connected, Event::Connected { .. }));
+
+    let unique = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let root = std::env::temp_dir().join(format!("openscreens-download-{unique}"));
+    std::fs::create_dir_all(&root).unwrap();
+
+    session
+        .start_download(7, "/remote/hello.txt", root.clone())
+        .await
+        .unwrap();
+
+    // The client sends a 0x22/0x0001 download request.
+    let mut header = [0u8; 14];
+    server.read_exact(&mut header).await.unwrap();
+    assert_eq!(header[0], 0x22);
+    let length = u32::from_be_bytes(header[2..6].try_into().unwrap()) as usize;
+    assert_eq!(
+        u16::from_be_bytes(header[8..10].try_into().unwrap()),
+        ft::SUBTYPE_DOWNLOAD_REQUEST
+    );
+    assert_eq!(u32::from_be_bytes(header[10..14].try_into().unwrap()), 7);
+    let mut payload = vec![0u8; length - 8];
+    server.read_exact(&mut payload).await.unwrap();
+
+    let entry = ft::Entry {
+        kind: ft::EntryKind::File,
+        name: "hello.txt",
+        data_size: 5,
+        resource_size: 0,
+        mode: 0o100_644,
+        nesting: 0,
+        created: 0,
+        accessed: 0,
+        changed: 0,
+        modified: 0,
+        finder_info: [0; 32],
+        link_target: None,
+    };
+    let messages = [
+        ft::upload_summary(7, 5, 1, 0).encode(),
+        ft::upload_entry(7, &entry).unwrap().encode(),
+        ft::upload_data(7, b"hello").unwrap().encode(),
+        ft::upload_complete(7).encode(),
+    ];
+    for message in messages {
+        server.write_all(&message).await.unwrap();
+    }
+
+    let mut complete = None;
+    for _ in 0..8 {
+        let event = timeout(Duration::from_secs(1), session.next_event())
+            .await
+            .unwrap()
+            .unwrap();
+        if let Event::DownloadComplete {
+            handle,
+            files,
+            bytes,
+            error,
+            ..
+        } = event
+        {
+            assert_eq!(handle, 7);
+            assert_eq!(files, 1);
+            assert_eq!(bytes, 5);
+            assert!(error.is_none());
+            complete = Some(());
+            break;
+        }
+    }
+    assert!(complete.is_some());
+    assert_eq!(std::fs::read(root.join("hello.txt")).unwrap(), b"hello");
+    std::fs::remove_dir_all(&root).ok();
+}

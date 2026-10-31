@@ -1,7 +1,9 @@
 //! RFB client session: handshake, framebuffer updates, input and events.
 
+use std::collections::HashMap;
 use std::fmt;
 use std::io;
+use std::path::PathBuf;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -21,7 +23,9 @@ use tokio::sync::Mutex as AsyncMutex;
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 
+use crate::apple_download::{DownloadEvent as AppleDownloadEvent, DownloadTransfer};
 use crate::apple_file_transfer;
+use crate::apple_input;
 use crate::handshake::{self, ClientConfig, HandshakeError};
 use crate::quality::AdaptiveQuality;
 
@@ -90,7 +94,21 @@ pub struct SessionConfig {
     pub frame_interval_ms: u16,
     /// Negotiate Apple's RFB 3.889 extension handshake when available.
     pub apple_session: bool,
+    /// Route the target connection through a userspace WireGuard tunnel.
+    /// Mutually exclusive with `ssh`.
+    pub wireguard: Option<WireGuardSettings>,
     pub ssh: Option<SshSettings>,
+}
+
+/// Userspace WireGuard settings for reaching the RFB target.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WireGuardSettings {
+    /// Full wg-quick style configuration text (`[Interface]`/`[Peer]`).
+    pub wg_quick: String,
+    /// Fall back to the system resolver when the tunnel DNS fails.
+    pub dns_fallback: bool,
+    /// TCP handshake timeout for inner connections, in seconds.
+    pub connect_timeout_secs: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -125,6 +143,7 @@ impl SessionConfig {
             quality: 9,
             frame_interval_ms: 16,
             apple_session: false,
+            wireguard: None,
             ssh: None,
         }
     }
@@ -193,6 +212,21 @@ pub enum Event {
         handle: u32,
         payload: Vec<u8>,
     },
+    /// Progress of an engine-managed download.
+    DownloadProgress {
+        handle: u32,
+        name: Option<String>,
+        bytes: u64,
+        total: u64,
+    },
+    /// A download reached a terminal state; `error` is set on failure.
+    DownloadComplete {
+        handle: u32,
+        files: u32,
+        directories: u32,
+        bytes: u64,
+        error: Option<String>,
+    },
     Disconnected {
         reason: String,
     },
@@ -204,6 +238,7 @@ pub enum SessionError {
     Handshake(HandshakeError),
     Decode(DecodeError),
     Protocol(&'static str),
+    Tunnel(String),
     Ssh(rfb_io::SshError),
     Closed,
 }
@@ -215,6 +250,7 @@ impl fmt::Display for SessionError {
             Self::Handshake(error) => write!(f, "handshake failed: {error}"),
             Self::Decode(error) => write!(f, "decode failed: {error:?}"),
             Self::Protocol(message) => write!(f, "protocol error: {message}"),
+            Self::Tunnel(message) => write!(f, "WireGuard tunnel failed: {message}"),
             Self::Ssh(error) => write!(f, "SSH tunnel failed: {error}"),
             Self::Closed => f.write_str("connection closed"),
         }
@@ -259,6 +295,7 @@ pub struct Session {
     input_clock: std::time::Instant,
     last_input_us: AtomicU64,
     transfer_handle: AtomicU32,
+    downloads: Arc<Mutex<HashMap<u32, DownloadTransfer>>>,
     name: String,
     reader: JoinHandle<()>,
     writer: JoinHandle<()>,
@@ -266,7 +303,26 @@ pub struct Session {
 
 impl Session {
     pub async fn connect(config: SessionConfig) -> Result<Self, SessionError> {
-        let stream: rfb_io::BoxedTransport = if let Some(ssh) = &config.ssh {
+        if config.wireguard.is_some() && config.ssh.is_some() {
+            return Err(SessionError::Protocol(
+                "wireguard and ssh cannot be combined",
+            ));
+        }
+        let stream: rfb_io::BoxedTransport = if let Some(wireguard) = &config.wireguard {
+            let options = rfb_io::TunnelOptions {
+                dns_fallback: wireguard.dns_fallback,
+                connect_timeout: std::time::Duration::from_secs(
+                    wireguard.connect_timeout_secs.max(1),
+                ),
+            };
+            let dialer = rfb_io::TunnelDialer::start(&wireguard.wg_quick, options)
+                .await
+                .map_err(|error| SessionError::Tunnel(error.to_string()))?;
+            dialer
+                .dial_tcp(&config.host, config.port)
+                .await
+                .map_err(|error| SessionError::Tunnel(error.to_string()))?
+        } else if let Some(ssh) = &config.ssh {
             let host_key = match ssh.host_key_fingerprint.as_deref() {
                 Some(fingerprint) if !fingerprint.trim().is_empty() => {
                     HostKeyPolicy::PinSha256(fingerprint.trim().to_owned())
@@ -321,6 +377,7 @@ impl Session {
         let name = handshake.server_init.name.clone();
         let framebuffer = Arc::new(Mutex::new(Framebuffer::new(width, height)));
         let viewport = Arc::new(Mutex::new(None));
+        let downloads = Arc::new(Mutex::new(HashMap::new()));
 
         let (read_half, write_half) = tokio::io::split(stream);
         let bytes_read = Arc::new(AtomicU64::new(0));
@@ -357,6 +414,7 @@ impl Session {
             config.local_cursor,
             config.quality,
             bytes_read.clone(),
+            downloads.clone(),
         ));
 
         Ok(Self {
@@ -370,6 +428,7 @@ impl Session {
             input_clock: std::time::Instant::now(),
             last_input_us: AtomicU64::new(0),
             transfer_handle: AtomicU32::new(1),
+            downloads,
             name,
             reader,
             writer,
@@ -415,7 +474,21 @@ impl Session {
     }
 
     pub async fn send_key(&self, down: bool, keysym: u32) -> Result<(), SessionError> {
+        if self.apple_session
+            && let Some(key) = self.input_key
+        {
+            let delta = self.next_input_delta_us();
+            if let Some(message) = apple_input::apple_key_message(&key, keysym, down, delta) {
+                return self.send(message.to_vec()).await;
+            }
+        }
         self.send(key_event(down, keysym).to_vec()).await
+    }
+
+    fn next_input_delta_us(&self) -> u32 {
+        let now = self.input_clock.elapsed().as_micros() as u64;
+        let previous = self.last_input_us.swap(now, Ordering::Relaxed);
+        u32::try_from(now.saturating_sub(previous)).unwrap_or(u32::MAX)
     }
 
     /// Sends an encrypted Apple pointer event (RFB 3.889). Requires an Apple
@@ -425,9 +498,7 @@ impl Session {
         let Some(key) = self.input_key else {
             return Err(SessionError::Protocol("Apple input key unavailable"));
         };
-        let now = self.input_clock.elapsed().as_micros() as u64;
-        let previous = self.last_input_us.swap(now, Ordering::Relaxed);
-        let delta = u32::try_from(now.saturating_sub(previous)).unwrap_or(u32::MAX);
+        let delta = self.next_input_delta_us();
         let message = rfb_proto::apple_auth::encrypt_apple_pointer_event(&key, x, y, mask, delta);
         self.send(message.to_vec()).await
     }
@@ -467,6 +538,17 @@ impl Session {
             return Ok(());
         }
         self.send_apple_client_version().await
+    }
+
+    /// Selects an Apple display (message 13). `None` selects all displays.
+    pub async fn select_display(&self, display_id: Option<u32>) -> Result<(), SessionError> {
+        if !self.apple_session {
+            return Err(SessionError::Protocol(
+                "display selection requires an Apple session",
+            ));
+        }
+        self.send(apple_file_transfer::select_display_message(display_id).to_vec())
+            .await
     }
 
     pub async fn request_refresh(&self) -> Result<(), SessionError> {
@@ -555,8 +637,38 @@ impl Session {
     }
 
     pub async fn cancel_transfer(&self, handle: u32) -> Result<(), SessionError> {
-        self.send(apple_file_transfer::transfer_cancel(handle).encode())
-            .await
+        let result = self
+            .send(apple_file_transfer::transfer_cancel(handle).encode())
+            .await;
+        if let Ok(mut downloads) = self.downloads.lock() {
+            downloads.remove(&handle);
+        }
+        result
+    }
+
+    /// Requests `path` from the server and writes the received tree below
+    /// `root`. Progress and completion arrive as events; `handle` must be
+    /// unique per concurrent download.
+    pub async fn start_download(
+        &self,
+        handle: u32,
+        path: &str,
+        root: PathBuf,
+    ) -> Result<(), SessionError> {
+        {
+            let mut downloads = self
+                .downloads
+                .lock()
+                .map_err(|_| SessionError::Protocol("download lock poisoned"))?;
+            downloads.insert(handle, DownloadTransfer::new(root));
+        }
+        if let Err(error) = self.request_download(handle, path).await {
+            if let Ok(mut downloads) = self.downloads.lock() {
+                downloads.remove(&handle);
+            }
+            return Err(error);
+        }
+        Ok(())
     }
 
     /// Starts a drag-out and asks the server for its pasteboard. The server
@@ -624,6 +736,7 @@ struct ReaderState {
     decoder: Decoder,
     framebuffer: Arc<Mutex<Framebuffer>>,
     pixel_format: PixelFormat,
+    downloads: Arc<Mutex<HashMap<u32, DownloadTransfer>>>,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -640,6 +753,7 @@ async fn reader_task<R>(
     local_cursor: bool,
     quality: u8,
     bytes_read: Arc<AtomicU64>,
+    downloads: Arc<Mutex<HashMap<u32, DownloadTransfer>>>,
 ) where
     R: AsyncRead + Unpin,
 {
@@ -660,6 +774,7 @@ async fn reader_task<R>(
         decoder: Decoder::new(),
         framebuffer,
         pixel_format: PixelFormat::bgra8888(),
+        downloads,
     };
     let mut sequence = 0u64;
     let mut last_request: Option<std::time::Instant> = None;
@@ -772,12 +887,25 @@ where
                 state.buffer[13],
                 state.buffer[14],
             ]) as usize;
-            state.buffer.advance(15);
             if len > MAX_TRANSFER_PAYLOAD {
                 return Err(SessionError::Protocol("pasteboard payload too large"));
             }
+            let mut message = Vec::with_capacity(16 + len);
+            message.push(0x1f);
+            message.extend_from_slice(&state.buffer[..15]);
+            state.buffer.advance(15);
             fill_buffer(read, &mut state.buffer, len).await?;
+            message.extend_from_slice(&state.buffer[..len]);
             state.buffer.advance(len);
+            if let Ok(pasteboard) = apple_input::parse_server_pasteboard(&message)
+                && let Some(text) = pasteboard.text
+                && !text.is_empty()
+            {
+                events
+                    .send(Event::Clipboard { text })
+                    .await
+                    .map_err(|_| SessionError::Closed)?;
+            }
         }
         0x20 => handle_drag_info(read, state, events).await?,
         0x22 => handle_file_transfer(read, state, events).await?,
@@ -892,6 +1020,76 @@ where
     state.buffer.advance(payload_len);
     let (container, _) = apple_file_transfer::Container::parse(&message)
         .map_err(|_| SessionError::Protocol("invalid file transfer message"))?;
+
+    let mut download_events = Vec::new();
+    let mut consumed = false;
+    {
+        let mut downloads = state
+            .downloads
+            .lock()
+            .map_err(|_| SessionError::Protocol("download lock poisoned"))?;
+        let mut finished = false;
+        if let Some(transfer) = downloads.get_mut(&container.handle) {
+            consumed = true;
+            match transfer.handle_message(container.subtype, container.handle, &container.payload) {
+                Ok(AppleDownloadEvent::EntryStarted { path, .. })
+                | Ok(AppleDownloadEvent::DataReceived { path, .. }) => {
+                    download_events.push(Event::DownloadProgress {
+                        handle: container.handle,
+                        name: Some(path.display().to_string()),
+                        bytes: transfer.bytes_received(),
+                        total: transfer
+                            .summary()
+                            .map(|summary| summary.total_bytes)
+                            .unwrap_or(0),
+                    });
+                }
+                Ok(AppleDownloadEvent::Summary(_))
+                | Ok(AppleDownloadEvent::SymlinkSkipped { .. }) => {}
+                Ok(AppleDownloadEvent::Completed(stats)) => {
+                    download_events.push(Event::DownloadComplete {
+                        handle: container.handle,
+                        files: stats.files,
+                        directories: stats.directories,
+                        bytes: stats.bytes_written,
+                        error: None,
+                    });
+                    finished = true;
+                }
+                Ok(AppleDownloadEvent::Cancelled) => {
+                    download_events.push(Event::DownloadComplete {
+                        handle: container.handle,
+                        files: 0,
+                        directories: 0,
+                        bytes: 0,
+                        error: Some("cancelled".to_string()),
+                    });
+                    finished = true;
+                }
+                Err(error) => {
+                    download_events.push(Event::DownloadComplete {
+                        handle: container.handle,
+                        files: 0,
+                        directories: 0,
+                        bytes: 0,
+                        error: Some(error.to_string()),
+                    });
+                    finished = true;
+                }
+            }
+        }
+        if finished {
+            downloads.remove(&container.handle);
+        }
+    }
+
+    for event in download_events {
+        events.send(event).await.map_err(|_| SessionError::Closed)?;
+    }
+    if consumed {
+        return Ok(());
+    }
+
     events
         .send(Event::FileTransfer {
             subtype: container.subtype,

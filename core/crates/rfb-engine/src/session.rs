@@ -3,7 +3,7 @@
 use std::fmt;
 use std::io;
 use std::pin::Pin;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll};
 
@@ -21,6 +21,7 @@ use tokio::sync::Mutex as AsyncMutex;
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 
+use crate::apple_file_transfer;
 use crate::handshake::{self, ClientConfig, HandshakeError};
 use crate::quality::AdaptiveQuality;
 
@@ -161,6 +162,23 @@ pub enum Event {
         x: u16,
         y: u16,
     },
+    /// The server asks the client to upload files into `path` (Apple drag-in).
+    UploadRequest {
+        handle: u32,
+        path: String,
+    },
+    /// The server offered its pasteboard for a drag-out; the payload is the
+    /// decompressed pasteboard archive (see `apple_file_transfer`).
+    DragInfo {
+        handle: u32,
+        pasteboard: Vec<u8>,
+    },
+    /// A message 34 container from the server (download flow, progress, ack).
+    FileTransfer {
+        subtype: u16,
+        handle: u32,
+        payload: Vec<u8>,
+    },
     Disconnected {
         reason: String,
     },
@@ -222,6 +240,7 @@ pub struct Session {
     framebuffer: Arc<Mutex<Framebuffer>>,
     viewport: Arc<Mutex<Option<Rect>>>,
     input_key: Option<[u8; 16]>,
+    transfer_handle: AtomicU32,
     name: String,
     reader: JoinHandle<()>,
     writer: JoinHandle<()>,
@@ -326,6 +345,7 @@ impl Session {
             framebuffer,
             viewport,
             input_key,
+            transfer_handle: AtomicU32::new(1),
             name,
             reader,
             writer,
@@ -399,6 +419,79 @@ impl Session {
             return Err(SessionError::Closed);
         };
         self.send(framebuffer_update_request(false, 0, 0, width, height).to_vec())
+            .await
+    }
+
+    /// Allocates the next Apple file transfer handle.
+    pub fn next_transfer_handle(&self) -> u32 {
+        self.transfer_handle.fetch_add(1, Ordering::Relaxed)
+    }
+
+    /// Announces a drag-in with local file URLs (message 32). The server
+    /// answers with an [`Event::UploadRequest`] carrying the destination
+    /// folder and the same handle.
+    pub async fn announce_upload(
+        &self,
+        handle: u32,
+        file_urls: &[String],
+    ) -> Result<(), SessionError> {
+        let urls: Vec<&str> = file_urls.iter().map(String::as_str).collect();
+        self.send(apple_file_transfer::drag_in_message(handle, &urls))
+            .await
+    }
+
+    pub async fn upload_destination(&self, handle: u32, folder: &str) -> Result<(), SessionError> {
+        self.send(apple_file_transfer::upload_destination(handle, folder).encode())
+            .await
+    }
+
+    pub async fn upload_summary(
+        &self,
+        handle: u32,
+        total_bytes: u64,
+        files: u32,
+        directories: u32,
+    ) -> Result<(), SessionError> {
+        self.send(
+            apple_file_transfer::upload_summary(handle, total_bytes, files, directories).encode(),
+        )
+        .await
+    }
+
+    pub async fn upload_entry(
+        &self,
+        handle: u32,
+        entry: &apple_file_transfer::Entry<'_>,
+    ) -> Result<(), SessionError> {
+        let container = apple_file_transfer::upload_entry(handle, entry)
+            .map_err(|_| SessionError::Protocol("invalid file transfer entry"))?;
+        self.send(container.encode()).await
+    }
+
+    pub async fn upload_data(&self, handle: u32, chunk: &[u8]) -> Result<(), SessionError> {
+        let container = apple_file_transfer::upload_data(handle, chunk)
+            .map_err(|_| SessionError::Protocol("file transfer chunk too large"))?;
+        self.send(container.encode()).await
+    }
+
+    pub async fn upload_complete(&self, handle: u32) -> Result<(), SessionError> {
+        self.send(apple_file_transfer::upload_complete(handle).encode())
+            .await
+    }
+
+    pub async fn cancel_transfer(&self, handle: u32) -> Result<(), SessionError> {
+        self.send(apple_file_transfer::transfer_cancel(handle).encode())
+            .await
+    }
+
+    /// Starts a drag-out and asks the server for its pasteboard. The server
+    /// answers with an [`Event::DragInfo`].
+    pub async fn start_drag_out(&self, handle: u32) -> Result<(), SessionError> {
+        self.send(apple_file_transfer::drag_out_start(handle)).await
+    }
+
+    pub async fn request_download(&self, handle: u32, path: &str) -> Result<(), SessionError> {
+        self.send(apple_file_transfer::download_request(handle, path).encode())
             .await
     }
 
@@ -589,10 +682,128 @@ where
                 .map_err(|_| SessionError::Closed)?;
         }
         3 => handle_server_cut_text(read, state, events).await?,
+        0x1e => handle_upload_request(read, state, events).await?,
+        0x20 => handle_drag_info(read, state, events).await?,
+        0x22 => handle_file_transfer(read, state, events).await?,
         _ => return Err(SessionError::Protocol("unknown server message")),
     }
 
     Ok(message_type == 0)
+}
+
+const MAX_TRANSFER_PAYLOAD: usize = 8 * 1024 * 1024;
+
+async fn handle_upload_request<R>(
+    read: &mut R,
+    state: &mut ReaderState,
+    events: &mpsc::Sender<Event>,
+) -> Result<(), SessionError>
+where
+    R: AsyncRead + Unpin,
+{
+    fill_buffer(read, &mut state.buffer, 11).await?;
+    let handle = u32::from_be_bytes([
+        state.buffer[3],
+        state.buffer[4],
+        state.buffer[5],
+        state.buffer[6],
+    ]);
+    let path_len = u32::from_be_bytes([
+        state.buffer[7],
+        state.buffer[8],
+        state.buffer[9],
+        state.buffer[10],
+    ]) as usize;
+    state.buffer.advance(11);
+    if path_len > MAX_TRANSFER_PAYLOAD {
+        return Err(SessionError::Protocol("file transfer path too long"));
+    }
+    fill_buffer(read, &mut state.buffer, path_len).await?;
+    let path = std::str::from_utf8(&state.buffer[..path_len])
+        .map_err(|_| SessionError::Protocol("invalid upload path"))?
+        .to_string();
+    state.buffer.advance(path_len);
+    events
+        .send(Event::UploadRequest { handle, path })
+        .await
+        .map_err(|_| SessionError::Closed)
+}
+
+async fn handle_drag_info<R>(
+    read: &mut R,
+    state: &mut ReaderState,
+    events: &mpsc::Sender<Event>,
+) -> Result<(), SessionError>
+where
+    R: AsyncRead + Unpin,
+{
+    fill_buffer(read, &mut state.buffer, 15).await?;
+    let chunk_len = u32::from_be_bytes([
+        state.buffer[11],
+        state.buffer[12],
+        state.buffer[13],
+        state.buffer[14],
+    ]) as usize;
+    if chunk_len > MAX_TRANSFER_PAYLOAD {
+        return Err(SessionError::Protocol("drag info payload too large"));
+    }
+    let mut message = Vec::with_capacity(16 + chunk_len);
+    message.push(apple_file_transfer::MSG_DRAG_INFO);
+    message.extend_from_slice(&state.buffer[..15]);
+    state.buffer.advance(15);
+    fill_buffer(read, &mut state.buffer, chunk_len).await?;
+    message.extend_from_slice(&state.buffer[..chunk_len]);
+    state.buffer.advance(chunk_len);
+    let (info, _) = apple_file_transfer::parse_drag_info(&message)
+        .map_err(|_| SessionError::Protocol("invalid drag info"))?;
+    events
+        .send(Event::DragInfo {
+            handle: info.handle,
+            pasteboard: info.pasteboard,
+        })
+        .await
+        .map_err(|_| SessionError::Closed)
+}
+
+async fn handle_file_transfer<R>(
+    read: &mut R,
+    state: &mut ReaderState,
+    events: &mpsc::Sender<Event>,
+) -> Result<(), SessionError>
+where
+    R: AsyncRead + Unpin,
+{
+    fill_buffer(read, &mut state.buffer, 13).await?;
+    let length = u32::from_be_bytes([
+        state.buffer[1],
+        state.buffer[2],
+        state.buffer[3],
+        state.buffer[4],
+    ]) as usize;
+    if length < 8 {
+        return Err(SessionError::Protocol("invalid file transfer length"));
+    }
+    let payload_len = length - 8;
+    if payload_len > MAX_TRANSFER_PAYLOAD {
+        return Err(SessionError::Protocol("file transfer payload too large"));
+    }
+    let mut message = Vec::with_capacity(14 + payload_len);
+    message.push(apple_file_transfer::MSG_FILE_TRANSFER);
+    message.extend_from_slice(&state.buffer[..13]);
+    state.buffer.advance(13);
+    fill_buffer(read, &mut state.buffer, payload_len).await?;
+    message.extend_from_slice(&state.buffer[..payload_len]);
+    state.buffer.advance(payload_len);
+    let (container, _) = apple_file_transfer::Container::parse(&message)
+        .map_err(|_| SessionError::Protocol("invalid file transfer message"))?;
+    events
+        .send(Event::FileTransfer {
+            subtype: container.subtype,
+            handle: container.handle,
+            payload: container.payload,
+        })
+        .await
+        .map_err(|_| SessionError::Closed)
 }
 
 async fn handle_framebuffer_update<R>(

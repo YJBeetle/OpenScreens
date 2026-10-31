@@ -1,6 +1,7 @@
 use std::time::Duration;
 
 use rfb_codec::Rect;
+use rfb_engine::apple_file_transfer as ft;
 use rfb_engine::session::{DisplayScreen, Event, Session, SessionConfig};
 use tokio::io::{AsyncReadExt, AsyncWriteExt, DuplexStream, duplex};
 use tokio::time::timeout;
@@ -499,4 +500,144 @@ async fn session_round_trip() {
     );
 
     server_task.await.unwrap();
+}
+
+#[tokio::test]
+async fn apple_file_transfer_events() {
+    let (client, mut server) = duplex(64 * 1024);
+    let task = tokio::spawn(async move {
+        Session::connect_stream(client, SessionConfig::new("mock", 5900))
+            .await
+            .unwrap()
+    });
+    perform_handshake(&mut server).await;
+    let _ = read_setup(&mut server).await;
+    let session = task.await.unwrap();
+    let connected = timeout(Duration::from_secs(1), session.next_event())
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(matches!(connected, Event::Connected { .. }));
+
+    let path = "/Users/example/Desktop";
+    let mut request = vec![0x1e, 0, 0, 0];
+    request.extend_from_slice(&0x1242_fe7eu32.to_be_bytes());
+    request.extend_from_slice(&(path.len() as u32).to_be_bytes());
+    request.extend_from_slice(path.as_bytes());
+    server.write_all(&request).await.unwrap();
+
+    let urls = ["file:///Users/example/Desktop/a.txt"];
+    server
+        .write_all(&ft::drag_in_message(0x1242_fe7e, &urls))
+        .await
+        .unwrap();
+
+    let mut payload = Vec::new();
+    payload.extend_from_slice(&5u32.to_be_bytes());
+    payload.extend_from_slice(b"a.txt");
+    let container = ft::Container {
+        subtype: ft::SUBTYPE_PROGRESS,
+        handle: 3,
+        payload: payload.clone(),
+    };
+    server.write_all(&container.encode()).await.unwrap();
+
+    let event = timeout(Duration::from_secs(1), session.next_event())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        event,
+        Event::UploadRequest {
+            handle: 0x1242_fe7e,
+            path: path.to_string()
+        }
+    );
+    let event = timeout(Duration::from_secs(1), session.next_event())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        event,
+        Event::DragInfo {
+            handle: 0x1242_fe7e,
+            pasteboard: ft::pasteboard_file_urls(&urls)
+        }
+    );
+    let event = timeout(Duration::from_secs(1), session.next_event())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        event,
+        Event::FileTransfer {
+            subtype: ft::SUBTYPE_PROGRESS,
+            handle: 3,
+            payload
+        }
+    );
+}
+
+#[tokio::test]
+async fn client_sends_file_transfer_messages() {
+    let (client, mut server) = duplex(64 * 1024);
+    let task = tokio::spawn(async move {
+        Session::connect_stream(client, SessionConfig::new("mock", 5900))
+            .await
+            .unwrap()
+    });
+    perform_handshake(&mut server).await;
+    let _ = read_setup(&mut server).await;
+    let session = task.await.unwrap();
+
+    assert_eq!(session.next_transfer_handle(), 1);
+    assert_eq!(session.next_transfer_handle(), 2);
+
+    let url = "file:///tmp/a.txt";
+    session
+        .announce_upload(1, &[url.to_string()])
+        .await
+        .unwrap();
+    session
+        .upload_destination(1, "/Users/example/Desktop")
+        .await
+        .unwrap();
+    session.upload_summary(1, 1600, 1, 0).await.unwrap();
+    let entry = ft::Entry {
+        kind: ft::EntryKind::File,
+        name: "a.txt",
+        data_size: 1600,
+        resource_size: 0,
+        mode: 0o100_644,
+        nesting: 0,
+        created: ft::timestamp_1904(1_782_000_000),
+        accessed: ft::timestamp_1904(1_782_000_000),
+        changed: ft::timestamp_1904(1_782_000_000),
+        modified: ft::timestamp_1904(1_782_000_000),
+        finder_info: [0; 32],
+        link_target: None,
+    };
+    session.upload_entry(1, &entry).await.unwrap();
+    session.upload_data(1, &[7u8; 1000]).await.unwrap();
+    session.upload_complete(1).await.unwrap();
+    session.cancel_transfer(2).await.unwrap();
+    session.start_drag_out(3).await.unwrap();
+    session.request_download(4, "/tmp/b.txt").await.unwrap();
+
+    let expected = [
+        ft::drag_in_message(1, &[url]),
+        ft::upload_destination(1, "/Users/example/Desktop").encode(),
+        ft::upload_summary(1, 1600, 1, 0).encode(),
+        ft::upload_entry(1, &entry).unwrap().encode(),
+        ft::upload_data(1, &[7u8; 1000]).unwrap().encode(),
+        ft::upload_complete(1).encode(),
+        ft::transfer_cancel(2).encode(),
+        ft::drag_out_start(3),
+        ft::download_request(4, "/tmp/b.txt").encode(),
+    ];
+    for message in expected {
+        let mut actual = vec![0u8; message.len()];
+        server.read_exact(&mut actual).await.unwrap();
+        assert_eq!(actual, message);
+    }
 }

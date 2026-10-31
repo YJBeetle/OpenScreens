@@ -6,6 +6,7 @@
 use std::sync::Arc;
 
 use rfb_codec::Rect as EngineRect;
+use rfb_engine::apple_file_transfer as ft;
 use rfb_engine::session::{
     Event as EngineEvent, Session, SessionConfig as EngineConfig, SshAuthSettings as EngineSshAuth,
     SshSettings as EngineSshSettings,
@@ -144,6 +145,19 @@ pub enum SessionEvent {
         x: u16,
         y: u16,
     },
+    UploadRequest {
+        handle: u32,
+        path: String,
+    },
+    DragInfo {
+        handle: u32,
+        pasteboard: Vec<u8>,
+    },
+    FileTransfer {
+        subtype: u16,
+        handle: u32,
+        payload: Vec<u8>,
+    },
     Disconnected {
         reason: String,
     },
@@ -179,8 +193,78 @@ impl From<EngineEvent> for SessionEvent {
                 pixels: shape.pixels,
             },
             EngineEvent::PointerPosition { x, y } => Self::PointerPosition { x, y },
+            EngineEvent::UploadRequest { handle, path } => Self::UploadRequest { handle, path },
+            EngineEvent::DragInfo { handle, pasteboard } => Self::DragInfo { handle, pasteboard },
+            EngineEvent::FileTransfer {
+                subtype,
+                handle,
+                payload,
+            } => Self::FileTransfer {
+                subtype,
+                handle,
+                payload,
+            },
             EngineEvent::Disconnected { reason } => Self::Disconnected { reason },
         }
+    }
+}
+
+#[derive(Debug, Clone, Copy, uniffi::Enum)]
+pub enum TransferEntryKind {
+    File,
+    Directory,
+    Symlink,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct TransferEntry {
+    pub kind: TransferEntryKind,
+    pub name: String,
+    pub data_size: u64,
+    pub resource_size: u64,
+    pub mode: u16,
+    pub nesting: u16,
+    pub created: u32,
+    pub accessed: u32,
+    pub changed: u32,
+    pub modified: u32,
+    pub finder_info: Vec<u8>,
+    pub link_target: Option<String>,
+}
+
+#[derive(Debug, Clone, uniffi::Enum)]
+pub enum TransferProgress {
+    Ratio { value: f64 },
+    Name { name: String },
+}
+
+impl TransferEntry {
+    fn to_engine(&self) -> Result<ft::Entry<'_>, SessionFailure> {
+        if self.finder_info.len() != 32 {
+            return Err(SessionFailure::Session {
+                reason: "finder_info must be 32 bytes".to_string(),
+            });
+        }
+        let mut finder_info = [0u8; 32];
+        finder_info.copy_from_slice(&self.finder_info);
+        Ok(ft::Entry {
+            kind: match self.kind {
+                TransferEntryKind::File => ft::EntryKind::File,
+                TransferEntryKind::Directory => ft::EntryKind::Directory,
+                TransferEntryKind::Symlink => ft::EntryKind::Symlink,
+            },
+            name: &self.name,
+            data_size: self.data_size,
+            resource_size: self.resource_size,
+            mode: self.mode,
+            nesting: self.nesting,
+            created: self.created,
+            accessed: self.accessed,
+            changed: self.changed,
+            modified: self.modified,
+            finder_info,
+            link_target: self.link_target.as_deref(),
+        })
     }
 }
 
@@ -242,6 +326,94 @@ impl RemoteSession {
         self.session.send_clipboard(&text).await.map_err(to_failure)
     }
 
+    pub fn next_transfer_handle(&self) -> u32 {
+        self.session.next_transfer_handle()
+    }
+
+    /// Announces a drag-in with local file URLs and returns once the message is
+    /// queued. The server replies with a `SessionEvent::UploadRequest`.
+    pub async fn announce_upload(
+        &self,
+        handle: u32,
+        file_urls: Vec<String>,
+    ) -> Result<(), SessionFailure> {
+        self.session
+            .announce_upload(handle, &file_urls)
+            .await
+            .map_err(to_failure)
+    }
+
+    pub async fn upload_destination(
+        &self,
+        handle: u32,
+        folder: String,
+    ) -> Result<(), SessionFailure> {
+        self.session
+            .upload_destination(handle, &folder)
+            .await
+            .map_err(to_failure)
+    }
+
+    pub async fn upload_summary(
+        &self,
+        handle: u32,
+        total_bytes: u64,
+        files: u32,
+        directories: u32,
+    ) -> Result<(), SessionFailure> {
+        self.session
+            .upload_summary(handle, total_bytes, files, directories)
+            .await
+            .map_err(to_failure)
+    }
+
+    pub async fn upload_entry(
+        &self,
+        handle: u32,
+        entry: TransferEntry,
+    ) -> Result<(), SessionFailure> {
+        let entry = entry.to_engine()?;
+        self.session
+            .upload_entry(handle, &entry)
+            .await
+            .map_err(to_failure)
+    }
+
+    pub async fn upload_data(&self, handle: u32, chunk: Vec<u8>) -> Result<(), SessionFailure> {
+        self.session
+            .upload_data(handle, &chunk)
+            .await
+            .map_err(to_failure)
+    }
+
+    pub async fn upload_complete(&self, handle: u32) -> Result<(), SessionFailure> {
+        self.session
+            .upload_complete(handle)
+            .await
+            .map_err(to_failure)
+    }
+
+    pub async fn cancel_transfer(&self, handle: u32) -> Result<(), SessionFailure> {
+        self.session
+            .cancel_transfer(handle)
+            .await
+            .map_err(to_failure)
+    }
+
+    pub async fn start_drag_out(&self, handle: u32) -> Result<(), SessionFailure> {
+        self.session
+            .start_drag_out(handle)
+            .await
+            .map_err(to_failure)
+    }
+
+    pub async fn request_download(&self, handle: u32, path: String) -> Result<(), SessionFailure> {
+        self.session
+            .request_download(handle, &path)
+            .await
+            .map_err(to_failure)
+    }
+
     pub async fn request_refresh(&self) -> Result<(), SessionFailure> {
         self.session.request_refresh().await.map_err(to_failure)
     }
@@ -273,6 +445,29 @@ impl RemoteSession {
     pub fn copy_region_scaled(&self, rect: Rect, scale: u16) -> Option<Vec<u8>> {
         self.session.copy_region_scaled(rect.into(), scale)
     }
+}
+
+#[uniffi::export]
+pub fn parse_transfer_progress(payload: Vec<u8>) -> Option<TransferProgress> {
+    match ft::parse_progress(&payload).ok()? {
+        ft::Progress::Ratio(value) => Some(TransferProgress::Ratio { value }),
+        ft::Progress::Name(name) => Some(TransferProgress::Name { name }),
+    }
+}
+
+#[uniffi::export]
+pub fn parse_transfer_ack(payload: Vec<u8>) -> Option<String> {
+    ft::parse_ack(&payload).ok()
+}
+
+#[uniffi::export]
+pub fn parse_pasteboard_file_urls(pasteboard: Vec<u8>) -> Vec<String> {
+    ft::parse_pasteboard_file_urls(&pasteboard).unwrap_or_default()
+}
+
+#[uniffi::export]
+pub fn transfer_timestamp_1904(unix_seconds: u64) -> u32 {
+    ft::timestamp_1904(unix_seconds)
 }
 
 fn to_failure(error: rfb_engine::session::SessionError) -> SessionFailure {

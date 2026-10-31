@@ -1,7 +1,10 @@
 package com.openscreens.app.ui.session
 
+import android.net.Uri
 import android.os.SystemClock
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -47,6 +50,7 @@ import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.ContentPaste
 import androidx.compose.material.icons.outlined.Fullscreen
 import androidx.compose.material.icons.outlined.FullscreenExit
+import androidx.compose.material.icons.outlined.UploadFile
 import androidx.compose.material.icons.outlined.Keyboard
 import androidx.compose.material.icons.outlined.KeyboardHide
 import androidx.compose.material.icons.outlined.Monitor
@@ -126,6 +130,7 @@ import com.openscreens.app.data.QualityPreset
 import com.openscreens.app.data.SshKey
 import com.openscreens.app.session.RemoteSession
 import com.openscreens.app.session.SessionEvent
+import com.openscreens.app.session.uploadPickedFiles
 import com.openscreens.app.session.SessionProvider
 import com.openscreens.app.ui.common.label
 import com.openscreens.app.ui.theme.SystemBarIconAppearance
@@ -182,6 +187,29 @@ fun SessionScreen(
     var cursor by remember { mutableStateOf<SessionEvent.Cursor?>(null) }
     var cursorPosition by remember { mutableStateOf<IntOffset?>(null) }
     var viewport by remember { mutableStateOf<SessionEvent.Viewport?>(null) }
+    var pendingUpload by remember { mutableStateOf<PendingUpload?>(null) }
+    var transferLabel by remember { mutableStateOf<String?>(null) }
+
+    val sendFilePicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenMultipleDocuments(),
+    ) { uris ->
+        if (uris.isEmpty()) return@rememberLauncherForActivityResult
+        scope.launch {
+            val handle = session.nextTransferHandle()
+            pendingUpload = PendingUpload(handle, uris)
+            runCatching {
+                session.announceUpload(
+                    handle,
+                    uris.indices.map { index -> "file:///android/$index" },
+                )
+            }.onFailure { error ->
+                pendingUpload = null
+                snackbarHostState.showSnackbar(
+                    context.getString(R.string.session_upload_failed, error.message ?: ""),
+                )
+            }
+        }
+    }
 
     val focusRequester = remember { FocusRequester() }
     val pointerMemory = remember(session) { PointerMemory() }
@@ -270,10 +298,46 @@ fun SessionScreen(
                     frame = event
                 }
                 is SessionEvent.Cursor -> cursor = event
-                is SessionEvent.UploadRequest,
+                is SessionEvent.UploadRequest -> {
+                    val pending = pendingUpload?.takeIf { it.handle == event.handle }
+                    pendingUpload = null
+                    if (pending != null) {
+                        scope.launch {
+                            transferLabel = context.getString(R.string.session_upload_preparing)
+                            try {
+                                uploadPickedFiles(
+                                    session = session,
+                                    handle = event.handle,
+                                    destination = event.path,
+                                    uris = pending.uris,
+                                    resolver = context.contentResolver,
+                                    cacheDir = context.cacheDir,
+                                ) { name -> transferLabel = if (name.isEmpty()) null else name }
+                                snackbarHostState.showSnackbar(
+                                    context.getString(
+                                        R.string.session_upload_done,
+                                        pending.uris.size,
+                                    ),
+                                )
+                            } catch (error: Exception) {
+                                runCatching { session.cancelTransfer(event.handle) }
+                                snackbarHostState.showSnackbar(
+                                    context.getString(
+                                        R.string.session_upload_failed,
+                                        error.message ?: error.javaClass.simpleName,
+                                    ),
+                                )
+                            } finally {
+                                transferLabel = null
+                            }
+                        }
+                    }
+                }
+                is SessionEvent.TransferProgress -> {
+                    event.name?.let { transferLabel = it }
+                }
+                is SessionEvent.TransferComplete -> transferLabel = null
                 is SessionEvent.DragInfo,
-                is SessionEvent.TransferProgress,
-                is SessionEvent.TransferComplete,
                 is SessionEvent.FileTransfer,
                 -> Unit
                 SessionEvent.Disconnected -> {
@@ -838,6 +902,24 @@ fun SessionScreen(
             )
         }
 
+        transferLabel?.let { label ->
+            Surface(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .windowInsetsPadding(WindowInsets.safeDrawing)
+                    .padding(top = 72.dp),
+                shape = RoundedCornerShape(14.dp),
+                color = Color.Black.copy(alpha = 0.65f),
+                contentColor = Color.White,
+            ) {
+                Text(
+                    text = label,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+        }
+
         if (keyboardActive) {
             SessionKeyboardBar(
                 modifiers = modifiers,
@@ -858,6 +940,7 @@ fun SessionScreen(
                 isFullscreen = isFullscreen,
                 onKeyboard = { keyboardActive = true },
                 onClipboard = { showClipboardDialog = true },
+                onUpload = { sendFilePicker.launch(arrayOf("*/*")) },
                 onToggleFullscreen = { isFullscreen = !isFullscreen },
                 onHideChrome = { chromeVisible = false },
                 modifier = Modifier
@@ -1123,6 +1206,7 @@ private fun SessionToolbar(
     isFullscreen: Boolean,
     onKeyboard: () -> Unit,
     onClipboard: () -> Unit,
+    onUpload: () -> Unit,
     onToggleFullscreen: () -> Unit,
     onHideChrome: () -> Unit,
     modifier: Modifier = Modifier,
@@ -1152,6 +1236,11 @@ private fun SessionToolbar(
                 icon = Icons.Outlined.ContentPaste,
                 label = stringResource(R.string.session_clipboard),
                 onClick = onClipboard,
+            )
+            ToolbarButton(
+                icon = Icons.Outlined.UploadFile,
+                label = stringResource(R.string.session_send_file),
+                onClick = onUpload,
             )
             Box {
                 ToolbarButton(
@@ -1515,6 +1604,8 @@ private const val MODIFIER_META = 1 shl 3
 
 private const val KEYBOARD_SENTINEL_CHAR = '\u200B'
 private const val KEYBOARD_SENTINEL = "\u200B"
+
+private data class PendingUpload(val handle: Int, val uris: List<Uri>)
 
 private data class ModifierKey(val flag: Int, val keysym: Int, val labelRes: Int)
 

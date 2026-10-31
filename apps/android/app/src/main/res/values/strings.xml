@@ -78,6 +78,10 @@
     <string name="session_clipboard_hint">Text to send to the remote clipboard</string>
     <string name="session_clipboard_action">Send text</string>
     <string name="session_quality">Quality</string>
+    <string name="session_send_file">Send files</string>
+    <string name="session_upload_preparing">Preparing transfer…</string>
+    <string name="session_upload_done">Sent %1$d file(s)</string>
+    <string name="session_upload_failed">Transfer failed: %1$s</string>
     <string name="session_enter_fullscreen">Enter fullscreen</string>
     <string name="session_exit_fullscreen">Exit fullscreen</string>
     <string name="session_action_prefix">Input: %1$s</string>

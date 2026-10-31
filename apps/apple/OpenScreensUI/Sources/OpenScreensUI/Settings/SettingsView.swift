@@ -17,6 +17,28 @@ public struct SettingsView: View {
         #endif
     }
 
+    private var orderedToolbarItems: [SessionToolbarItem] {
+        let enabled = settings.settings.toolbarItems.filter { visibleToolbarItems.contains($0) }
+        let hidden = visibleToolbarItems.filter { !enabled.contains($0) }
+        return enabled + hidden
+    }
+
+    private func moveToolbarItem(_ item: SessionToolbarItem, by offset: Int) {
+        var items = settings.settings.toolbarItems
+        guard let index = items.firstIndex(of: item),
+              items.indices.contains(index + offset) else { return }
+        items.swapAt(index, index + offset)
+        settings.settings.toolbarItems = items
+    }
+
+    private func isFirstToolbarItem(_ item: SessionToolbarItem) -> Bool {
+        settings.settings.toolbarItems.first == item
+    }
+
+    private func isLastToolbarItem(_ item: SessionToolbarItem) -> Bool {
+        settings.settings.toolbarItems.last == item
+    }
+
     private func toolbarBinding(_ item: SessionToolbarItem) -> Binding<Bool> {
         Binding(
             get: { settings.settings.toolbarItems.contains(item) },
@@ -74,9 +96,29 @@ public struct SettingsView: View {
             }
 
             Section {
-                ForEach(visibleToolbarItems) { item in
-                    Toggle(isOn: toolbarBinding(item)) {
-                        Label(item.title, systemImage: item.systemImage)
+                ForEach(orderedToolbarItems) { item in
+                    HStack(spacing: 6) {
+                        Toggle(isOn: toolbarBinding(item)) {
+                            Label(item.title, systemImage: item.systemImage)
+                        }
+
+                        if settings.settings.toolbarItems.contains(item) {
+                            Button {
+                                moveToolbarItem(item, by: -1)
+                            } label: {
+                                Image(systemName: "chevron.up")
+                            }
+                            .buttonStyle(.borderless)
+                            .disabled(isFirstToolbarItem(item))
+
+                            Button {
+                                moveToolbarItem(item, by: 1)
+                            } label: {
+                                Image(systemName: "chevron.down")
+                            }
+                            .buttonStyle(.borderless)
+                            .disabled(isLastToolbarItem(item))
+                        }
                     }
                 }
             } header: {

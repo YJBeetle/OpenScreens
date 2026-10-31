@@ -12,7 +12,6 @@ public struct SessionScreen: View {
     @Environment(\.scenePhase) private var scenePhase
 
     private let model: SessionViewModel
-    private let showsCloseButton: Bool
     private let onClose: () -> Void
 
     @State private var confirmingDisconnect = false
@@ -27,11 +26,9 @@ public struct SessionScreen: View {
 
     public init(
         model: SessionViewModel,
-        showsCloseButton: Bool = true,
         onClose: @escaping () -> Void = {}
     ) {
         self.model = model
-        self.showsCloseButton = showsCloseButton
         self.onClose = onClose
     }
 
@@ -271,6 +268,7 @@ public struct SessionScreen: View {
         if model.showsChrome {
             VStack(spacing: 0) {
                 HStack(alignment: .top) {
+                    Spacer(minLength: 0)
                     statusHeader
                     Spacer(minLength: 0)
                 }
@@ -337,20 +335,6 @@ public struct SessionScreen: View {
                     .accessibilityLabel("Observe mode is on")
             }
 
-            if showsCloseButton {
-                Button {
-                    requestClose()
-                } label: {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(.secondary)
-                        .frame(width: 28, height: 28)
-                        .background(.quaternary.opacity(0.6), in: Circle())
-                        .contentShape(Circle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Close session")
-            }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)

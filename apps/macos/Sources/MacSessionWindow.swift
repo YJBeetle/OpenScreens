@@ -13,7 +13,7 @@ struct MacSessionWindow: View {
     var body: some View {
         Group {
             if let model {
-                SessionScreen(model: model, showsCloseButton: false) {
+                SessionScreen(model: model) {
                     dismissWindow()
                 }
                 .navigationTitle(model.profile.name)

@@ -1,5 +1,9 @@
 package com.openscreens.app.ui.editor
 
+import android.content.Context
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -27,11 +31,14 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -40,13 +47,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
@@ -60,6 +69,9 @@ import com.openscreens.app.data.SshAuthMode
 import com.openscreens.app.data.SshCredentials
 import com.openscreens.app.data.SshKey
 import com.openscreens.app.ui.theme.ThemedSystemBarIcons
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -105,8 +117,37 @@ fun ConnectionEditorScreen(
     var sshKeyId by rememberSaveable(editorKey) {
         mutableStateOf(connection?.ssh?.keyId.orEmpty())
     }
+    var wireGuardConfig by rememberSaveable(editorKey) {
+        mutableStateOf<String?>(connection?.wireGuardConfig)
+    }
+    var wireGuardFileName by rememberSaveable(editorKey) {
+        mutableStateOf<String?>(null)
+    }
+    var wireGuardImportFailed by remember { mutableStateOf(false) }
     var keyMenuExpanded by remember { mutableStateOf(false) }
     var validate by rememberSaveable { mutableStateOf(false) }
+
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
+    val wireGuardPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            val text = withContext(Dispatchers.IO) { readWireGuardConfig(context, uri) }
+            if (text == null) {
+                wireGuardImportFailed = true
+            } else {
+                wireGuardConfig = text
+                wireGuardFileName = uri.lastPathSegment
+                    ?.substringAfterLast('/')
+                    ?.take(64)
+                    ?.takeIf { it.isNotBlank() }
+                wireGuardImportFailed = false
+            }
+        }
+    }
 
     val nameError = if (name.isBlank()) R.string.editor_error_required else null
     val hostError = when {
@@ -137,11 +178,18 @@ fun ConnectionEditorScreen(
     } else {
         null
     }
+    val wireGuardConflict = sshEnabled && !wireGuardConfig.isNullOrBlank()
 
     val onSaveClick: () -> Unit = {
         validate = true
+        if (wireGuardConflict) {
+            scope.launch {
+                snackbarHostState.showSnackbar(context.getString(R.string.editor_wireguard_conflict))
+            }
+        }
         if (nameError == null && hostError == null && portError == null &&
-            sshUsernameError == null && sshPortError == null && sshKeyError == null
+            sshUsernameError == null && sshPortError == null && sshKeyError == null &&
+            !wireGuardConflict
         ) {
             val ssh = if (sshEnabled) {
                 SshCredentials(
@@ -163,6 +211,7 @@ fun ConnectionEditorScreen(
                 username = username.trim(),
                 vncPassword = vncPassword,
                 ssh = ssh,
+                wireGuardConfig = wireGuardConfig?.takeIf { it.isNotBlank() },
             )
             onSave(draft)
         }
@@ -197,6 +246,7 @@ fun ConnectionEditorScreen(
                 },
             )
         },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { innerPadding ->
         Box(
             modifier = Modifier
@@ -456,6 +506,88 @@ fun ConnectionEditorScreen(
                     }
                 }
 
+                HorizontalDivider(Modifier.padding(vertical = 4.dp))
+
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = stringResource(R.string.editor_wireguard_title),
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    Text(
+                        text = stringResource(R.string.editor_wireguard_description),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    val selectedWireGuard = wireGuardConfig
+                    if (selectedWireGuard.isNullOrBlank()) {
+                        OutlinedButton(
+                            onClick = {
+                                wireGuardImportFailed = false
+                                wireGuardPicker.launch(arrayOf("*/*"))
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text(stringResource(R.string.editor_wireguard_import))
+                        }
+                    } else {
+                        val preview = wireGuardPreview(selectedWireGuard)
+                        OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+                            Row(
+                                modifier = Modifier.padding(start = 16.dp, top = 8.dp, end = 8.dp, bottom = 8.dp),
+                                verticalAlignment = Alignment.Top,
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .padding(top = 4.dp),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                                ) {
+                                    Text(
+                                        text = wireGuardFileName
+                                            ?: stringResource(R.string.editor_wireguard_loaded),
+                                        style = MaterialTheme.typography.titleSmall,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                    if (preview.isNotBlank()) {
+                                        Text(
+                                            text = preview,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            fontFamily = FontFamily.Monospace,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            maxLines = 4,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                    }
+                                }
+                                TextButton(
+                                    onClick = {
+                                        wireGuardConfig = null
+                                        wireGuardFileName = null
+                                        wireGuardImportFailed = false
+                                    },
+                                ) {
+                                    Text(stringResource(R.string.editor_wireguard_remove))
+                                }
+                            }
+                        }
+                    }
+                    if (wireGuardImportFailed) {
+                        Text(
+                            text = stringResource(R.string.editor_wireguard_import_failed),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                    if (wireGuardConflict) {
+                        Text(
+                            text = stringResource(R.string.editor_wireguard_conflict),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                }
+
                 Spacer(Modifier.height(24.dp))
             }
         }
@@ -498,4 +630,33 @@ private fun PasswordField(
         },
         supportingText = { Text(supportingText) },
     )
+}
+
+private const val WIREGUARD_CONFIG_MAX_BYTES = 64 * 1024
+
+/** Reads a picked wg-quick file; null when it is unreadable, empty, or over 64 KiB. */
+private fun readWireGuardConfig(context: Context, uri: Uri): String? = runCatching {
+    context.contentResolver.openInputStream(uri)?.use { stream ->
+        val bytes = ByteArray(WIREGUARD_CONFIG_MAX_BYTES + 1)
+        var total = 0
+        while (total < bytes.size) {
+            val count = stream.read(bytes, total, bytes.size - total)
+            if (count < 0) break
+            total += count
+        }
+        check(total <= WIREGUARD_CONFIG_MAX_BYTES) { "WireGuard config exceeds 64 KiB" }
+        String(bytes, 0, total, Charsets.UTF_8)
+    }
+}.getOrNull()?.takeIf { it.isNotBlank() }
+
+/** A few non-secret lines so the selected config can be recognised later. */
+private fun wireGuardPreview(config: String): String {
+    val secretKeys = setOf("privatekey", "presharedkey")
+    return config.lineSequence()
+        .map(String::trim)
+        .filter { it.isNotEmpty() && !it.startsWith("#") && !it.startsWith(";") }
+        .filterNot { secretKeys.contains(it.substringBefore('=').trim().lowercase()) }
+        .take(4)
+        .joinToString("\n")
+        .take(240)
 }

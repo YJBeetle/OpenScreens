@@ -86,6 +86,7 @@ class ConnectionStore(
                 .put("port", connection.port)
                 .put("username", connection.username)
                 .put("vncPassword", connection.vncPassword)
+            connection.wireGuardConfig?.let { item.put("wireGuardConfig", it) }
             connection.ssh?.let { ssh ->
                 item.put(
                     "ssh",
@@ -134,6 +135,7 @@ class ConnectionStore(
                         port = item.optInt("port", Connection.DEFAULT_VNC_PORT),
                         username = item.optString("username"),
                         vncPassword = item.optString("vncPassword"),
+                        wireGuardConfig = item.optString("wireGuardConfig").takeIf { it.isNotBlank() },
                         ssh = ssh,
                         lastConnectedAt = if (item.has("lastConnectedAt") && !item.isNull("lastConnectedAt")) {
                             item.getLong("lastConnectedAt")

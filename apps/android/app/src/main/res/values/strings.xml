@@ -40,6 +40,13 @@
     <string name="editor_ssh_port">SSH port</string>
     <string name="editor_ssh_fingerprint">Host key SHA-256 (optional)</string>
     <string name="editor_ssh_fingerprint_help">Pins the SSH server key. Leave empty to accept the first key.</string>
+    <string name="editor_wireguard_title">WireGuard</string>
+    <string name="editor_wireguard_description">Route VNC traffic through a userspace WireGuard tunnel. Import a wg-quick .conf file. SSH and WireGuard can’t be used together.</string>
+    <string name="editor_wireguard_import">Import .conf file</string>
+    <string name="editor_wireguard_loaded">Imported WireGuard config</string>
+    <string name="editor_wireguard_remove">Remove</string>
+    <string name="editor_wireguard_import_failed">Couldn’t read the file. Choose a UTF-8 .conf file under 64 KiB.</string>
+    <string name="editor_wireguard_conflict">Use either SSH or WireGuard, not both.</string>
     <string name="editor_error_required">This field is required.</string>
     <string name="editor_error_host">Use a hostname or IP address without spaces.</string>
     <string name="editor_error_port">Enter a port from 1 to 65535.</string>

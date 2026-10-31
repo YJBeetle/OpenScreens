@@ -40,6 +40,13 @@
     <string name="editor_ssh_port">SSH 端口</string>
     <string name="editor_ssh_fingerprint">主机密钥 SHA-256（可选）</string>
     <string name="editor_ssh_fingerprint_help">用于固定 SSH 服务器密钥；留空则接受首次密钥。</string>
+    <string name="editor_wireguard_title">WireGuard</string>
+    <string name="editor_wireguard_description">通过用户态 WireGuard 隧道转发 VNC 流量。导入 wg-quick .conf 文件。SSH 与 WireGuard 只能二选一。</string>
+    <string name="editor_wireguard_import">导入 .conf 文件</string>
+    <string name="editor_wireguard_loaded">已导入的 WireGuard 配置</string>
+    <string name="editor_wireguard_remove">移除</string>
+    <string name="editor_wireguard_import_failed">无法读取文件，请选择不超过 64 KiB 的 UTF-8 .conf 文件。</string>
+    <string name="editor_wireguard_conflict">SSH 与 WireGuard 只能二选一。</string>
     <string name="editor_error_required">此字段为必填项。</string>
     <string name="editor_error_host">请输入不含空格的主机名或 IP 地址。</string>
     <string name="editor_error_port">请输入 1 到 65535 之间的端口。</string>

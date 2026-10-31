@@ -10,6 +10,8 @@ data class Connection(
     val username: String = "",
     val vncPassword: String = "",
     val ssh: SshCredentials? = null,
+    /** Full wg-quick configuration text; routes the session through userspace WireGuard. */
+    val wireGuardConfig: String? = null,
     val lastConnectedAt: Long? = null,
 ) {
     val address: String

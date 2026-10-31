@@ -139,7 +139,7 @@ class UniFfiRemoteSession(
                 QualityPreset.High -> 9u
             },
             frameIntervalMs = 16u,
-            wireguardConfig = null,
+            wireguardConfig = connection.wireGuardConfig,
             wireguardDnsFallback = true,
             sshHost = ssh?.let { it.host.ifBlank { connection.host } },
             sshPort = ssh?.let { it.port.toUShort() },
@@ -617,30 +617,54 @@ class UniFfiRemoteSession(
             if (right <= left || bottom <= top) continue
 
             val destLeft = left / scale - viewportX / scale
-            val destTop = top / scale - viewportY / scale
             val destWidth = (right - 1) / scale - left / scale + 1
-            val destHeight = (bottom - 1) / scale - top / scale + 1
-            val count = destWidth * destHeight
-            if (count <= 0) continue
+            if (destWidth <= 0) continue
 
-            val pixels = connected.copyRegionScaled(
-                rect = rect(left, top, right - left, bottom - top),
-                scale = scale.toUShort(),
-            ) ?: continue
-            if (pixels.size < count * 4) continue
-
-            val argb = scratchFor(count)
-            var offset = 0
-            for (index in 0 until count) {
-                val blue = pixels[offset].toInt() and 0xFF
-                val green = pixels[offset + 1].toInt() and 0xFF
-                val red = pixels[offset + 2].toInt() and 0xFF
-                val alpha = pixels[offset + 3].toInt() and 0xFF
-                argb[index] = (alpha shl 24) or (red shl 16) or (green shl 8) or blue
-                offset += 4
+            // Convert in horizontal bands: a 6K framebuffer update can be tens
+            // of megabytes, and converting it in one IntArray exceeds the
+            // Android heap (the bitmap itself is downsampled).
+            val rowsPerBand = maxOf(1, MAX_SCRATCH_PIXELS / destWidth)
+            val bandSourceHeight = rowsPerBand * scale
+            var bandTop = top
+            while (bandTop < bottom) {
+                val bandBottom = minOf(bottom, bandTop + bandSourceHeight)
+                val destTop = bandTop / scale - viewportY / scale
+                val destHeight = (bandBottom - 1) / scale - bandTop / scale + 1
+                val count = destWidth * destHeight
+                if (destTop >= 0 && destLeft >= 0 &&
+                    destTop + destHeight <= target.height &&
+                    destLeft + destWidth <= target.width &&
+                    count > 0
+                ) {
+                    val pixels = connected.copyRegionScaled(
+                        rect = rect(left, bandTop, right - left, bandBottom - bandTop),
+                        scale = scale.toUShort(),
+                    )
+                    if (pixels != null && pixels.size >= count * 4) {
+                        val argb = scratchFor(count)
+                        var offset = 0
+                        for (index in 0 until count) {
+                            val blue = pixels[offset].toInt() and 0xFF
+                            val green = pixels[offset + 1].toInt() and 0xFF
+                            val red = pixels[offset + 2].toInt() and 0xFF
+                            val alpha = pixels[offset + 3].toInt() and 0xFF
+                            argb[index] = (alpha shl 24) or (red shl 16) or (green shl 8) or blue
+                            offset += 4
+                        }
+                        target.setPixels(
+                            argb,
+                            0,
+                            destWidth,
+                            destLeft,
+                            destTop,
+                            destWidth,
+                            destHeight,
+                        )
+                        wrote = true
+                    }
+                }
+                bandTop = bandBottom
             }
-            target.setPixels(argb, 0, destWidth, destLeft, destTop, destWidth, destHeight)
-            wrote = true
         }
         if (!wrote) return
 
@@ -716,5 +740,6 @@ class UniFfiRemoteSession(
         const val INITIAL_TARGET_WIDTH = 1080
         const val MAX_VIEWPORT_PIXELS = 6_000_000L
         const val MAX_DISPLAY_SCALE = 16
+        const val MAX_SCRATCH_PIXELS = 1_000_000
     }
 }

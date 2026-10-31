@@ -197,6 +197,97 @@ pub struct DragInfo {
     pub pasteboard: Vec<u8>,
 }
 
+/// One remote item offered by a drag-out (message `0x20`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RemoteFile {
+    /// Original `file://` URL from the remote pasteboard.
+    pub url: String,
+    /// Absolute POSIX path (percent-decoded), usable with `0x22/0x0001`.
+    pub path: String,
+    /// Last path component, used as the local file name.
+    pub name: String,
+}
+
+/// Extracts file URLs from a decompressed drag-out pasteboard archive.
+///
+/// The archive stores one item per pasteboard type; file drags use a
+/// `public.file-url` item whose data block is a `file://` URL. Non-file URLs
+/// (`public.url`, http links) are ignored.
+pub fn remote_files_from_pasteboard(blob: &[u8]) -> Vec<RemoteFile> {
+    let Ok(pasteboard) = crate::apple_input::parse_pasteboard_archive_all(blob) else {
+        return Vec::new();
+    };
+    let mut files = Vec::new();
+    for url in pasteboard.urls {
+        if let Some(file) = remote_file_from_url(&url)
+            && !files.iter().any(|existing: &RemoteFile| existing.path == file.path)
+        {
+            files.push(file);
+        }
+    }
+    files
+}
+
+/// Converts a `file://` URL into a [`RemoteFile`].
+pub fn remote_file_from_url(url: &str) -> Option<RemoteFile> {
+    let rest = url.strip_prefix("file://")?;
+    let path = if rest.starts_with('/') {
+        rest.to_string()
+    } else if let Some(path) = rest.strip_prefix("localhost") {
+        path.strip_prefix('/').map(|path| format!("/{path}"))?
+    } else {
+        // file://host/share -> /share
+        let slash = rest.find('/')?;
+        rest[slash..].to_string()
+    };
+    if path.is_empty() {
+        return None;
+    }
+    let path = percent_decode(&path)?;
+    let name = path
+        .trim_end_matches('/')
+        .rsplit('/')
+        .next()
+        .filter(|name| !name.is_empty())
+        .unwrap_or(&path)
+        .to_string();
+    Some(RemoteFile {
+        url: url.to_string(),
+        path,
+        name,
+    })
+}
+
+fn percent_decode(input: &str) -> Option<String> {
+    let bytes = input.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut index = 0;
+    while index < bytes.len() {
+        if bytes[index] == b'%' {
+            if index + 2 >= bytes.len() {
+                return None;
+            }
+            let high = hex_value(bytes[index + 1])?;
+            let low = hex_value(bytes[index + 2])?;
+            out.push((high << 4) | low);
+            index += 3;
+        } else {
+            out.push(bytes[index]);
+            index += 1;
+        }
+    }
+    String::from_utf8(out).ok()
+}
+
+fn hex_value(byte: u8) -> Option<u8> {
+    match byte {
+        b'0'..=b'9' => Some(byte - b'0'),
+        b'a'..=b'f' => Some(byte - b'a' + 10),
+        b'A'..=b'F' => Some(byte - b'A' + 10),
+        _ => None,
+    }
+}
+
 pub fn timestamp_1904(unix_seconds: u64) -> u32 {
     u32::try_from(unix_seconds.saturating_add(EPOCH_1904_OFFSET)).unwrap_or(u32::MAX)
 }
@@ -954,6 +1045,46 @@ mod tests {
     fn drag_out_start_is_8_bytes() {
         let message = drag_out_start(0xdead_beef);
         assert_eq!(message, vec![0x0e, 0, 0, 0, 0xde, 0xad, 0xbe, 0xef]);
+    }
+
+    #[test]
+    fn converts_file_urls_to_remote_files() {
+        let file = remote_file_from_url("file:///Users/example/Desktop/a%20b%20%E4%B8%96%E7%95%8C.txt")
+            .unwrap();
+        assert_eq!(file.path, "/Users/example/Desktop/a b 世界.txt");
+        assert_eq!(file.name, "a b 世界.txt");
+
+        let localhost = remote_file_from_url("file://localhost/tmp/x").unwrap();
+        assert_eq!(localhost.path, "/tmp/x");
+        assert_eq!(localhost.name, "x");
+
+        let folder = remote_file_from_url("file:///Users/example/Desktop/folder/").unwrap();
+        assert_eq!(folder.path, "/Users/example/Desktop/folder/");
+        assert_eq!(folder.name, "folder");
+
+        assert!(remote_file_from_url("https://example.com/a").is_none());
+        assert!(remote_file_from_url("file:///tmp/bad%zz").is_none());
+    }
+
+    #[test]
+    fn drag_info_yields_multiple_remote_files() {
+        let urls = [
+            "file:///Users/example/Desktop/a.txt",
+            "file:///Users/example/Desktop/b%20c.txt",
+        ];
+        let archive = pasteboard_file_urls(&urls);
+        let files = remote_files_from_pasteboard(&archive);
+        assert_eq!(files.len(), 2);
+        assert_eq!(files[0].path, "/Users/example/Desktop/a.txt");
+        assert_eq!(files[1].name, "b c.txt");
+
+        // The wrapper used by 0x20 (zlib-compressed pasteboard) parses too.
+        let message = drag_in_message(9, &urls);
+        let (info, used) = parse_drag_info(&message).unwrap();
+        assert_eq!(used, message.len());
+        assert_eq!(info.handle, 9);
+        let files = remote_files_from_pasteboard(&info.pasteboard);
+        assert_eq!(files.len(), 2);
     }
 
     #[test]

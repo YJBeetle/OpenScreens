@@ -6,7 +6,7 @@ use std::io;
 use rfb_proto::apple_auth::{MAX_MODULUS_LEN, MIN_MODULUS_LEN, apple_dh_reply};
 use rfb_proto::auth::vnc_auth_response;
 use rfb_proto::security::{SecurityResult, SecurityType};
-use rfb_proto::server_init::{SERVER_INIT_HEADER_LEN, ServerInit, parse_server_init};
+use rfb_proto::server_init::{SERVER_INIT_HEADER_LEN, ServerInit, parse_server_init_ext};
 use rfb_proto::version::{ProtocolVersion, VERSION_LEN};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
@@ -164,7 +164,7 @@ where
 
     let client_init = if apple { 0xc1 } else { u8::from(config.shared) };
     stream.write_all(&[client_init]).await?;
-    let server_init = read_server_init(stream).await?;
+    let server_init = read_server_init(stream, apple).await?;
     Ok(Handshake {
         version,
         server_init,
@@ -288,7 +288,7 @@ where
     ProtocolVersion::parse(&bytes).map_err(|_| HandshakeError::Protocol("invalid protocol version"))
 }
 
-async fn read_server_init<T>(stream: &mut T) -> Result<ServerInit, HandshakeError>
+async fn read_server_init<T>(stream: &mut T, apple: bool) -> Result<ServerInit, HandshakeError>
 where
     T: AsyncRead + Unpin,
 {
@@ -306,7 +306,7 @@ where
         .read_exact(&mut message[SERVER_INIT_HEADER_LEN..])
         .await?;
 
-    parse_server_init(&message)
+    parse_server_init_ext(&message, apple)
         .map(|(init, _)| init)
         .map_err(|_| HandshakeError::Protocol("invalid ServerInit"))
 }

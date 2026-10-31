@@ -54,9 +54,11 @@
 //! URLs carry the UTF-8 URL string in the data block.
 
 use std::fmt;
-use std::io::Read;
+use std::io::{Read, Write};
 
+use flate2::Compression;
 use flate2::read::{DeflateDecoder, ZlibDecoder};
+use flate2::write::ZlibEncoder;
 use rfb_proto::apple_auth::{AES_KEY_LEN, encrypt_apple_input_message};
 
 /// Server-to-client pasteboard message id.
@@ -312,6 +314,54 @@ pub fn parse_server_pasteboard(
     parse_archive(&archive)
 }
 
+/// Builds the pasteboard archive VNCKit sends for a plain-text pasteboard:
+/// one `public.utf8-plain-text` item with that flavor and the same bytes as
+/// its data block (`VncPasteboardData`).
+pub fn client_pasteboard_archive(text: &str) -> Vec<u8> {
+    let key = "public.utf8-plain-text";
+    let mut archive = Vec::with_capacity(64 + text.len() * 2);
+    push_u32(&mut archive, 1);
+    push_string(&mut archive, key);
+    push_u32(&mut archive, 0); // reserved, mirrors VNCKit's encoder
+    push_u32(&mut archive, 1);
+    push_string(&mut archive, key);
+    push_string(&mut archive, text);
+    push_u32(&mut archive, text.len() as u32);
+    archive.extend_from_slice(text.as_bytes());
+    archive
+}
+
+/// Builds a client-to-server pasteboard message (id `0x1F`).
+///
+/// Layout matches `-[VncClient sendPasteboard:preview:]`: a 16-byte header
+/// (`[2]=preview`, `[8..12]=u32 BE uncompressed size`, `[12..16]=u32 BE
+/// compressed size`) followed by a zlib stream. The server only advertises
+/// support through feature bit 32 (`serverCanReceivePasteboard`).
+pub fn client_pasteboard_message(text: &str) -> Vec<u8> {
+    let archive = client_pasteboard_archive(text);
+    let mut encoder = ZlibEncoder::new(Vec::new(), Compression::default());
+    let _ = encoder.write_all(&archive);
+    let compressed = encoder.finish().unwrap_or_default();
+
+    let mut message = Vec::with_capacity(PASTEBOARD_HEADER_LEN + compressed.len());
+    message.resize(PASTEBOARD_HEADER_LEN, 0);
+    message[0] = MSG_SERVER_PASTEBOARD;
+    message[2] = 0; // preview
+    message[8..12].copy_from_slice(&(archive.len() as u32).to_be_bytes());
+    message[12..16].copy_from_slice(&(compressed.len() as u32).to_be_bytes());
+    message.extend_from_slice(&compressed);
+    message
+}
+
+fn push_u32(out: &mut Vec<u8>, value: u32) {
+    out.extend_from_slice(&value.to_be_bytes());
+}
+
+fn push_string(out: &mut Vec<u8>, value: &str) {
+    push_u32(out, value.len() as u32);
+    out.extend_from_slice(value.as_bytes());
+}
+
 fn inflate(payload: &[u8]) -> Result<Vec<u8>, AppleInputError> {
     let mut out = Vec::new();
     if ZlibDecoder::new(payload).read_to_end(&mut out).is_ok() && !out.is_empty() {
@@ -327,8 +377,45 @@ fn inflate(payload: &[u8]) -> Result<Vec<u8>, AppleInputError> {
     Ok(out)
 }
 
+/// Parses an already-decompressed pasteboard archive.
+pub fn parse_pasteboard_archive(archive: &[u8]) -> Result<ApplePasteboard, AppleInputError> {
+    parse_archive(archive)
+}
+
+/// Parses an already-decompressed archive that may contain several
+/// concatenated item groups. VNCKit's drag-in template writes a fresh item
+/// count for every URL, so a multi-file drag-in payload is several archives
+/// back to back; drag-out payloads normally contain one group.
+pub fn parse_pasteboard_archive_all(
+    archive: &[u8],
+) -> Result<ApplePasteboard, AppleInputError> {
+    let mut cursor = Cursor::new(archive);
+    let mut combined = ApplePasteboard::default();
+    while cursor.pos < archive.len() {
+        let start = cursor.pos;
+        let pasteboard = parse_archive_group(&mut cursor)?;
+        if cursor.pos == start {
+            break;
+        }
+        if combined.text.is_none() {
+            combined.text = pasteboard.text;
+        }
+        for url in pasteboard.urls {
+            if !combined.urls.contains(&url) {
+                combined.urls.push(url);
+            }
+        }
+        combined.types.extend(pasteboard.types);
+    }
+    Ok(combined)
+}
+
 fn parse_archive(archive: &[u8]) -> Result<ApplePasteboard, AppleInputError> {
     let mut cursor = Cursor::new(archive);
+    parse_archive_group(&mut cursor)
+}
+
+fn parse_archive_group(cursor: &mut Cursor<'_>) -> Result<ApplePasteboard, AppleInputError> {
     let item_count = cursor.take_u32()?;
     let mut pasteboard = ApplePasteboard::default();
 
@@ -707,5 +794,40 @@ mod tests {
         let parsed = parse_server_pasteboard(&zlib(&archive)).unwrap();
         assert_eq!(parsed.text.as_deref(), Some("fallback"));
         assert!(parsed.urls.is_empty());
+    }
+
+    #[test]
+    fn client_pasteboard_matches_vnckit_layout() {
+        let text = "Hello, 世界";
+        let archive = client_pasteboard_archive(text);
+        let mut cursor = 0usize;
+        assert_eq!(
+            u32::from_be_bytes(archive[cursor..cursor + 4].try_into().unwrap()),
+            1
+        );
+        cursor += 4;
+        let key_len =
+            u32::from_be_bytes(archive[cursor..cursor + 4].try_into().unwrap()) as usize;
+        cursor += 4;
+        assert_eq!(&archive[cursor..cursor + key_len], b"public.utf8-plain-text");
+        cursor += key_len;
+        assert_eq!(&archive[cursor..cursor + 4], &[0, 0, 0, 0]);
+        cursor += 4;
+        assert_eq!(
+            u32::from_be_bytes(archive[cursor..cursor + 4].try_into().unwrap()),
+            1
+        );
+
+        let message = client_pasteboard_message(text);
+        assert_eq!(message.len(), 16 + u32::from_be_bytes(message[12..16].try_into().unwrap()) as usize);
+        assert_eq!(message[0], MSG_SERVER_PASTEBOARD);
+        assert_eq!(message[2], 0);
+        assert_eq!(
+            u32::from_be_bytes(message[8..12].try_into().unwrap()) as usize,
+            archive.len()
+        );
+        let parsed = parse_server_pasteboard(&message).unwrap();
+        assert_eq!(parsed.text.as_deref(), Some(text));
+        assert_eq!(parsed.types, vec!["public.utf8-plain-text"]);
     }
 }

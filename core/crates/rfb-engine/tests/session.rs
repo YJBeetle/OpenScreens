@@ -2,6 +2,7 @@ use std::time::Duration;
 
 use rfb_codec::Rect;
 use rfb_engine::apple_file_transfer as ft;
+use rfb_engine::apple_file_transfer::RemoteFile;
 use rfb_engine::session::{DisplayScreen, Event, Session, SessionConfig};
 use tokio::io::{AsyncReadExt, AsyncWriteExt, DuplexStream, duplex};
 use tokio::time::timeout;
@@ -15,6 +16,20 @@ fn server_init() -> Vec<u8> {
     message.extend_from_slice(&HEIGHT.to_be_bytes());
     message.extend_from_slice(&rfb_proto::pixel_format::PixelFormat::bgra8888().encode());
     message.extend_from_slice(&4u32.to_be_bytes());
+    message.extend_from_slice(b"Mock");
+    message
+}
+
+fn apple_server_init(feature_bits: u64) -> Vec<u8> {
+    let mut extension = vec![0u8; 22];
+    extension[6..14].copy_from_slice(&feature_bits.to_be_bytes());
+    let name_len = extension.len() + 4;
+    let mut message = Vec::new();
+    message.extend_from_slice(&WIDTH.to_be_bytes());
+    message.extend_from_slice(&HEIGHT.to_be_bytes());
+    message.extend_from_slice(&rfb_proto::pixel_format::PixelFormat::bgra8888().encode());
+    message.extend_from_slice(&(name_len as u32).to_be_bytes());
+    message.extend_from_slice(&extension);
     message.extend_from_slice(b"Mock");
     message
 }
@@ -559,9 +574,13 @@ async fn apple_file_transfer_events() {
         .unwrap();
     assert_eq!(
         event,
-        Event::DragInfo {
+        Event::DragOutInfo {
             handle: 0x1242_fe7e,
-            pasteboard: ft::pasteboard_file_urls(&urls)
+            files: vec![RemoteFile {
+                url: "file:///Users/example/Desktop/a.txt".to_string(),
+                path: "/Users/example/Desktop/a.txt".to_string(),
+                name: "a.txt".to_string(),
+            }],
         }
     );
     let event = timeout(Duration::from_secs(1), session.next_event())
@@ -674,7 +693,93 @@ async fn apple_keepalive_and_pasteboard_are_consumed() {
         .await
         .unwrap()
         .unwrap();
+    assert_eq!(event, Event::ClipboardRequest);
+    let event = timeout(Duration::from_secs(1), session.next_event())
+        .await
+        .unwrap()
+        .unwrap();
     assert!(matches!(event, Event::Frame { .. }));
+}
+
+async fn read_pasteboard_message(server: &mut DuplexStream) -> Vec<u8> {
+    let mut header = [0u8; 16];
+    server.read_exact(&mut header).await.unwrap();
+    assert_eq!(header[0], 0x1f);
+    let compressed = u32::from_be_bytes(header[12..16].try_into().unwrap()) as usize;
+    let mut message = header.to_vec();
+    message.resize(16 + compressed, 0);
+    server.read_exact(&mut message[16..]).await.unwrap();
+    message
+}
+
+#[tokio::test]
+async fn apple_clipboard_request_upload_and_replay() {
+    let (client, mut server) = duplex(64 * 1024);
+    let task = tokio::spawn(async move {
+        let mut config = SessionConfig::new("mock", 5900);
+        config.apple_session = true;
+        Session::connect_stream(client, config).await.unwrap()
+    });
+    server.write_all(b"RFB 003.889\n").await.unwrap();
+    let mut version = [0u8; 12];
+    server.read_exact(&mut version).await.unwrap();
+    assert_eq!(&version, b"RFB 003.889\n");
+    server.write_all(&[1, 1]).await.unwrap();
+    let mut security = [0u8; 1];
+    server.read_exact(&mut security).await.unwrap();
+    assert_eq!(security[0], 1);
+    server.write_all(&0u32.to_be_bytes()).await.unwrap();
+    let mut client_init = [0u8; 1];
+    server.read_exact(&mut client_init).await.unwrap();
+    assert_eq!(client_init[0], 0xc1);
+    server
+        .write_all(&apple_server_init(1 << 32))
+        .await
+        .unwrap();
+    let mut apple = [0u8; 66];
+    server.read_exact(&mut apple).await.unwrap();
+    let _ = read_setup(&mut server).await;
+    let session = task.await.unwrap();
+
+    let connected = timeout(Duration::from_secs(1), session.next_event())
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(matches!(connected, Event::Connected { .. }));
+
+    // Apple event subtype 2: server asks for the client clipboard.
+    server
+        .write_all(&[0x14, 0x00, 0x04, 0x00, 0x04, 0x00, 0x01, 0x02])
+        .await
+        .unwrap();
+    let event = timeout(Duration::from_secs(1), session.next_event())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(event, Event::ClipboardRequest);
+
+    let text = "Hello, 世界";
+    session.send_clipboard(text).await.unwrap();
+    let message = read_pasteboard_message(&mut server).await;
+    let pasteboard = rfb_engine::apple_input::parse_server_pasteboard(&message).unwrap();
+    assert_eq!(pasteboard.text.as_deref(), Some(text));
+
+    // The same clipboard is not sent twice (echo-loop guard).
+    session.send_clipboard(text).await.unwrap();
+    let mut byte = [0u8; 1];
+    assert!(
+        timeout(Duration::from_millis(200), server.read_exact(&mut byte))
+            .await
+            .is_err()
+    );
+
+    // Subtype 3 asks the client to replay its last pasteboard.
+    server
+        .write_all(&[0x14, 0x00, 0x04, 0x00, 0x04, 0x00, 0x01, 0x03])
+        .await
+        .unwrap();
+    let replay = read_pasteboard_message(&mut server).await;
+    assert_eq!(replay, message);
 }
 
 #[tokio::test]

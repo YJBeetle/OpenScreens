@@ -25,7 +25,7 @@ use tokio::task::JoinHandle;
 
 use crate::apple_displays;
 use crate::apple_download::{DownloadEvent as AppleDownloadEvent, DownloadTransfer};
-use crate::apple_file_transfer;
+use crate::apple_file_transfer::{self, RemoteFile};
 use crate::apple_input;
 use crate::handshake::{self, ClientConfig, HandshakeError};
 use crate::quality::AdaptiveQuality;
@@ -203,6 +203,10 @@ pub enum Event {
     Clipboard {
         text: String,
     },
+    /// The server asked the client for its local clipboard (Apple message
+    /// `0x14` subtype 2). Frontends should read the platform pasteboard and
+    /// call [`Session::send_clipboard`] when shared clipboard is enabled.
+    ClipboardRequest,
     Bell,
     /// A client-side cursor bitmap (Cursor pseudo-encoding).
     Cursor(CursorShape),
@@ -217,11 +221,11 @@ pub enum Event {
         handle: u32,
         path: String,
     },
-    /// The server offered its pasteboard for a drag-out; the payload is the
-    /// decompressed pasteboard archive (see `apple_file_transfer`).
-    DragInfo {
+    /// The server answered a drag-out sequence (message `0x20`) with the
+    /// remote file URLs currently on its drag pasteboard.
+    DragOutInfo {
         handle: u32,
-        pasteboard: Vec<u8>,
+        files: Vec<RemoteFile>,
     },
     /// A message 34 container from the server (download flow, progress, ack).
     FileTransfer {
@@ -308,10 +312,16 @@ pub struct Session {
     viewport: Arc<Mutex<Option<Rect>>>,
     input_key: Option<[u8; 16]>,
     apple_session: bool,
+    /// The server advertised `serverCanReceivePasteboard` (feature bit 32), so
+    /// clipboard text is sent as Apple message `0x1F` instead of ClientCutText.
+    apple_pasteboard: bool,
     apple_client_version_sent: AtomicBool,
     input_clock: std::time::Instant,
     last_input_us: AtomicU64,
     transfer_handle: AtomicU32,
+    /// Last clipboard message sent, replayed when the server asks again
+    /// (Apple message `0x14` subtype 3) and used to suppress echo loops.
+    last_clipboard: Arc<Mutex<Option<Vec<u8>>>>,
     downloads: Arc<Mutex<HashMap<u32, DownloadTransfer>>>,
     name: String,
     reader: JoinHandle<()>,
@@ -388,6 +398,11 @@ impl Session {
         .await?;
         let input_key = handshake.input_key;
         let apple_session = handshake.version.major == 3 && handshake.version.minor == 889;
+        let apple_pasteboard = handshake
+            .server_init
+            .apple_features
+            .map(|features| features.server_can_receive_pasteboard())
+            .unwrap_or(false);
 
         let width = handshake.server_init.width;
         let height = handshake.server_init.height;
@@ -395,6 +410,7 @@ impl Session {
         let framebuffer = Arc::new(Mutex::new(Framebuffer::new(width, height)));
         let viewport = Arc::new(Mutex::new(None));
         let downloads = Arc::new(Mutex::new(HashMap::new()));
+        let last_clipboard = Arc::new(Mutex::new(None));
 
         let (read_half, write_half) = tokio::io::split(stream);
         let bytes_read = Arc::new(AtomicU64::new(0));
@@ -441,6 +457,7 @@ impl Session {
             config.adaptive_dct && apple_session,
             bytes_read.clone(),
             downloads.clone(),
+            last_clipboard.clone(),
         ));
 
         let session = Self {
@@ -450,10 +467,12 @@ impl Session {
             viewport,
             input_key,
             apple_session,
+            apple_pasteboard,
             apple_client_version_sent: AtomicBool::new(apple_session),
             input_clock: std::time::Instant::now(),
             last_input_us: AtomicU64::new(0),
             transfer_handle: AtomicU32::new(1),
+            last_clipboard,
             downloads,
             name,
             reader,
@@ -536,8 +555,26 @@ impl Session {
         self.send(message.to_vec()).await
     }
 
+    /// Sends clipboard text. Apple servers that advertise
+    /// `serverCanReceivePasteboard` receive message `0x1F` with a pasteboard
+    /// archive (matching VNCKit); other servers get a standard ClientCutText.
+    ///
+    /// Re-sending an identical clipboard is suppressed so a frontend that
+    /// answers every `ClipboardRequest` cannot create an echo loop with the
+    /// server's own clipboard notifications.
     pub async fn send_clipboard(&self, text: &str) -> Result<(), SessionError> {
-        self.send(client_cut_text(text.as_bytes())).await
+        let message = if self.apple_pasteboard {
+            apple_input::client_pasteboard_message(text)
+        } else {
+            client_cut_text(text.as_bytes())
+        };
+        if let Ok(mut last) = self.last_clipboard.lock() {
+            if last.as_deref() == Some(message.as_slice()) {
+                return Ok(());
+            }
+            *last = Some(message.clone());
+        }
+        self.send(message).await
     }
 
     /// Restricts incremental update requests to a framebuffer region and asks
@@ -704,10 +741,20 @@ impl Session {
         Ok(())
     }
 
-    /// Starts a drag-out and asks the server for its pasteboard. The server
-    /// answers with an [`Event::DragInfo`].
+    /// Starts a drag-out sequence (message `0x0E`) and asks the server for its
+    /// drag pasteboard. The server answers asynchronously with an
+    /// [`Event::DragOutInfo`]. Returns the handle used; a transfer handle is
+    /// allocated when `handle` is `None`.
+    pub async fn begin_drag_out(&self, handle: Option<u32>) -> Result<u32, SessionError> {
+        let handle = handle.unwrap_or_else(|| self.next_transfer_handle());
+        self.send(apple_file_transfer::drag_out_start(handle))
+            .await?;
+        Ok(handle)
+    }
+
+    /// Starts a drag-out sequence with an explicit handle.
     pub async fn start_drag_out(&self, handle: u32) -> Result<(), SessionError> {
-        self.send(apple_file_transfer::drag_out_start(handle)).await
+        self.begin_drag_out(Some(handle)).await.map(|_| ())
     }
 
     pub async fn request_download(&self, handle: u32, path: &str) -> Result<(), SessionError> {
@@ -774,6 +821,8 @@ struct ReaderState {
     dct_failed: bool,
     dct_full_refresh: bool,
     downloads: Arc<Mutex<HashMap<u32, DownloadTransfer>>>,
+    commands: mpsc::Sender<Vec<u8>>,
+    last_clipboard: Arc<Mutex<Option<Vec<u8>>>>,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -793,6 +842,7 @@ async fn reader_task<R>(
     adaptive_dct: bool,
     bytes_read: Arc<AtomicU64>,
     downloads: Arc<Mutex<HashMap<u32, DownloadTransfer>>>,
+    last_clipboard: Arc<Mutex<Option<Vec<u8>>>>,
 ) where
     R: AsyncRead + Unpin,
 {
@@ -818,6 +868,8 @@ async fn reader_task<R>(
         dct_failed: false,
         dct_full_refresh: false,
         downloads,
+        commands: commands.clone(),
+        last_clipboard,
     };
     let mut sequence = 0u64;
     let mut last_request: Option<std::time::Instant> = None;
@@ -940,9 +992,40 @@ where
         }
         3 => handle_server_cut_text(read, state, events).await?,
         0x14 => {
-            // Apple event/keepalive (clipboard notifications, keepalives).
+            // Apple event/keepalive. Header: 14 00 04 00 04 00 01 <subtype>.
             fill_buffer(read, &mut state.buffer, 7).await?;
+            let mut magic = [0u8; 6];
+            magic.copy_from_slice(&state.buffer[..6]);
+            let subtype = state.buffer[6];
             state.buffer.advance(7);
+            if magic == [0x00, 0x04, 0x00, 0x04, 0x00, 0x01] {
+                match subtype {
+                    // The server's clipboard changed / it wants the client's
+                    // clipboard; the frontend supplies it on demand.
+                    2 => events
+                        .send(Event::ClipboardRequest)
+                        .await
+                        .map_err(|_| SessionError::Closed)?,
+                    // The server asks again for the last pasteboard (VNCKit
+                    // replays its `savedPasteboard` and clears it).
+                    3 => {
+                        let replay = state
+                            .last_clipboard
+                            .lock()
+                            .ok()
+                            .and_then(|message| message.clone());
+                        if let Some(message) = replay {
+                            state
+                                .commands
+                                .send(message)
+                                .await
+                                .map_err(|_| SessionError::Closed)?;
+                        }
+                    }
+                    // 4, 0xB, 0xC are keepalive/debug notifications.
+                    _ => {}
+                }
+            }
         }
         0x1e => handle_upload_request(read, state, events).await?,
         0x1f => {
@@ -1048,10 +1131,11 @@ where
     state.buffer.advance(chunk_len);
     let (info, _) = apple_file_transfer::parse_drag_info(&message)
         .map_err(|_| SessionError::Protocol("invalid drag info"))?;
+    let files = apple_file_transfer::remote_files_from_pasteboard(&info.pasteboard);
     events
-        .send(Event::DragInfo {
+        .send(Event::DragOutInfo {
             handle: info.handle,
-            pasteboard: info.pasteboard,
+            files,
         })
         .await
         .map_err(|_| SessionError::Closed)

@@ -26,6 +26,11 @@
 	<string>$(OPENSCREENS_BUILD_VERSION)</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>OpenScreens saves screenshots of remote sessions to your photo library.</string>
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<true/>
+	</dict>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UIDeviceFamily</key>

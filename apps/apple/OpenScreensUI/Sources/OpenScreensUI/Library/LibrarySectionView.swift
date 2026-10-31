@@ -8,6 +8,7 @@ struct ConnectionGrid: View {
     let onEdit: (ConnectionProfile) -> Void
     let onDuplicate: (ConnectionProfile) -> Void
     let onDelete: (ConnectionProfile) -> Void
+    var onOpenInNewWindow: ((ConnectionProfile) -> Void)? = nil
     var onMove: ((ConnectionProfile, Int) -> Void)? = nil
 
     @Environment(SettingsStore.self) private var settings
@@ -41,6 +42,14 @@ struct ConnectionGrid: View {
                             onConnect(profile)
                         } label: {
                             Label("Connect", systemImage: "play.fill")
+                        }
+
+                        if let onOpenInNewWindow {
+                            Button {
+                                onOpenInNewWindow(profile)
+                            } label: {
+                                Label("Open in New Window", systemImage: "rectangle.badge.plus")
+                            }
                         }
 
                         Button {
@@ -131,6 +140,7 @@ public struct LibrarySectionView: View {
     private let onEdit: (ConnectionProfile) -> Void
     private let onDuplicate: (ConnectionProfile) -> Void
     private let onDelete: (ConnectionProfile) -> Void
+    private let onOpenInNewWindow: ((ConnectionProfile) -> Void)?
     private let onNewConnection: () -> Void
 
     @Environment(ConnectionStore.self) private var store
@@ -144,6 +154,7 @@ public struct LibrarySectionView: View {
         onEdit: @escaping (ConnectionProfile) -> Void,
         onDuplicate: @escaping (ConnectionProfile) -> Void,
         onDelete: @escaping (ConnectionProfile) -> Void,
+        onOpenInNewWindow: ((ConnectionProfile) -> Void)? = nil,
         onNewConnection: @escaping () -> Void
     ) {
         self.section = section
@@ -153,6 +164,7 @@ public struct LibrarySectionView: View {
         self.onEdit = onEdit
         self.onDuplicate = onDuplicate
         self.onDelete = onDelete
+        self.onOpenInNewWindow = onOpenInNewWindow
         self.onNewConnection = onNewConnection
     }
 
@@ -175,6 +187,7 @@ public struct LibrarySectionView: View {
                     onEdit: onEdit,
                     onDuplicate: onDuplicate,
                     onDelete: onDelete,
+                    onOpenInNewWindow: onOpenInNewWindow,
                     onMove: { profile, offset in
                         store.move(id: profile.id, by: offset, within: profiles.map(\.id))
                     }
@@ -277,6 +290,7 @@ public struct LibrarySearchResultsView: View {
     private let onEdit: (ConnectionProfile) -> Void
     private let onDuplicate: (ConnectionProfile) -> Void
     private let onDelete: (ConnectionProfile) -> Void
+    private let onOpenInNewWindow: ((ConnectionProfile) -> Void)?
 
     @Environment(ConnectionStore.self) private var store
 
@@ -285,13 +299,15 @@ public struct LibrarySearchResultsView: View {
         onConnect: @escaping (ConnectionProfile) -> Void,
         onEdit: @escaping (ConnectionProfile) -> Void,
         onDuplicate: @escaping (ConnectionProfile) -> Void,
-        onDelete: @escaping (ConnectionProfile) -> Void
+        onDelete: @escaping (ConnectionProfile) -> Void,
+        onOpenInNewWindow: ((ConnectionProfile) -> Void)? = nil
     ) {
         self.query = query
         self.onConnect = onConnect
         self.onEdit = onEdit
         self.onDuplicate = onDuplicate
         self.onDelete = onDelete
+        self.onOpenInNewWindow = onOpenInNewWindow
     }
 
     public var body: some View {
@@ -316,7 +332,8 @@ public struct LibrarySearchResultsView: View {
                     onConnect: onConnect,
                     onEdit: onEdit,
                     onDuplicate: onDuplicate,
-                    onDelete: onDelete
+                    onDelete: onDelete,
+                    onOpenInNewWindow: onOpenInNewWindow
                 )
             }
         }

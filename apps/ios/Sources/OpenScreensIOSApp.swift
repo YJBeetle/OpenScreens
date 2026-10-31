@@ -16,6 +16,29 @@ struct OpenScreensIOSApp: App {
                 .preferredColorScheme(settings.settings.appearance.colorScheme)
                 .tint(Theme.Colors.accent)
         }
+
+        WindowGroup(
+            NSLocalizedString("Session", comment: "Session window title"),
+            id: IOSSessionScene.id,
+            for: UUID.self
+        ) { $profileID in
+            Group {
+                if let profileID, let profile = connections.connection(id: profileID) {
+                    IOSSessionWindow(profile: profile)
+                } else {
+                    ContentUnavailableView {
+                        Label("Connection Not Found", systemImage: "questionmark.folder")
+                    } description: {
+                        Text("This connection was removed from the library.")
+                    }
+                }
+            }
+            .environment(connections)
+            .environment(settings)
+            .environment(sshKeys)
+            .preferredColorScheme(settings.settings.appearance.colorScheme)
+            .tint(Theme.Colors.accent)
+        }
     }
 }
 

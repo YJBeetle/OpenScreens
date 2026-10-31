@@ -32,6 +32,27 @@ struct IOSSessionPresenter: View {
     }
 }
 
+enum IOSSessionScene {
+    static let id = "session"
+}
+
+/// Session hosted in its own iPad window, dismissed with the window controls.
+struct IOSSessionWindow: View {
+    @Environment(\.dismissWindow) private var dismissWindow
+
+    @State private var model: SessionViewModel
+
+    init(profile: ConnectionProfile) {
+        _model = State(initialValue: SessionViewModel(profile: profile, service: UniFfiSessionService()))
+    }
+
+    var body: some View {
+        SessionScreen(model: model) {
+            dismissWindow()
+        }
+    }
+}
+
 enum IOSLibrarySheet: Identifiable {
     case editor(IOSEditorRoute)
     case settings

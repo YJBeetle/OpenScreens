@@ -4,6 +4,7 @@ import SwiftUI
 struct IPadLibraryView: View {
     @Environment(ConnectionStore.self) private var store
     @Environment(SettingsStore.self) private var settings
+    @Environment(\.openWindow) private var openWindow
 
     @State private var selection: LibraryDestination? = .section(.nearby)
     @State private var searchText = ""
@@ -71,7 +72,8 @@ struct IPadLibraryView: View {
                 onConnect: openSession,
                 onEdit: edit,
                 onDuplicate: duplicate,
-                onDelete: delete
+                onDelete: delete,
+                onOpenInNewWindow: openSessionInNewWindow
             )
         } else if let destination = selection {
             switch destination {
@@ -82,6 +84,7 @@ struct IPadLibraryView: View {
                     onEdit: edit,
                     onDuplicate: duplicate,
                     onDelete: delete,
+                    onOpenInNewWindow: openSessionInNewWindow,
                     onNewConnection: {
                         activeSheet = .editor(IOSEditorRoute(mode: .create(.custom)))
                     }
@@ -94,6 +97,7 @@ struct IPadLibraryView: View {
                     onEdit: edit,
                     onDuplicate: duplicate,
                     onDelete: delete,
+                    onOpenInNewWindow: openSessionInNewWindow,
                     onNewConnection: {
                         activeSheet = .editor(
                             IOSEditorRoute(mode: .create(.custom), groupID: groupID)
@@ -129,6 +133,11 @@ struct IPadLibraryView: View {
     private func openSession(_ profile: ConnectionProfile) {
         store.markConnected(id: profile.id)
         activeProfile = profile
+    }
+
+    private func openSessionInNewWindow(_ profile: ConnectionProfile) {
+        store.markConnected(id: profile.id)
+        openWindow(id: IOSSessionScene.id, value: profile.id)
     }
 
     private func edit(_ profile: ConnectionProfile) {

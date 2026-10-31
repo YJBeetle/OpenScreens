@@ -154,6 +154,58 @@ fn apple_dh_reply_with_exponent(
 
 /// Encrypts a 16-byte input-event header with the retained session key.
 ///
+/// Wraps a 16-byte event header into the 18-byte Apple input message used
+/// inside RFB 3.889 sessions: `[0x10, direction ^ 1, AES-128-ECB(header)]`.
+pub fn encrypt_apple_input_message(
+    key: &[u8; AES_KEY_LEN],
+    header: &[u8; AES_KEY_LEN],
+    direction: u8,
+) -> [u8; 18] {
+    let ciphertext = encrypt_apple_input_event(key, header);
+    let mut message = [0u8; 18];
+    message[0] = 0x10;
+    message[1] = direction ^ 1;
+    message[2..].copy_from_slice(&ciphertext);
+    message
+}
+
+/// Builds the encrypted mouse message. Layout verified by disassembling
+/// `-[VncClient sendAppleMouseEvent:y:buttons:timeDeltaUS:]`:
+/// `[0..6)=0, u32 BE time delta at 6, 0xFF at 10, buttons at 11,
+/// u16 BE x at 12, u16 BE y at 14`.
+pub fn encrypt_apple_pointer_event(
+    key: &[u8; AES_KEY_LEN],
+    x: u16,
+    y: u16,
+    buttons: u8,
+    time_delta_us: u32,
+) -> [u8; 18] {
+    let mut header = [0u8; AES_KEY_LEN];
+    header[6..10].copy_from_slice(&time_delta_us.to_be_bytes());
+    header[10] = 0xFF;
+    header[11] = buttons;
+    header[12..14].copy_from_slice(&x.to_be_bytes());
+    header[14..16].copy_from_slice(&y.to_be_bytes());
+    encrypt_apple_input_message(key, &header, 1)
+}
+
+/// Builds the encrypted key message; see `-[VncClient sendAppleKeyEvent:...]`.
+/// `keycode` is the macOS virtual keycode carried in the header.
+pub fn encrypt_apple_key_event(
+    key: &[u8; AES_KEY_LEN],
+    keycode: u16,
+    down: bool,
+    time_delta_us: u32,
+) -> [u8; 18] {
+    let mut header = [0u8; AES_KEY_LEN];
+    header[0] = 0xFF;
+    header[1] = u8::from(down);
+    header[4..6].copy_from_slice(&keycode.to_be_bytes());
+    header[6..10].copy_from_slice(&time_delta_us.to_be_bytes());
+    header[13] = 0x2F;
+    encrypt_apple_input_message(key, &header, 0)
+}
+
 /// The protocol requires AES-128-ECB over each 16-byte block; the header is
 /// a single block, so no padding is involved.
 pub fn encrypt_apple_input_event(key: &[u8; AES_KEY_LEN], header: &[u8; AES_KEY_LEN]) -> [u8; 16] {
@@ -640,6 +692,44 @@ mod tests {
         let expected: [u8; AES_KEY_LEN] =
             hex("3ad77bb40d7a3660a89ecaf32466ef97").try_into().unwrap();
         assert_eq!(encrypt_apple_input_event(&key, &plaintext), expected);
+    }
+
+    #[test]
+    fn pointer_message_layout() {
+        use aes::cipher::BlockDecrypt;
+        let key = [0x11u8; AES_KEY_LEN];
+        let message = encrypt_apple_pointer_event(&key, 0x1234, 0x5678, 0x05, 0x0a0b0c0d);
+        assert_eq!(message[0], 0x10);
+        assert_eq!(message[1], 0);
+
+        let cipher = Aes128::new_from_slice(&key).unwrap();
+        let mut block = Block::<Aes128>::clone_from_slice(&message[2..]);
+        cipher.decrypt_block(&mut block);
+        let header: [u8; 16] = block.into();
+        assert_eq!(&header[6..10], &0x0a0b0c0du32.to_be_bytes());
+        assert_eq!(header[10], 0xff);
+        assert_eq!(header[11], 0x05);
+        assert_eq!(&header[12..14], &0x1234u16.to_be_bytes());
+        assert_eq!(&header[14..16], &0x5678u16.to_be_bytes());
+    }
+
+    #[test]
+    fn key_message_layout() {
+        use aes::cipher::BlockDecrypt;
+        let key = [0x22u8; AES_KEY_LEN];
+        let message = encrypt_apple_key_event(&key, 0x000d, true, 42);
+        assert_eq!(message[0], 0x10);
+        assert_eq!(message[1], 1);
+
+        let cipher = Aes128::new_from_slice(&key).unwrap();
+        let mut block = Block::<Aes128>::clone_from_slice(&message[2..]);
+        cipher.decrypt_block(&mut block);
+        let header: [u8; 16] = block.into();
+        assert_eq!(header[0], 0xff);
+        assert_eq!(header[1], 1);
+        assert_eq!(&header[4..6], &0x000du16.to_be_bytes());
+        assert_eq!(&header[6..10], &42u32.to_be_bytes());
+        assert_eq!(header[13], 0x2f);
     }
 
     #[test]

@@ -3,7 +3,7 @@
 use std::fmt;
 use std::io;
 use std::pin::Pin;
-use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll};
 
@@ -29,6 +29,17 @@ const EVENT_CHANNEL_CAPACITY: usize = 32;
 const COMMAND_CHANNEL_CAPACITY: usize = 64;
 const READ_CHUNK: usize = 64 * 1024;
 const MAX_CUT_TEXT_LEN: usize = 16 * 1024 * 1024;
+
+/// Apple client version/capability message captured from Screens 5. The
+/// trailing part is a capability bitmask; the server only reads the leading
+/// constants and feature fields in practice.
+const APPLE_CLIENT_VERSION: [u8; 66] = [
+    0x21, 0x00, 0x00, 0x3e, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0a, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00,
+    0x00, 0x00, 0xb0, 0x00, 0x08, 0x03, 0xa0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00,
+];
 
 /// Encodings advertised to the server, most preferred first. The TightVNC
 /// JPEG quality pseudo-encoding is inserted per session, before these move
@@ -77,6 +88,8 @@ pub struct SessionConfig {
     /// Minimum delay between incremental update requests, in milliseconds.
     /// Zero requests the next update as soon as the previous one arrived.
     pub frame_interval_ms: u16,
+    /// Negotiate Apple's RFB 3.889 extension handshake when available.
+    pub apple_session: bool,
     pub ssh: Option<SshSettings>,
 }
 
@@ -111,6 +124,7 @@ impl SessionConfig {
             local_cursor: false,
             quality: 9,
             frame_interval_ms: 16,
+            apple_session: false,
             ssh: None,
         }
     }
@@ -240,6 +254,10 @@ pub struct Session {
     framebuffer: Arc<Mutex<Framebuffer>>,
     viewport: Arc<Mutex<Option<Rect>>>,
     input_key: Option<[u8; 16]>,
+    apple_session: bool,
+    apple_client_version_sent: AtomicBool,
+    input_clock: std::time::Instant,
+    last_input_us: AtomicU64,
     transfer_handle: AtomicU32,
     name: String,
     reader: JoinHandle<()>,
@@ -291,10 +309,12 @@ impl Session {
                 username: config.username.clone(),
                 password: config.password.clone(),
                 shared: config.shared,
+                apple_session: config.apple_session,
             },
         )
         .await?;
         let input_key = handshake.input_key;
+        let apple_session = handshake.version.major == 3 && handshake.version.minor == 889;
 
         let width = handshake.server_init.width;
         let height = handshake.server_init.height;
@@ -345,6 +365,10 @@ impl Session {
             framebuffer,
             viewport,
             input_key,
+            apple_session,
+            apple_client_version_sent: AtomicBool::new(false),
+            input_clock: std::time::Instant::now(),
+            last_input_us: AtomicU64::new(0),
             transfer_handle: AtomicU32::new(1),
             name,
             reader,
@@ -384,11 +408,28 @@ impl Session {
     }
 
     pub async fn send_pointer(&self, mask: u8, x: u16, y: u16) -> Result<(), SessionError> {
+        if self.apple_session && self.input_key.is_some() {
+            return self.send_apple_pointer(mask, x, y).await;
+        }
         self.send(pointer_event(mask, x, y).to_vec()).await
     }
 
     pub async fn send_key(&self, down: bool, keysym: u32) -> Result<(), SessionError> {
         self.send(key_event(down, keysym).to_vec()).await
+    }
+
+    /// Sends an encrypted Apple pointer event (RFB 3.889). Requires an Apple
+    /// authentication key; callers should only use it on Apple sessions with
+    /// server support for Apple input events.
+    pub async fn send_apple_pointer(&self, mask: u8, x: u16, y: u16) -> Result<(), SessionError> {
+        let Some(key) = self.input_key else {
+            return Err(SessionError::Protocol("Apple input key unavailable"));
+        };
+        let now = self.input_clock.elapsed().as_micros() as u64;
+        let previous = self.last_input_us.swap(now, Ordering::Relaxed);
+        let delta = u32::try_from(now.saturating_sub(previous)).unwrap_or(u32::MAX);
+        let message = rfb_proto::apple_auth::encrypt_apple_pointer_event(&key, x, y, mask, delta);
+        self.send(message.to_vec()).await
     }
 
     pub async fn send_clipboard(&self, text: &str) -> Result<(), SessionError> {
@@ -414,6 +455,20 @@ impl Session {
             .await
     }
 
+    /// Sends Apple's client version/capability message (id 33). Screens sends
+    /// it right after the handshake; the macOS server uses it to enable its
+    /// vendor extensions, including drag-and-drop file transfer.
+    pub async fn send_apple_client_version(&self) -> Result<(), SessionError> {
+        self.send(APPLE_CLIENT_VERSION.to_vec()).await
+    }
+
+    async fn ensure_apple_client_version(&self) -> Result<(), SessionError> {
+        if self.apple_client_version_sent.swap(true, Ordering::Relaxed) {
+            return Ok(());
+        }
+        self.send_apple_client_version().await
+    }
+
     pub async fn request_refresh(&self) -> Result<(), SessionError> {
         let Some((width, height)) = self.size() else {
             return Err(SessionError::Closed);
@@ -437,7 +492,27 @@ impl Session {
     ) -> Result<(), SessionError> {
         let urls: Vec<&str> = file_urls.iter().map(String::as_str).collect();
         self.send(apple_file_transfer::drag_in_message(handle, &urls))
-            .await
+            .await?;
+        // macOS Screen Sharing completes the drag-in when the pointer performs
+        // a drop over the session; without it the server never sends the
+        // upload request (0x1E). Apple sessions carry the pointer encrypted.
+        if self.apple_session && self.input_key.is_some() {
+            self.ensure_apple_client_version().await?;
+            let (width, height) = self.size().ok_or(SessionError::Closed)?;
+            let x = width / 2;
+            let y = height / 2;
+            self.send_apple_pointer(0, x, y).await?;
+            tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+            for offset in [0u16, 20, 40, 60] {
+                let drop_x = x.saturating_add(offset).min(width.saturating_sub(1));
+                self.send_apple_pointer(1, drop_x, y).await?;
+                tokio::time::sleep(std::time::Duration::from_millis(120)).await;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+            let drop_x = x.saturating_add(60).min(width.saturating_sub(1));
+            self.send_apple_pointer(0, drop_x, y).await?;
+        }
+        Ok(())
     }
 
     pub async fn upload_destination(&self, handle: u32, folder: &str) -> Result<(), SessionError> {
@@ -682,7 +757,28 @@ where
                 .map_err(|_| SessionError::Closed)?;
         }
         3 => handle_server_cut_text(read, state, events).await?,
+        0x14 => {
+            // Apple event/keepalive (clipboard notifications, keepalives).
+            fill_buffer(read, &mut state.buffer, 7).await?;
+            state.buffer.advance(7);
+        }
         0x1e => handle_upload_request(read, state, events).await?,
+        0x1f => {
+            // Apple pasteboard: 16-byte header, compressed payload.
+            fill_buffer(read, &mut state.buffer, 15).await?;
+            let len = u32::from_be_bytes([
+                state.buffer[11],
+                state.buffer[12],
+                state.buffer[13],
+                state.buffer[14],
+            ]) as usize;
+            state.buffer.advance(15);
+            if len > MAX_TRANSFER_PAYLOAD {
+                return Err(SessionError::Protocol("pasteboard payload too large"));
+            }
+            fill_buffer(read, &mut state.buffer, len).await?;
+            state.buffer.advance(len);
+        }
         0x20 => handle_drag_info(read, state, events).await?,
         0x22 => handle_file_transfer(read, state, events).await?,
         _ => return Err(SessionError::Protocol("unknown server message")),

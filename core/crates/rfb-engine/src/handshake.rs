@@ -20,6 +20,9 @@ pub struct ClientConfig {
     pub username: Option<String>,
     pub password: Option<String>,
     pub shared: bool,
+    /// Negotiate Apple's RFB 3.889 handshake (extended ServerInit and
+    /// ClientInit 0xC1) when the server advertises it.
+    pub apple_session: bool,
 }
 
 impl Default for ClientConfig {
@@ -28,6 +31,7 @@ impl Default for ClientConfig {
             username: None,
             password: None,
             shared: true,
+            apple_session: false,
         }
     }
 }
@@ -110,7 +114,12 @@ where
 
     // Apple advertises 3.889; the standard 3.8 flow remains valid until Apple
     // extensions are explicitly negotiated.
-    let version = negotiate_version(server_version);
+    let apple = config.apple_session && server_version == ProtocolVersion::new(3, 889);
+    let version = if apple {
+        server_version
+    } else {
+        negotiate_version(server_version)
+    };
     stream.write_all(&version.encode()).await?;
 
     let security = if version == ProtocolVersion::RFB_3_3 {
@@ -153,7 +162,8 @@ where
         }
     }
 
-    stream.write_all(&[u8::from(config.shared)]).await?;
+    let client_init = if apple { 0xc1 } else { u8::from(config.shared) };
+    stream.write_all(&[client_init]).await?;
     let server_init = read_server_init(stream).await?;
     Ok(Handshake {
         version,
@@ -406,10 +416,34 @@ mod tests {
             username: None,
             password: Some(password.to_owned()),
             shared: true,
+            apple_session: false,
         };
         let handshake = perform(&mut client, &config).await.unwrap();
         task.await.unwrap();
         assert_eq!(handshake.server_init.name, "Test Mac");
+    }
+
+    #[tokio::test]
+    async fn apple_session_negotiates_3889() {
+        let (mut client, mut server) = duplex(1024);
+        let task = tokio::spawn(async move {
+            server.write_all(b"RFB 003.889\n").await.unwrap();
+            assert_eq!(read_version_from(&mut server).await, *b"RFB 003.889\n");
+            server.write_all(&[1, 1]).await.unwrap();
+            assert_eq!(read_u8_from(&mut server).await, 1);
+            server.write_all(&0u32.to_be_bytes()).await.unwrap();
+            assert_eq!(read_u8_from(&mut server).await, 0xc1);
+            server.write_all(&server_init_message()).await.unwrap();
+        });
+        let config = ClientConfig {
+            username: None,
+            password: None,
+            shared: true,
+            apple_session: true,
+        };
+        let handshake = perform(&mut client, &config).await.unwrap();
+        assert_eq!(handshake.version, ProtocolVersion::new(3, 889));
+        task.await.unwrap();
     }
 
     #[tokio::test]
@@ -430,6 +464,7 @@ mod tests {
             username: None,
             password: Some("wrong".to_owned()),
             shared: true,
+            apple_session: false,
         };
         let error = perform(&mut client, &config).await.unwrap_err();
         assert!(matches!(

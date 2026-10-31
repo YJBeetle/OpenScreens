@@ -74,6 +74,9 @@ impl From<SessionConfig> for EngineConfig {
             local_cursor: config.local_cursor,
             quality: config.quality,
             frame_interval_ms: config.frame_interval_ms,
+            // Apple servers are detected during the handshake; non-Apple
+            // servers keep the standard 3.8 flow.
+            apple_session: true,
             ssh,
         }
     }

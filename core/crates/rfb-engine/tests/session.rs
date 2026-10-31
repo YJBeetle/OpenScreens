@@ -641,3 +641,58 @@ async fn client_sends_file_transfer_messages() {
         assert_eq!(actual, message);
     }
 }
+
+#[tokio::test]
+async fn apple_keepalive_and_pasteboard_are_consumed() {
+    let (client, mut server) = duplex(64 * 1024);
+    let task = tokio::spawn(async move {
+        Session::connect_stream(client, SessionConfig::new("mock", 5900))
+            .await
+            .unwrap()
+    });
+    perform_handshake(&mut server).await;
+    let _ = read_setup(&mut server).await;
+    let session = task.await.unwrap();
+    let connected = timeout(Duration::from_secs(1), session.next_event())
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(matches!(connected, Event::Connected { .. }));
+
+    // Apple keepalive (id 20): fixed eight bytes.
+    server
+        .write_all(&[0x14, 0x00, 0x04, 0x00, 0x04, 0x00, 0x01, 0x02])
+        .await
+        .unwrap();
+    // Apple pasteboard (id 31): 16-byte header, compressed length at [12..16].
+    let mut pasteboard = vec![0x1f, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 3, 0, 0, 0, 2];
+    pasteboard.extend_from_slice(&[0x78, 0xda]);
+    server.write_all(&pasteboard).await.unwrap();
+    server.write_all(&raw_update()).await.unwrap();
+
+    let event = timeout(Duration::from_secs(1), session.next_event())
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(matches!(event, Event::Frame { .. }));
+}
+
+#[tokio::test]
+async fn apple_client_version_message_is_sent_verbatim() {
+    let (client, mut server) = duplex(64 * 1024);
+    let task = tokio::spawn(async move {
+        Session::connect_stream(client, SessionConfig::new("mock", 5900))
+            .await
+            .unwrap()
+    });
+    perform_handshake(&mut server).await;
+    let _ = read_setup(&mut server).await;
+    let session = task.await.unwrap();
+    session.send_apple_client_version().await.unwrap();
+
+    let mut message = [0u8; 66];
+    server.read_exact(&mut message).await.unwrap();
+    assert_eq!(message[0], 0x21);
+    assert_eq!(&message[1..6], &[0x00, 0x00, 0x3e, 0x00, 0x01]);
+    assert_eq!(&message[34..39], &[0xb0, 0x00, 0x08, 0x03, 0xa0]);
+}

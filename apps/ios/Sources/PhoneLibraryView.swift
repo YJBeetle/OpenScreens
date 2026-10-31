@@ -230,11 +230,7 @@ struct PhoneTabBar: View {
             }
         }
         .padding(6)
-        .background(.ultraThinMaterial, in: Capsule(style: .continuous))
-        .overlay {
-            Capsule(style: .continuous)
-                .strokeBorder(Theme.Colors.hairline, lineWidth: 1)
-        }
+        .glassSurface(in: Capsule(style: .continuous))
         .shadow(color: .black.opacity(0.2), radius: 18, y: 8)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Library tabs")

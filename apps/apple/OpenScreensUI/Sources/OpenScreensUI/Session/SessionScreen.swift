@@ -558,14 +558,13 @@ public struct SessionScreen: View {
                 Spacer()
                 Text(message)
                     .font(.footnote.weight(.medium))
+                    .foregroundStyle(.white)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 8)
-                    .background(.ultraThinMaterial, in: Capsule())
-                    .overlay {
-                        Capsule().strokeBorder(Theme.Colors.hairline, lineWidth: 1)
-                    }
+                    .glassSurface(in: Capsule())
                     .padding(.bottom, 82)
             }
+            .environment(\.colorScheme, .dark)
             .allowsHitTesting(false)
             .transition(.opacity)
             .animation(.snappy, value: model.clipboardMessage)
@@ -588,15 +587,13 @@ public struct SessionScreen: View {
                 }
                 .padding(.horizontal, 14)
                 .padding(.vertical, 8)
-                .background(.ultraThinMaterial, in: Capsule())
-                .overlay {
-                    Capsule().strokeBorder(Theme.Colors.hairline, lineWidth: 1)
-                }
+                .glassSurface(in: Capsule())
                 .frame(maxWidth: 420)
                 .padding(.top, model.showsChrome ? 74 : 16)
 
                 Spacer()
             }
+            .environment(\.colorScheme, .dark)
             .allowsHitTesting(false)
             .transition(.opacity)
             .animation(.snappy, value: text)

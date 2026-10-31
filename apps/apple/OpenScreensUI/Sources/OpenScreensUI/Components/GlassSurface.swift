@@ -54,7 +54,7 @@ struct GlassSurface<S: InsettableShape>: ViewModifier {
 }
 
 extension View {
-    func glassSurface<S: InsettableShape>(in shape: S, tint: Color? = nil) -> some View {
+    public func glassSurface<S: InsettableShape>(in shape: S, tint: Color? = nil) -> some View {
         modifier(GlassSurface(shape: shape, tint: tint))
     }
 }

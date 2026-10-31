@@ -87,11 +87,13 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
@@ -175,10 +177,16 @@ fun SessionScreen(
     var keyboardActive by remember { mutableStateOf(false) }
     var modifiers by remember { mutableIntStateOf(0) }
     var backgroundedAt by remember { mutableLongStateOf(0L) }
+    var cursor by remember { mutableStateOf<SessionEvent.Cursor?>(null) }
+    var cursorPosition by remember { mutableStateOf<IntOffset?>(null) }
 
     val focusRequester = remember { FocusRequester() }
     val pointerMemory = remember(session) { PointerMemory() }
     val taps = remember(session) { DeferredTapController() }
+    val trackPointer: (Int, Int) -> Unit = { x, y ->
+        cursorPosition = IntOffset(x, y)
+        pointerMemory.remember(x, y)
+    }
 
     val imeVisible = WindowInsets.isImeVisible
     // Focus may survive the IME being dismissed with Back. Drop the accessory row shortly
@@ -235,7 +243,11 @@ fun SessionScreen(
     LaunchedEffect(session) {
         session.events.collect { event ->
             when (event) {
-                SessionEvent.Connecting -> status = SessionStatus.Connecting
+                SessionEvent.Connecting -> {
+                    status = SessionStatus.Connecting
+                    cursor = null
+                    cursorPosition = null
+                }
                 is SessionEvent.Connected -> {
                     status = SessionStatus.Connected
                     remoteWidth = event.width
@@ -250,6 +262,7 @@ fun SessionScreen(
                     status = SessionStatus.Connected
                     frame = event
                 }
+                is SessionEvent.Cursor -> cursor = event
                 SessionEvent.Disconnected -> {
                     status = SessionStatus.Disconnected
                     if (!isExiting) {
@@ -392,7 +405,7 @@ fun SessionScreen(
                         session.sendPointer(x, y, 0)
                         session.sendPointer(x, y, 1)
                         session.sendPointer(x, y, 0)
-                        pointerMemory.remember(x, y)
+                        trackPointer(x, y)
                         recordPointer(x, y)
                     }
 
@@ -435,6 +448,7 @@ fun SessionScreen(
 
                     fun sendWheel(mask: Int, labelRes: Int) {
                         val (x, y) = pointerMemory.resolve(remoteWidth, remoteHeight)
+                        cursorPosition = IntOffset(x, y)
                         session.sendPointer(x, y, mask)
                         session.sendPointer(x, y, 0)
                         lastAction = context.getString(
@@ -478,7 +492,7 @@ fun SessionScreen(
                                     longPressSent = true
                                     session.sendPointer(start.first, start.second, 2)
                                     session.sendPointer(start.first, start.second, 0)
-                                    pointerMemory.remember(start.first, start.second)
+                                    trackPointer(start.first, start.second)
                                     recordPointer(start.first, start.second)
                                 }
                                 continue
@@ -494,7 +508,7 @@ fun SessionScreen(
                                 if (mode == GestureMode.Pending || mode == GestureMode.Drag) {
                                     if (mode == GestureMode.Drag) {
                                         session.sendPointer(last.first, last.second, 0)
-                                        pointerMemory.remember(last.first, last.second)
+                                        trackPointer(last.first, last.second)
                                     }
                                     mode = if (zoom > ZOOM_ACTIVE_EPSILON) {
                                         GestureMode.Transform
@@ -671,13 +685,13 @@ fun SessionScreen(
                             ) {
                                 mode = GestureMode.Drag
                                 session.sendPointer(start.first, start.second, 1)
-                                pointerMemory.remember(start.first, start.second)
+                                trackPointer(start.first, start.second)
                                 recordPointer(start.first, start.second)
                             }
                             if (mode == GestureMode.Drag) {
                                 last = remotePoint(change.position, size, remoteWidth, remoteHeight, zoom, pan)
                                 session.sendPointer(last.first, last.second, 1)
-                                pointerMemory.remember(last.first, last.second)
+                                trackPointer(last.first, last.second)
                                 change.consume()
                             }
                         }
@@ -685,7 +699,7 @@ fun SessionScreen(
                         when (mode) {
                             GestureMode.Drag -> {
                                 session.sendPointer(last.first, last.second, 0)
-                                pointerMemory.remember(last.first, last.second)
+                                trackPointer(last.first, last.second)
                             }
                             GestureMode.Pending -> if (!longPressSent) {
                                 if (isDoubleTap) {
@@ -726,6 +740,7 @@ fun SessionScreen(
                         dstSize = IntSize(size.width.roundToInt(), size.height.roundToInt()),
                         filterQuality = if (zoom > 1.2f) FilterQuality.Medium else FilterQuality.Low,
                     )
+                    drawRemoteCursor(cursor, cursorPosition, remoteWidth.toFloat(), size)
                 }
             } else {
                 RemoteCanvasPlaceholder(
@@ -842,6 +857,32 @@ fun SessionScreen(
             },
         )
     }
+}
+
+/**
+ * Draws the client-side cursor bitmap in framebuffer coordinates, so the canvas
+ * transpose (zoom and pan via graphicsLayer) applies to it automatically.
+ */
+private fun DrawScope.drawRemoteCursor(
+    cursor: SessionEvent.Cursor?,
+    position: IntOffset?,
+    remoteWidth: Float,
+    canvasSize: Size,
+) {
+    if (cursor == null || position == null || remoteWidth <= 0f) return
+    val scale = canvasSize.width / remoteWidth
+    val left = (position.x - cursor.hotspotX) * scale
+    val top = (position.y - cursor.hotspotY) * scale
+    val width = (cursor.bitmap.width * scale).roundToInt().coerceAtLeast(1)
+    val height = (cursor.bitmap.height * scale).roundToInt().coerceAtLeast(1)
+    drawImage(
+        image = cursor.bitmap.asImageBitmap(),
+        srcOffset = IntOffset.Zero,
+        srcSize = IntSize(cursor.bitmap.width, cursor.bitmap.height),
+        dstOffset = IntOffset(left.roundToInt(), top.roundToInt()),
+        dstSize = IntSize(width, height),
+        filterQuality = FilterQuality.Low,
+    )
 }
 
 @Composable

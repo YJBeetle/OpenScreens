@@ -52,6 +52,9 @@ sealed interface SessionEvent {
      */
     data class Frame(val sequence: Long, val bitmap: Bitmap) : SessionEvent
 
+    /** A client-side cursor bitmap supplied through the Cursor pseudo-encoding. */
+    data class Cursor(val bitmap: Bitmap, val hotspotX: Int, val hotspotY: Int) : SessionEvent
+
     data object Disconnected : SessionEvent
     data class Failed(val reason: String) : SessionEvent
 }

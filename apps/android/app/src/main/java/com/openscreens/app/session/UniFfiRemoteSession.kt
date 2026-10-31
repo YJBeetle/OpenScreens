@@ -8,6 +8,7 @@ import com.openscreens.app.data.QualityPreset
 import com.openscreens.app.data.SshAuthMode
 import com.openscreens.app.data.SshKey
 import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -110,7 +111,7 @@ class UniFfiRemoteSession(
             username = connection.username.ifBlank { null },
             password = connection.vncPassword.ifBlank { null },
             shared = true,
-            localCursor = false,
+            localCursor = true,
             quality = when (quality) {
                 QualityPreset.Low -> 3u
                 QualityPreset.Balanced -> 6u
@@ -239,7 +240,7 @@ class UniFfiRemoteSession(
                     is NativeEvent.Resized -> applySize(event.width.toInt(), event.height.toInt())
                     is NativeEvent.Clipboard -> Log.d(TAG, "remote clipboard: ${event.text.length} chars")
                     NativeEvent.Bell -> Log.d(TAG, "remote bell")
-                    is NativeEvent.Cursor,
+                    is NativeEvent.Cursor -> renderCursor(event)
                     is NativeEvent.PointerPosition -> Unit
                     is NativeEvent.Disconnected -> {
                         Log.i(TAG, "remote closed the session: ${event.reason}")
@@ -255,6 +256,35 @@ class UniFfiRemoteSession(
             return
         }
         if (!closed.get()) _events.emit(SessionEvent.Disconnected)
+    }
+
+    private suspend fun renderCursor(event: NativeEvent.Cursor) {
+        val width = event.width.toInt()
+        val height = event.height.toInt()
+        val pixels = event.pixels
+        if (width <= 0 || height <= 0 || pixels.size < width * height * 4) return
+
+        val bitmap = withContext(Dispatchers.Default) {
+            val argb = IntArray(width * height)
+            val buffer = ByteBuffer.wrap(pixels).order(ByteOrder.LITTLE_ENDIAN)
+            for (index in argb.indices) {
+                val bgra = buffer.getInt()
+                val blue = bgra and 0xFF
+                val green = (bgra ushr 8) and 0xFF
+                val red = (bgra ushr 16) and 0xFF
+                val alpha = (bgra ushr 24) and 0xFF
+                argb[index] = (alpha shl 24) or (red shl 16) or (green shl 8) or blue
+            }
+            Bitmap.createBitmap(argb, width, height, Bitmap.Config.ARGB_8888)
+                .apply { setHasAlpha(true) }
+        }
+        _events.emit(
+            SessionEvent.Cursor(
+                bitmap = bitmap,
+                hotspotX = event.hotspotX.toInt(),
+                hotspotY = event.hotspotY.toInt(),
+            ),
+        )
     }
 
     private suspend fun applySize(width: Int, height: Int) {

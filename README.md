@@ -8,7 +8,7 @@ Implemented:
 
 - RFB 3.3/3.7/3.8 client with VNC password and Apple DH authentication (macOS Screen Sharing)
 - Raw, CopyRect, RRE, Hextile, ZRLE, zlib and Tight/JPEG decoding into a BGRA framebuffer
-- Client-side cursor rendering on macOS (Cursor and PointerPos pseudo-encodings) with hover-driven pointer tracking; iOS and Android keep the server-composited cursor
+- Client-side cursor rendering on macOS (hover-driven pointer) and Android (Cursor and PointerPos pseudo-encodings); iOS keeps the server-composited cursor
 - Per-connection Tight JPEG quality selection (the Android quality menu) and paced framebuffer update requests
 - TCP and SSH (`direct-tcpip`) transports; SSH jump hosts and password/private-key auth are exposed in the Android editor (with an encrypted key manager) and in the macOS editor (private keys can be selected directly from `~/.ssh`)
 - Native SwiftUI apps for macOS and iOS/iPadOS with a Metal canvas

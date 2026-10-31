@@ -59,6 +59,8 @@ jobs:
     environment: Build
     env:
       HAS_MAC_SIGNING: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 != '' }}
+    outputs:
+      notarized: ${{ steps.package.outputs.notarized }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -80,17 +82,19 @@ jobs:
             ARCHS=arm64 ONLY_ACTIVE_ARCH=YES \
             CODE_SIGNING_ALLOWED=NO SYMROOT="$PWD/build" build
       - name: Sign, notarize and package
+        id: package
         working-directory: apps/macos
         env:
           APPLE_CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          SIGNING_IDENTITY: ${{ vars.SIGNING_IDENTITY }}
-          SIGNING_TEAM_ID: ${{ vars.SIGNING_TEAM_ID }}
+          APPLE_SIGNING_IDENTITY: ${{ vars.APPLE_SIGNING_IDENTITY }}
+          APPLE_SIGNING_TEAM_ID: ${{ vars.APPLE_SIGNING_TEAM_ID }}
           NOTARY_APPLE_ID: ${{ secrets.NOTARY_APPLE_ID }}
           NOTARY_APP_PASSWORD: ${{ secrets.NOTARY_APP_PASSWORD }}
         run: |
           set -euo pipefail
           APP="$PWD/build/Release/OpenScreens.app"
+          NOTARIZED=false
           if [[ "${HAS_MAC_SIGNING:-false}" == "true" ]]; then
             KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
             security create-keychain -p actions "$KEYCHAIN"
@@ -103,16 +107,18 @@ jobs:
               -s -k actions "$KEYCHAIN" >/dev/null
             security list-keychains -d user -s "$KEYCHAIN" login.keychain-db
             rm -f "$RUNNER_TEMP/signing.p12"
-            codesign --force --options runtime --timestamp --sign "$SIGNING_IDENTITY" "$APP"
+            codesign --force --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" "$APP"
             codesign --verify --deep --strict --verbose=2 "$APP"
             ditto -c -k --keepParent "$APP" "$RUNNER_TEMP/OpenScreens-notarize.zip"
             xcrun notarytool submit "$RUNNER_TEMP/OpenScreens-notarize.zip" \
               --apple-id "$NOTARY_APPLE_ID" --password "$NOTARY_APP_PASSWORD" \
-              --team-id "$SIGNING_TEAM_ID" --wait
+              --team-id "$APPLE_SIGNING_TEAM_ID" --wait
             xcrun stapler staple "$APP"
             xcrun stapler validate "$APP"
             spctl -a -vvv "$APP"
+            NOTARIZED=true
           fi
+          echo "notarized=$NOTARIZED" >> "$GITHUB_OUTPUT"
           ditto -c -k --sequesterRsrc --keepParent \
             "$APP" "$GITHUB_WORKSPACE/OpenScreens-snapshot-macos.zip"
       - uses: actions/upload-artifact@v4
@@ -138,11 +144,15 @@ jobs:
           short="${GITHUB_SHA::7}"
           date="$(date -u +%Y-%m-%d)"
           title="Development snapshot ${short} (${date})"
+          mac_note="The macOS build is unsigned until notarization credentials are configured."
+          if [[ "${{ needs.macos.outputs.notarized }}" == "true" ]]; then
+            mac_note="The macOS build is signed with Developer ID and notarized."
+          fi
           cat > notes.md <<EOF
           Automated development snapshot from \`${GITHUB_SHA}\` (${date}).
 
           - Android APK is signed with the project release key and updates the "Snapshot" channel.
-          - The macOS build is unsigned until notarization credentials are configured.
+          - $mac_note
           - Stable and pre-release channels are unaffected by this rolling release.
           EOF
           if gh release view snapshot --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then

@@ -408,12 +408,18 @@ impl TightDecoder {
         self.bgra.resize(pixels * 4, 0);
         match rgb.len() {
             length if length == pixels * 3 => {
-                for (pixel, rgb) in self.bgra.chunks_exact_mut(4).zip(rgb.chunks_exact(3)) {
+                for (pixel, rgb) in self
+                    .bgra
+                    .as_chunks_mut::<4>()
+                    .0
+                    .iter_mut()
+                    .zip(rgb.as_chunks::<3>().0.iter())
+                {
                     pixel.copy_from_slice(&[rgb[2], rgb[1], rgb[0], 255]);
                 }
             }
             length if length == pixels => {
-                for (pixel, &luma) in self.bgra.chunks_exact_mut(4).zip(rgb.iter()) {
+                for (pixel, &luma) in self.bgra.as_chunks_mut::<4>().0.iter_mut().zip(rgb.iter()) {
                     pixel.copy_from_slice(&[luma, luma, luma, 255]);
                 }
             }
@@ -525,7 +531,10 @@ fn fill_bgra(framebuffer: &mut Framebuffer, rect: Rect, colour: [u8; 4]) {
     let y = usize::from(rect.y);
     for row in 0..usize::from(rect.height) {
         let start = (y + row) * stride + x * 4;
-        for pixel in framebuffer.pixels_mut()[start..start + row_bytes].chunks_exact_mut(4) {
+        for pixel in framebuffer.pixels_mut()[start..start + row_bytes]
+            .as_chunks_mut::<4>()
+            .0
+        {
             pixel.copy_from_slice(&colour);
         }
     }

@@ -458,7 +458,14 @@ mod tests {
             )
             .unwrap();
         assert_eq!(consumed, data.len());
-        assert!(framebuffer.pixels().chunks_exact(4).all(|p| p == white()));
+        assert!(
+            framebuffer
+                .pixels()
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .all(|p| *p == white())
+        );
     }
 
     #[test]
@@ -481,7 +488,14 @@ mod tests {
             )
             .unwrap();
         assert_eq!(consumed, data.len());
-        assert!(framebuffer.pixels().chunks_exact(4).all(|p| p == red()));
+        assert!(
+            framebuffer
+                .pixels()
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .all(|p| *p == red())
+        );
     }
 
     #[test]
@@ -526,7 +540,14 @@ mod tests {
             )
             .unwrap();
         assert_eq!(consumed, message.len());
-        assert!(framebuffer.pixels().chunks_exact(4).all(|p| p == red()));
+        assert!(
+            framebuffer
+                .pixels()
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .all(|p| *p == red())
+        );
     }
 
     #[test]
@@ -581,7 +602,14 @@ mod tests {
                 PixelFormat::bgra8888(),
             )
             .unwrap();
-        assert!(framebuffer.pixels().chunks_exact(4).all(|p| p == red()));
+        assert!(
+            framebuffer
+                .pixels()
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .all(|p| *p == red())
+        );
     }
 
     #[test]
@@ -631,8 +659,10 @@ mod tests {
         assert!(
             framebuffer
                 .pixels()
-                .chunks_exact(4)
-                .all(|p| p == [0, 0, 0, 255])
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .all(|p| *p == [0, 0, 0, 255])
         );
     }
 
@@ -946,8 +976,10 @@ mod tests {
         assert!(
             framebuffer
                 .pixels()
-                .chunks_exact(4)
-                .all(|pixel| pixel == [0, 0, 0, 255])
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .all(|pixel| *pixel == [0, 0, 0, 255])
         );
     }
 
@@ -969,8 +1001,10 @@ mod tests {
         assert!(
             framebuffer
                 .pixels()
-                .chunks_exact(4)
-                .all(|pixel| pixel == [200, 100, 50, 255])
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .all(|pixel| *pixel == [200, 100, 50, 255])
         );
     }
 
@@ -989,7 +1023,14 @@ mod tests {
             )
             .unwrap();
         assert_eq!(consumed, wire.len());
-        assert!(framebuffer.pixels().chunks_exact(4).all(|p| p == red()));
+        assert!(
+            framebuffer
+                .pixels()
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .all(|p| *p == red())
+        );
     }
 
     #[test]
@@ -1195,7 +1236,7 @@ mod tests {
         let mut source = zune_jpeg::JpegDecoder::new(std::io::Cursor::new(TINY_JPEG));
         let rgb = source.decode().unwrap();
         let mut expected = Vec::new();
-        for pixel in rgb.chunks_exact(3) {
+        for pixel in rgb.as_chunks::<3>().0.iter() {
             expected.extend_from_slice(&[pixel[2], pixel[1], pixel[0], 255]);
         }
         assert_eq!(expected.len(), 8 * 8 * 4);
@@ -1506,8 +1547,10 @@ mod tests {
             let end = start + usize::from(width) * 4;
             assert!(
                 framebuffer.pixels()[start..end]
-                    .chunks_exact(4)
-                    .all(|pixel| pixel == blue())
+                    .as_chunks::<4>()
+                    .0
+                    .iter()
+                    .all(|pixel| *pixel == blue())
             );
         }
 

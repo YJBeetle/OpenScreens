@@ -26,7 +26,12 @@ pub fn vnc_auth_response(
 ) -> [u8; VNC_CHALLENGE_LEN] {
     let cipher = Des::new_from_slice(&vnc_des_key(password)).expect("DES key is always 8 bytes");
     let mut response = [0u8; VNC_CHALLENGE_LEN];
-    for (chunk, out) in challenge.chunks_exact(8).zip(response.chunks_exact_mut(8)) {
+    for (chunk, out) in challenge
+        .as_chunks::<8>()
+        .0
+        .iter()
+        .zip(response.as_chunks_mut::<8>().0)
+    {
         let mut block = Block::<Des>::clone_from_slice(chunk);
         cipher.encrypt_block(&mut block);
         out.copy_from_slice(&block);

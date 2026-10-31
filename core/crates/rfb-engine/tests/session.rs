@@ -49,7 +49,9 @@ async fn read_setup(server: &mut DuplexStream) -> Vec<i32> {
     let mut raw = vec![0u8; usize::from(count) * 4];
     server.read_exact(&mut raw).await.unwrap();
     let encodings = raw
-        .chunks_exact(4)
+        .as_chunks::<4>()
+        .0
+        .iter()
         .map(|id| i32::from_be_bytes([id[0], id[1], id[2], id[3]]))
         .collect();
 

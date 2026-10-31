@@ -46,18 +46,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             Ok(Some(Event::Frame { sequence, rects })) => {
                 frames += 1;
                 println!("frame {sequence}: {} rects", rects.len());
-                if frames == 1 {
-                    if let Some((width, height)) = session.size() {
-                        let rect = Rect {
-                            x: 0,
-                            y: 0,
-                            width,
-                            height,
-                        };
-                        let pixels = session.copy_region(rect).ok_or("copy failed")?;
-                        write_bmp(&pixels, width, height, "target/probe-frame.bmp")?;
-                        println!("saved target/probe-frame.bmp ({width}x{height})");
-                    }
+                if frames == 1
+                    && let Some((width, height)) = session.size()
+                {
+                    let rect = Rect {
+                        x: 0,
+                        y: 0,
+                        width,
+                        height,
+                    };
+                    let pixels = session.copy_region(rect).ok_or("copy failed")?;
+                    write_bmp(&pixels, width, height, "target/probe-frame.bmp")?;
+                    println!("saved target/probe-frame.bmp ({width}x{height})");
                 }
                 if frames >= 2 {
                     break;

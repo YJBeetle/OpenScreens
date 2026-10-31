@@ -506,21 +506,20 @@ async fn reader_task<R>(
                     let total_bytes = bytes_read.load(Ordering::Relaxed);
                     let update_bytes = total_bytes.saturating_sub(last_bytes);
                     last_bytes = total_bytes;
-                    if let Some(level) = adaptive.observe(now, update_bytes) {
-                        if commands
+                    if let Some(level) = adaptive.observe(now, update_bytes)
+                        && commands
                             .send(set_encodings(&encodings(local_cursor, level)))
                             .await
                             .is_err()
-                        {
-                            break;
-                        }
+                    {
+                        break;
                     }
-                    if !frame_interval.is_zero() {
-                        if let Some(last) = last_request {
-                            let elapsed = last.elapsed();
-                            if elapsed < frame_interval {
-                                tokio::time::sleep(frame_interval - elapsed).await;
-                            }
+                    if !frame_interval.is_zero()
+                        && let Some(last) = last_request
+                    {
+                        let elapsed = last.elapsed();
+                        if elapsed < frame_interval {
+                            tokio::time::sleep(frame_interval - elapsed).await;
                         }
                     }
                     let (x, y, width, height) =
@@ -760,7 +759,9 @@ fn parse_desktop_screens(
     }
 
     Ok(payload
-        .chunks_exact(DESKTOP_SCREEN_LEN)
+        .as_chunks::<DESKTOP_SCREEN_LEN>()
+        .0
+        .iter()
         .map(|screen| DisplayScreen {
             id: u32::from_be_bytes([screen[0], screen[1], screen[2], screen[3]]),
             x: u16::from_be_bytes([screen[4], screen[5]]),

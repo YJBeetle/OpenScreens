@@ -158,7 +158,7 @@ pub(crate) fn fill_rect(
         let line = dst
             .get_mut(offset..offset + width * 4)
             .ok_or(DecodeError::InvalidData("pixel out of bounds"))?;
-        for pixel in line.chunks_exact_mut(4) {
+        for pixel in line.as_chunks_mut::<4>().0 {
             pixel.copy_from_slice(&bgra);
         }
     }

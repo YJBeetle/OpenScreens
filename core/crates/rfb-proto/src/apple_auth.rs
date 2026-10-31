@@ -302,7 +302,7 @@ fn aes128(key: &[u8; AES_KEY_LEN]) -> Aes128 {
 
 fn encrypt_credential_block(key: &[u8; AES_KEY_LEN], block: &mut [u8; CREDENTIAL_BLOCK_LEN]) {
     let cipher = aes128(key);
-    for chunk in block.chunks_exact_mut(AES_KEY_LEN) {
+    for chunk in block.as_chunks_mut::<AES_KEY_LEN>().0 {
         let mut cipher_block = Block::<Aes128>::clone_from_slice(chunk);
         cipher.encrypt_block(&mut cipher_block);
         chunk.copy_from_slice(&cipher_block);
@@ -330,7 +330,9 @@ mod tests {
         let bytes = value.as_bytes();
         assert_eq!(bytes.len() & 1, 0, "hex string must have even length");
         bytes
-            .chunks_exact(2)
+            .as_chunks::<2>()
+            .0
+            .iter()
             .map(|pair| {
                 let text = std::str::from_utf8(pair).expect("ASCII hex");
                 u8::from_str_radix(text, 16).expect("valid hex")
@@ -356,7 +358,7 @@ mod tests {
     fn decrypt_ecb(key: &[u8; AES_KEY_LEN], ciphertext: &[u8]) -> Vec<u8> {
         let cipher = aes128(key);
         let mut plaintext = ciphertext.to_vec();
-        for chunk in plaintext.chunks_exact_mut(AES_KEY_LEN) {
+        for chunk in plaintext.as_chunks_mut::<AES_KEY_LEN>().0 {
             let mut block = Block::<Aes128>::clone_from_slice(chunk);
             cipher.decrypt_block(&mut block);
             chunk.copy_from_slice(&block);

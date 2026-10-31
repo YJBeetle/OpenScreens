@@ -53,10 +53,8 @@ import androidx.compose.ui.unit.dp
 import com.openscreens.app.BuildConfig
 import com.openscreens.app.R
 import com.openscreens.app.data.AppSettings
-import com.openscreens.app.data.QualityPreset
 import com.openscreens.app.data.ThemeMode
 import com.openscreens.app.data.UpdateChannel
-import com.openscreens.app.ui.common.label
 import com.openscreens.app.ui.theme.ThemedSystemBarIcons
 import com.openscreens.app.update.ApkUpdater
 import com.openscreens.app.update.UpdateCheck
@@ -71,7 +69,6 @@ fun SettingsScreen(
     settings: AppSettings,
     sshKeyCount: Int,
     onThemeModeChange: (ThemeMode) -> Unit,
-    onQualityChange: (QualityPreset) -> Unit,
     updateChannel: UpdateChannel,
     onUpdateChannelChange: (UpdateChannel) -> Unit,
     onManageSshKeys: () -> Unit,
@@ -166,22 +163,6 @@ fun SettingsScreen(
                         onClick = { onThemeModeChange(mode) },
                     )
                     if (index != ThemeMode.entries.lastIndex) {
-                        HorizontalDivider(Modifier.padding(start = 16.dp))
-                    }
-                }
-            }
-
-            Spacer(Modifier.height(4.dp))
-            SectionHeader(stringResource(R.string.settings_streaming))
-            SettingsCard {
-                QualityPreset.entries.forEachIndexed { index, preset ->
-                    SelectionRow(
-                        title = preset.label(),
-                        subtitle = qualitySummary(preset),
-                        selected = settings.quality == preset,
-                        onClick = { onQualityChange(preset) },
-                    )
-                    if (index != QualityPreset.entries.lastIndex) {
                         HorizontalDivider(Modifier.padding(start = 16.dp))
                     }
                 }
@@ -494,11 +475,3 @@ private fun themeLabel(mode: ThemeMode): String = stringResource(
     },
 )
 
-@Composable
-private fun qualitySummary(preset: QualityPreset): String = stringResource(
-    when (preset) {
-        QualityPreset.Low -> R.string.quality_low_summary
-        QualityPreset.Balanced -> R.string.quality_balanced_summary
-        QualityPreset.High -> R.string.quality_high_summary
-    },
-)

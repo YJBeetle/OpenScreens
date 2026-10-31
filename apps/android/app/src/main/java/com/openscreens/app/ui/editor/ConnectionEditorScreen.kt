@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -36,6 +37,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -65,7 +67,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.openscreens.app.R
 import com.openscreens.app.data.Connection
+import com.openscreens.app.data.QualityPreset
 import com.openscreens.app.data.SshAuthMode
+import com.openscreens.app.ui.common.label
+import com.openscreens.app.ui.common.summary
 import com.openscreens.app.data.SshCredentials
 import com.openscreens.app.data.SshKey
 import com.openscreens.app.ui.theme.ThemedSystemBarIcons
@@ -91,6 +96,9 @@ fun ConnectionEditorScreen(
     }
     var vncPassword by rememberSaveable(editorKey) {
         mutableStateOf(connection?.vncPassword.orEmpty())
+    }
+    var quality by rememberSaveable(editorKey) {
+        mutableStateOf(connection?.quality ?: QualityPreset.Balanced)
     }
     var username by rememberSaveable(editorKey) {
         mutableStateOf(connection?.username.orEmpty())
@@ -210,6 +218,7 @@ fun ConnectionEditorScreen(
                 port = portNumber ?: Connection.DEFAULT_VNC_PORT,
                 username = username.trim(),
                 vncPassword = vncPassword,
+                quality = quality,
                 ssh = ssh,
                 wireGuardConfig = wireGuardConfig?.takeIf { it.isNotBlank() },
             )
@@ -339,6 +348,38 @@ fun ConnectionEditorScreen(
                     label = stringResource(R.string.editor_vnc_password),
                     supportingText = stringResource(R.string.editor_optional),
                 )
+
+                Text(
+                    text = stringResource(R.string.settings_streaming),
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                QualityPreset.entries.forEach { preset ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .selectable(
+                                selected = quality == preset,
+                                role = Role.RadioButton,
+                                onClick = { quality = preset },
+                            )
+                            .padding(vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        RadioButton(selected = quality == preset, onClick = null)
+                        Spacer(Modifier.width(12.dp))
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(2.dp),
+                        ) {
+                            Text(preset.label(), style = MaterialTheme.typography.bodyLarge)
+                            Text(
+                                preset.summary(),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
 
                 HorizontalDivider(Modifier.padding(vertical = 4.dp))
 

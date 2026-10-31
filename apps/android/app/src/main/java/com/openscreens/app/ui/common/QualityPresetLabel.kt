@@ -13,3 +13,12 @@ fun QualityPreset.label(): String = stringResource(
         QualityPreset.High -> R.string.quality_high
     },
 )
+
+@Composable
+fun QualityPreset.summary(): String = stringResource(
+    when (this) {
+        QualityPreset.Low -> R.string.quality_low_summary
+        QualityPreset.Balanced -> R.string.quality_balanced_summary
+        QualityPreset.High -> R.string.quality_high_summary
+    },
+)

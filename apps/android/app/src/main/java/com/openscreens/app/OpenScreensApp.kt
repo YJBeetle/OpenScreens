@@ -50,7 +50,6 @@ fun OpenScreensApp(viewModel: MainViewModel = viewModel()) {
                     settings = settings,
                     sshKeyCount = sshKeys.size,
                     onThemeModeChange = viewModel::setThemeMode,
-                    onQualityChange = viewModel::setQuality,
                     updateChannel = settings.updateChannel,
                     onUpdateChannelChange = viewModel::setUpdateChannel,
                     onManageSshKeys = { viewModel.navigate(Route.SshKeys) },
@@ -83,8 +82,8 @@ fun OpenScreensApp(viewModel: MainViewModel = viewModel()) {
                         SessionScreen(
                             connection = connection,
                             sshKey = viewModel.sshKey(connection.ssh?.keyId),
-                            quality = settings.quality,
-                            onQualityChange = viewModel::setQuality,
+                            quality = connection.quality,
+                            onQualityChange = { viewModel.setConnectionQuality(connection.id, it) },
                             onConnected = { viewModel.markConnected(connection.id) },
                             onExit = viewModel::back,
                         )

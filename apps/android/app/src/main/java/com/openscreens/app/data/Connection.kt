@@ -12,6 +12,8 @@ data class Connection(
     val ssh: SshCredentials? = null,
     /** Full wg-quick configuration text; routes the session through userspace WireGuard. */
     val wireGuardConfig: String? = null,
+    /** Streaming quality for this device. */
+    val quality: QualityPreset = QualityPreset.Balanced,
     val lastConnectedAt: Long? = null,
 ) {
     val address: String

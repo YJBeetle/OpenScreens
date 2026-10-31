@@ -74,9 +74,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         settingsStore.save(_settings.value)
     }
 
-    fun setQuality(quality: QualityPreset) {
-        _settings.update { it.copy(quality = quality) }
-        settingsStore.save(_settings.value)
+    fun setConnectionQuality(id: String, quality: QualityPreset) {
+        val connection = connectionStore.find(id) ?: return
+        connectionStore.save(connection.copy(quality = quality))
     }
 
     fun setUpdateChannel(channel: UpdateChannel) {

@@ -131,7 +131,7 @@
     <string name="settings_about">关于</string>
     <string name="settings_app_description">由共享 Rust 核心驱动的开源 VNC 客户端。</string>
     <string name="settings_version">版本 %1$s</string>
-    <string name="settings_license">基于 Apache-2.0 许可</string>
+    <string name="settings_license">基于 AGPL-3.0 许可</string>
     <string name="settings_back">返回</string>
 
     <string name="settings_security">安全</string>

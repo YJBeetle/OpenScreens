@@ -83,7 +83,6 @@ public final class RemoteCanvasRenderer {
     /// dimensions of the *whole* framebuffer; `region` and `pixels` describe the
     /// update only. Rows in `pixels` are tightly packed.
     ///
-    /// A region update is ignored until a full frame has established the texture.
     public func update(region: RemoteRegion, width: Int, height: Int, pixels: Data) {
         update(region: region, width: width, height: height, bytesPerRow: region.width * 4, pixels: pixels)
     }
@@ -91,12 +90,27 @@ public final class RemoteCanvasRenderer {
     /// Uploads a sub-region with an explicit source stride.
     public func update(region: RemoteRegion, width: Int, height: Int, bytesPerRow: Int, pixels: Data) {
         guard !region.isEmpty,
-              width == frameWidth, height == frameHeight,
+              width > 0, height > 0,
               region.isContained(inWidth: width, height: height),
               bytesPerRow >= region.width * 4,
-              pixels.count >= bytesPerRow * region.height,
-              let texture
+              pixels.count >= bytesPerRow * region.height
         else { return }
+
+        let needsInitialization = texture == nil || frameWidth != width || frameHeight != height
+        guard let texture = makeTextureIfNeeded(width: width, height: height) else { return }
+
+        if needsInitialization {
+            let zeros = Data(count: width * height * 4)
+            zeros.withUnsafeBytes { buffer in
+                guard let base = buffer.baseAddress else { return }
+                texture.replace(
+                    region: MTLRegionMake2D(0, 0, width, height),
+                    mipmapLevel: 0,
+                    withBytes: base,
+                    bytesPerRow: width * 4
+                )
+            }
+        }
 
         let metalRegion = MTLRegionMake2D(region.x, region.y, region.width, region.height)
         pixels.withUnsafeBytes { buffer in

@@ -8,7 +8,7 @@ Implemented:
 
 - RFB 3.3/3.7/3.8 client with VNC password and Apple DH authentication (macOS Screen Sharing)
 - Raw, CopyRect, RRE, Hextile, ZRLE, zlib and Tight/JPEG decoding into a BGRA framebuffer
-- TCP and SSH (`direct-tcpip`) transports; SSH jump hosts and password/private-key auth are exposed in the Android editor, with an encrypted SSH key manager
+- TCP and SSH (`direct-tcpip`) transports; SSH jump hosts and password/private-key auth are exposed in the Android editor (with an encrypted key manager) and in the macOS editor (private keys can be selected directly from `~/.ssh`)
 - Native SwiftUI apps for macOS and iOS/iPadOS with a Metal canvas
 - Compose Material 3 app for Android
 

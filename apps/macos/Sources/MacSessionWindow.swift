@@ -18,6 +18,7 @@ struct MacSessionWindow: View {
                 }
                 .navigationTitle(model.profile.name)
                 .navigationSubtitle(model.profile.endpoint)
+                .focusedSceneValue(\.sessionCommands, commands(for: model))
             } else if store.connection(id: route.profileID) != nil {
                 ProgressView("Opening Session…")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -37,5 +38,23 @@ struct MacSessionWindow: View {
     private func createModelIfNeeded() {
         guard model == nil, let profile = store.connection(id: route.profileID) else { return }
         model = SessionViewModel(profile: profile, service: UniFfiSessionService())
+    }
+
+    private func commands(for model: SessionViewModel) -> SessionCommands {
+        SessionCommands(
+            reconnect: { model.reconnect() },
+            disconnect: {
+                model.disconnect()
+                dismissWindow()
+            },
+            takeScreenshot: { model.grabScreenshot() },
+            toggleToolbar: { model.toggleChrome() },
+            toggleObserveMode: { model.toggleObserveMode() },
+            setCursorMode: { model.setCursorMode($0) },
+            showsToolbar: model.showsChrome,
+            isObserving: model.isObserving,
+            cursorMode: model.cursorMode,
+            isConnected: model.state.isConnected
+        )
     }
 }

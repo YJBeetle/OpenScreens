@@ -17,6 +17,24 @@ final class VNCLinkTests: XCTestCase {
         )
     }
 
+    func testBuildsLinksThatParseBack() {
+        XCTAssertEqual(
+            VNCLink(host: "studio.local").url?.absoluteString,
+            "vnc://studio.local"
+        )
+        XCTAssertEqual(
+            VNCLink(host: "10.0.0.2", port: 5901).url?.absoluteString,
+            "vnc://10.0.0.2:5901"
+        )
+        let userLink = VNCLink(host: "build.local", port: 5901, username: "ci")
+        XCTAssertEqual(userLink.url?.absoluteString, "vnc://ci@build.local:5901")
+        XCTAssertEqual(userLink.url.flatMap(VNCLink.parse), userLink)
+
+        let ipv6 = VNCLink(host: "::1", port: 5901)
+        XCTAssertEqual(ipv6.url?.absoluteString, "vnc://[::1]:5901")
+        XCTAssertEqual(ipv6.url.flatMap(VNCLink.parse), ipv6)
+    }
+
     func testRejectsMalformedLinks() {
         XCTAssertNil(VNCLink.parse(URL(string: "https://studio.local")!))
         XCTAssertNil(VNCLink.parse(URL(string: "vnc://")!))

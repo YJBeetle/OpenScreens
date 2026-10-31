@@ -16,7 +16,11 @@ public struct VNCLink: Hashable, Sendable {
     public static func parse(_ url: URL) -> VNCLink? {
         guard url.scheme?.lowercased() == "vnc" else { return nil }
         guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return nil }
-        let host = components.host?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        var host = components.host?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if host.hasPrefix("["), host.hasSuffix("]") {
+            host.removeFirst()
+            host.removeLast()
+        }
         guard !host.isEmpty else { return nil }
         let port = components.port ?? 5900
         guard (1...65535).contains(port) else { return nil }
@@ -25,6 +29,19 @@ public struct VNCLink: Hashable, Sendable {
             port: port,
             username: components.user?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         )
+    }
+
+    public var url: URL? {
+        var components = URLComponents()
+        components.scheme = "vnc"
+        components.host = host.contains(":") ? "[\(host)]" : host
+        if port != 5900 {
+            components.port = port
+        }
+        if !username.isEmpty {
+            components.user = username
+        }
+        return components.url
     }
 }
 

@@ -23,6 +23,7 @@ struct OpenScreensMacApp: App {
         .defaultSize(width: 1080, height: 700)
         .commands {
             SidebarCommands()
+            SessionMenuCommands()
             CommandGroup(after: .appInfo) {
                 Button("Check for Updates…") {
                     updater.check()

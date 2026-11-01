@@ -37,6 +37,7 @@ const FILTER_GRADIENT: u8 = 2;
 enum Filter {
     Copy,
     Palette,
+    Gradient,
 }
 
 /// Progress of the rectangle currently being decompressed.
@@ -147,9 +148,7 @@ impl TightDecoder {
                     filter = match id & 0x0f {
                         FILTER_COPY => Filter::Copy,
                         FILTER_PALETTE => Filter::Palette,
-                        FILTER_GRADIENT => {
-                            return Err(DecodeError::InvalidData("tight gradient filter"));
-                        }
+                        FILTER_GRADIENT => Filter::Gradient,
                         _ => return Err(DecodeError::InvalidData("tight filter")),
                     };
                 }
@@ -332,9 +331,49 @@ impl TightDecoder {
             Filter::Palette => {
                 self.render_palette(pending, width, height)?;
             }
+            Filter::Gradient => {
+                self.render_gradient(pending, width, height)?;
+            }
         }
 
         blit(framebuffer, pending.rect, &self.bgra);
+        Ok(())
+    }
+
+    /// Gradient filter: component deltas predicted from the previous decoded
+    /// row, the pixel to the left and the previous row's left neighbour.
+    /// Predictions are clamped per component before the delta is added.
+    fn render_gradient(
+        &mut self,
+        pending: &Pending,
+        width: usize,
+        height: usize,
+    ) -> Result<(), DecodeError> {
+        let mut cursor = Cursor::new(&pending.output);
+        let mut previous = vec![0u8; width * 4];
+        let mut current = vec![0u8; width * 4];
+        for row in 0..height {
+            for column in 0..width {
+                let mut pixel = read_tpixel(&mut cursor, pending.pixel_format)?;
+                for channel in 0..3 {
+                    let estimate = if column == 0 {
+                        i32::from(previous[channel])
+                    } else {
+                        let left = column * 4 - 4;
+                        (i32::from(previous[column * 4 + channel])
+                            + i32::from(current[left + channel])
+                            - i32::from(previous[left + channel]))
+                        .clamp(0, 255)
+                    };
+                    pixel[channel] = pixel[channel].wrapping_add(estimate as u8);
+                }
+                let offset = column * 4;
+                current[offset..offset + 4].copy_from_slice(&pixel);
+                let target = (row * width + column) * 4;
+                self.bgra[target..target + 4].copy_from_slice(&pixel);
+            }
+            std::mem::swap(&mut previous, &mut current);
+        }
         Ok(())
     }
 
@@ -441,7 +480,7 @@ impl Pending {
             .checked_mul(height)
             .ok_or(DecodeError::InvalidData("tight rectangle too large"))?;
         match self.filter {
-            Filter::Copy => pixels
+            Filter::Copy | Filter::Gradient => pixels
                 .checked_mul(tpixel)
                 .ok_or(DecodeError::InvalidData("tight rectangle too large")),
             Filter::Palette => {

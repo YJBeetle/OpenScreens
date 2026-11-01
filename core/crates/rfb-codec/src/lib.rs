@@ -1187,19 +1187,86 @@ mod tests {
     }
 
     #[test]
-    fn tight_rejects_gradient_filter() {
+    fn tight_decodes_gradient_filter_with_predictor() {
+        let mut framebuffer = Framebuffer::new(3, 2);
+        let mut decoder = Decoder::new();
+        let payload: Vec<u8> = [
+            [10u8, 20, 30],
+            [40, 40, 40],
+            [40, 40, 40],
+            [251, 242, 233],
+            [15, 24, 33],
+            [20, 20, 20],
+        ]
+        .concat();
+        let compressed = TightEncoder::new().chunk(&payload);
+        let wire = tight_wire(0, Some(2), &compressed);
+        let consumed = decoder
+            .decode(
+                &mut framebuffer,
+                rect(0, 0, 3, 2),
+                Encoding::Tight,
+                &wire,
+                PixelFormat::bgra8888(),
+            )
+            .unwrap();
+        assert_eq!(consumed, wire.len());
+        assert_eq!(
+            framebuffer.pixels(),
+            bgras(&[
+                [30, 20, 10, 255],
+                [70, 60, 50, 255],
+                [110, 100, 90, 255],
+                [7, 6, 5, 255],
+                [80, 70, 60, 255],
+                [140, 130, 120, 255],
+            ])
+        );
+    }
+
+    #[test]
+    fn tight_gradient_clamps_prediction_per_component() {
         let mut framebuffer = Framebuffer::new(2, 2);
         let mut decoder = Decoder::new();
+        let payload: Vec<u8> = [[0u8, 0, 0], [255, 255, 255], [255, 255, 255], [0, 0, 0]].concat();
+        let compressed = TightEncoder::new().chunk(&payload);
+        let wire = tight_wire(0, Some(2), &compressed);
+        decoder
+            .decode(
+                &mut framebuffer,
+                rect(0, 0, 2, 2),
+                Encoding::Tight,
+                &wire,
+                PixelFormat::bgra8888(),
+            )
+            .unwrap();
+        assert_eq!(
+            framebuffer.pixels(),
+            bgras(&[
+                [0, 0, 0, 255],
+                [255, 255, 255, 255],
+                [255, 255, 255, 255],
+                [255, 255, 255, 255]
+            ])
+        );
+    }
+
+    #[test]
+    fn tight_rejects_unknown_filter() {
+        let mut framebuffer = Framebuffer::new(2, 2);
+        let mut decoder = Decoder::new();
+        let compressed = TightEncoder::new().chunk(&[0, 0, 0, 0]);
+        let wire = tight_wire(0, Some(9), &compressed);
         let error = decoder
             .decode(
                 &mut framebuffer,
                 rect(0, 0, 2, 2),
                 Encoding::Tight,
-                &[0x40, 0x02],
+                &wire,
                 PixelFormat::bgra8888(),
             )
             .unwrap_err();
-        assert_eq!(error, DecodeError::InvalidData("tight gradient filter"));
+        assert_eq!(error, DecodeError::InvalidData("tight filter"));
     }
 
     #[test]

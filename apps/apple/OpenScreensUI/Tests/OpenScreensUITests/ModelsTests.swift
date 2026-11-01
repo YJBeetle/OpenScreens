@@ -41,6 +41,29 @@ final class VNCLinkTests: XCTestCase {
         XCTAssertNil(VNCLink.parse(URL(string: "vnc://host:70000")!))
         XCTAssertNil(VNCLink.parse(URL(string: "vnc://host:0")!))
     }
+
+    func testParsesQuickConnectInput() {
+        XCTAssertEqual(
+            VNCLink.parse(userInput: "  studio.local  "),
+            VNCLink(host: "studio.local")
+        )
+        XCTAssertEqual(
+            VNCLink.parse(userInput: "designer@studio.local:5902"),
+            VNCLink(host: "studio.local", port: 5902, username: "designer")
+        )
+        XCTAssertEqual(
+            VNCLink.parse(userInput: "VNC://studio.local:5903"),
+            VNCLink(host: "studio.local", port: 5903)
+        )
+        XCTAssertEqual(
+            VNCLink.parse(userInput: "[::1]:5901"),
+            VNCLink(host: "::1", port: 5901)
+        )
+        XCTAssertNil(VNCLink.parse(userInput: ""))
+        XCTAssertNil(VNCLink.parse(userInput: "   "))
+        XCTAssertNil(VNCLink.parse(userInput: "https://studio.local"))
+        XCTAssertNil(VNCLink.parse(userInput: "vnc://host:70000"))
+    }
 }
 
 final class ConnectionProfileTests: XCTestCase {

@@ -24,6 +24,7 @@ struct OpenScreensMacApp: App {
         .commands {
             SidebarCommands()
             SessionMenuCommands()
+            LibraryMenuCommands()
             CommandGroup(after: .appInfo) {
                 Button("Check for Updates…") {
                     updater.check()

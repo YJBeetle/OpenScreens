@@ -386,3 +386,9 @@
 "Bottom Left" = "左下角";
 "Bottom Right" = "右下角";
 "Show Dock" = "显示 Dock";
+
+/* MARK: - Quick connect */
+"Quick Connect" = "快速连接";
+"Open a session by entering its vnc:// address." = "输入 vnc:// 地址以打开会话。";
+"Enter a valid vnc:// address." = "请输入有效的 vnc:// 地址。";
+"Port defaults to 5900." = "端口默认为 5900。";

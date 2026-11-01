@@ -10,6 +10,7 @@ struct IPadLibraryView: View {
     @State private var searchText = ""
     @State private var activeSheet: IOSLibrarySheet?
     @State private var activeProfile: ConnectionProfile?
+    @State private var pendingQuickConnect: URL?
 
     private var isSearching: Bool {
         !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -24,6 +25,14 @@ struct IPadLibraryView: View {
                 .navigationTitle(navigationTitle)
                 .searchable(text: $searchText, prompt: "Search connections")
                 .toolbar {
+                    ToolbarItem(placement: .primaryAction) {
+                        Button {
+                            activeSheet = .quickConnect
+                        } label: {
+                            Label("Quick Connect", systemImage: "bolt.horizontal")
+                        }
+                    }
+
                     ToolbarItem(placement: .primaryAction) {
                         Button {
                             activeSheet = .editor(
@@ -44,7 +53,7 @@ struct IPadLibraryView: View {
                 }
         }
         .navigationSplitViewStyle(.balanced)
-        .sheet(item: $activeSheet) { sheet in
+        .sheet(item: $activeSheet, onDismiss: connectPendingLink) { sheet in
             switch sheet {
             case .editor(let route):
                 ConnectionEditorView(mode: route.mode, defaultGroupID: route.groupID)
@@ -56,6 +65,12 @@ struct IPadLibraryView: View {
                 SettingsSheet(appVersion: IOSAppInfo.version, buildVersion: IOSAppInfo.buildVersion)
                     .environment(store)
                     .environment(settings)
+            case .quickConnect:
+                QuickConnectView { url in
+                    pendingQuickConnect = url
+                }
+                .presentationDetents([.height(300)])
+                .presentationDragIndicator(.visible)
             }
         }
         .fullScreenCover(item: $activeProfile) { profile in
@@ -133,6 +148,13 @@ struct IPadLibraryView: View {
     private func openSession(_ profile: ConnectionProfile) {
         store.markConnected(id: profile.id)
         activeProfile = profile
+    }
+
+    private func connectPendingLink() {
+        guard let url = pendingQuickConnect else { return }
+        pendingQuickConnect = nil
+        guard let profile = store.resolveLink(url) else { return }
+        openSession(profile)
     }
 
     private func openSessionInNewWindow(_ profile: ConnectionProfile) {

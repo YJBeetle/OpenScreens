@@ -8,7 +8,7 @@ struct MacLibraryView: View {
 
     @State private var selection: LibraryDestination? = .section(.nearby)
     @State private var searchText = ""
-    @State private var editorRoute: EditorRoute?
+    @State private var activeSheet: LibrarySheet?
 
     private var isSearching: Bool {
         !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -25,7 +25,16 @@ struct MacLibraryView: View {
                 .toolbar {
                     ToolbarItem(placement: .primaryAction) {
                         Button {
-                            editorRoute = EditorRoute(mode: .create(.custom))
+                            activeSheet = .quickConnect
+                        } label: {
+                            Label("Quick Connect", systemImage: "bolt.horizontal")
+                        }
+                        .help("Quick Connect (⌘K)")
+                    }
+
+                    ToolbarItem(placement: .primaryAction) {
+                        Button {
+                            activeSheet = .editor(EditorRoute(mode: .create(.custom)))
                         } label: {
                             Label("New Connection", systemImage: "plus")
                         }
@@ -41,11 +50,26 @@ struct MacLibraryView: View {
                 }
         }
         .navigationSplitViewStyle(.balanced)
-        .sheet(item: $editorRoute) { route in
-            ConnectionEditorView(mode: route.mode, defaultGroupID: route.groupID)
+        .focusedSceneValue(
+            \.libraryCommands,
+            LibraryCommands(quickConnect: { activeSheet = .quickConnect })
+        )
+        .sheet(item: $activeSheet) { sheet in
+            switch sheet {
+            case .editor(let route):
+                ConnectionEditorView(mode: route.mode, defaultGroupID: route.groupID)
+                    .environment(store)
+                    .environment(settings)
+                    .frame(width: 720, height: 620)
+            case .quickConnect:
+                QuickConnectView { url in
+                    guard let profile = store.resolveLink(url) else { return }
+                    connect(profile)
+                }
                 .environment(store)
                 .environment(settings)
-                .frame(width: 720, height: 620)
+                .frame(width: 440)
+            }
         }
         .onAppear(perform: autoConnectForTesting)
         .onOpenURL { url in
@@ -73,7 +97,7 @@ struct MacLibraryView: View {
                     onEdit: edit,
                     onDuplicate: duplicate,
                     onDelete: delete,
-                    onNewConnection: { editorRoute = EditorRoute(mode: .create(.custom)) }
+                    onNewConnection: { activeSheet = .editor(EditorRoute(mode: .create(.custom))) }
                 )
             case .group(let groupID):
                 LibrarySectionView(
@@ -84,7 +108,7 @@ struct MacLibraryView: View {
                     onDuplicate: duplicate,
                     onDelete: delete,
                     onNewConnection: {
-                        editorRoute = EditorRoute(mode: .create(.custom), groupID: groupID)
+                        activeSheet = .editor(EditorRoute(mode: .create(.custom), groupID: groupID))
                     }
                 )
             }
@@ -122,7 +146,7 @@ struct MacLibraryView: View {
     }
 
     private func edit(_ profile: ConnectionProfile) {
-        editorRoute = EditorRoute(mode: .edit(profile))
+        activeSheet = .editor(EditorRoute(mode: .edit(profile)))
     }
 
     private func duplicate(_ profile: ConnectionProfile) {
@@ -138,4 +162,16 @@ private struct EditorRoute: Identifiable {
     let id = UUID()
     let mode: ConnectionEditorMode
     var groupID: UUID?
+}
+
+private enum LibrarySheet: Identifiable {
+    case editor(EditorRoute)
+    case quickConnect
+
+    var id: String {
+        switch self {
+        case .editor(let route): "editor-\(route.id.uuidString)"
+        case .quickConnect: "quick-connect"
+        }
+    }
 }

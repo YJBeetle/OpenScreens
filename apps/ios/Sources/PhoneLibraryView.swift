@@ -30,6 +30,7 @@ struct PhoneLibraryView: View {
     @State private var groupDialog: GroupDialog?
     @State private var groupName = ""
     @State private var pendingGroupDeletion: LibraryGroup?
+    @State private var pendingQuickConnect: URL?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -44,7 +45,7 @@ struct PhoneLibraryView: View {
                 .padding(.top, 6)
                 .padding(.bottom, 4)
         }
-        .sheet(item: $activeSheet) { sheet in
+        .sheet(item: $activeSheet, onDismiss: connectPendingLink) { sheet in
             switch sheet {
             case .editor(let route):
                 ConnectionEditorView(mode: route.mode, defaultGroupID: route.groupID)
@@ -56,6 +57,12 @@ struct PhoneLibraryView: View {
                 SettingsSheet(appVersion: IOSAppInfo.version, buildVersion: IOSAppInfo.buildVersion)
                     .environment(store)
                     .environment(settings)
+            case .quickConnect:
+                QuickConnectView { url in
+                    pendingQuickConnect = url
+                }
+                .presentationDetents([.height(300)])
+                .presentationDragIndicator(.visible)
             }
         }
         .fullScreenCover(item: $activeProfile) { profile in
@@ -156,6 +163,9 @@ struct PhoneLibraryView: View {
                         activeSheet = .editor(
                             IOSEditorRoute(mode: .create(.custom), groupID: effectiveGroupID)
                         )
+                    }
+                    FloatingIconButton(systemImage: "bolt.horizontal", title: "Quick Connect") {
+                        activeSheet = .quickConnect
                     }
                     FloatingIconButton(systemImage: "gearshape", title: "Settings") {
                         activeSheet = .settings
@@ -357,6 +367,13 @@ struct PhoneLibraryView: View {
     private func openSession(_ profile: ConnectionProfile) {
         store.markConnected(id: profile.id)
         activeProfile = profile
+    }
+
+    private func connectPendingLink() {
+        guard let url = pendingQuickConnect else { return }
+        pendingQuickConnect = nil
+        guard let profile = store.resolveLink(url) else { return }
+        openSession(profile)
     }
 
     private func edit(_ profile: ConnectionProfile) {

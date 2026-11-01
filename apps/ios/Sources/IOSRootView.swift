@@ -76,11 +76,13 @@ struct IOSSessionWindow: View {
 enum IOSLibrarySheet: Identifiable {
     case editor(IOSEditorRoute)
     case settings
+    case quickConnect
 
     var id: String {
         switch self {
         case .editor(let route): "editor-\(route.id.uuidString)"
         case .settings: "settings"
+        case .quickConnect: "quick-connect"
         }
     }
 }

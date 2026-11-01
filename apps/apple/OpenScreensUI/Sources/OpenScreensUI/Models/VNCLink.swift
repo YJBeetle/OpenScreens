@@ -31,6 +31,16 @@ public struct VNCLink: Hashable, Sendable {
         )
     }
 
+    /// Parses text typed into a Quick Connect field. A bare `host[:port]` is
+    /// treated as a `vnc://` address; other schemes are rejected.
+    public static func parse(userInput: String) -> VNCLink? {
+        let trimmed = userInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        let candidate = trimmed.contains("://") ? trimmed : "vnc://\(trimmed)"
+        guard let url = URL(string: candidate) else { return nil }
+        return parse(url)
+    }
+
     public var url: URL? {
         var components = URLComponents()
         components.scheme = "vnc"

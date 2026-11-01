@@ -9,7 +9,7 @@ struct OpenScreensMacApp: App {
     @State private var updater = AppUpdater()
 
     var body: some Scene {
-        WindowGroup {
+        Window("OpenScreens", id: MacSceneID.library) {
             MacLibraryView()
                 .environment(connections)
                 .environment(settings)
@@ -52,6 +52,12 @@ struct OpenScreensMacApp: App {
         }
         .defaultSize(width: 1120, height: 760)
 
+        MenuBarExtra("OpenScreens", systemImage: "display") {
+            MacMenuBarContent(updater: updater)
+                .environment(connections)
+        }
+        .menuBarExtraStyle(.menu)
+
         Settings {
             MacSettingsView(
                 appVersion: MacAppInfo.version,
@@ -68,6 +74,7 @@ struct OpenScreensMacApp: App {
 }
 
 enum MacSceneID {
+    static let library = "library"
     static let session = "session"
 }
 

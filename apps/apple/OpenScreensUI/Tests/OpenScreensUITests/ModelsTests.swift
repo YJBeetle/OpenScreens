@@ -137,6 +137,25 @@ final class AppSettingsTests: XCTestCase {
         XCTAssertEqual(right.toolbarDock.orientation, .vertical)
         XCTAssertEqual(ToolbarDock.bottom.orientation, .horizontal)
     }
+
+    func testBiometricLockRoundTripsAndDefaultsOff() throws {
+        let encoded = try JSONEncoder().encode(AppSettings(requireBiometrics: true))
+        let object = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: encoded) as? [String: Any]
+        )
+        XCTAssertEqual(object["requireBiometrics"] as? Bool, true)
+
+        var legacy = object
+        legacy.removeValue(forKey: "requireBiometrics")
+        let decoded = try JSONDecoder().decode(
+            AppSettings.self,
+            from: JSONSerialization.data(withJSONObject: legacy)
+        )
+        XCTAssertFalse(decoded.requireBiometrics)
+
+        let enabled = try JSONDecoder().decode(AppSettings.self, from: encoded)
+        XCTAssertTrue(enabled.requireBiometrics)
+    }
 }
 
 @MainActor

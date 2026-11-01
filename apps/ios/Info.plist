@@ -35,6 +35,8 @@
 	<true/>
 	<key>OpenScreensBuildVersion</key>
 	<string>$(OPENSCREENS_BUILD_VERSION)</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Unlock OpenScreens with Face ID.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>OpenScreens saves screenshots of remote sessions to your photo library.</string>
 	<key>UIApplicationSceneManifest</key>

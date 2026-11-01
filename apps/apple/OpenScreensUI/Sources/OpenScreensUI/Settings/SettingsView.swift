@@ -157,13 +157,21 @@ public struct SettingsView: View {
 
             #if os(iOS)
             Section {
+                if AppLock.isAvailable {
+                    Toggle(AppLock.settingTitle, isOn: $settings.settings.requireBiometrics)
+                }
+
                 NavigationLink("SSH Keys") {
                     SSHKeyManagerView()
                 }
             } header: {
                 Text("Security")
             } footer: {
-                Text("Private keys imported for SSH tunnels are kept in the Keychain.")
+                if AppLock.isAvailable {
+                    Text("OpenScreens locks when you leave the app. Unlock with \(AppLock.biometryName). Imported SSH keys are kept in the Keychain.")
+                } else {
+                    Text("Private keys imported for SSH tunnels are kept in the Keychain.")
+                }
             }
             #endif
 

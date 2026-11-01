@@ -392,3 +392,17 @@
 "Open a session by entering its vnc:// address." = "输入 vnc:// 地址以打开会话。";
 "Enter a valid vnc:// address." = "请输入有效的 vnc:// 地址。";
 "Port defaults to 5900." = "端口默认为 5900。";
+
+/* MARK: - App lock */
+"OpenScreens is Locked" = "OpenScreens 已锁定";
+"Unlock to access your saved connections." = "解锁后可访问已保存的连接。";
+"Unlock with Face ID" = "使用 Face ID 解锁";
+"Unlock with Touch ID" = "使用 Touch ID 解锁";
+"Unlock" = "解锁";
+"Biometrics" = "生物识别";
+"Require Face ID" = "需要 Face ID";
+"Require Touch ID" = "需要 Touch ID";
+"Require Biometrics" = "需要生物识别";
+"Authentication is unavailable." = "当前无法使用身份验证。";
+"Authentication failed. Try again." = "验证失败，请重试。";
+"OpenScreens locks when you leave the app. Unlock with %@. Imported SSH keys are kept in the Keychain." = "离开 OpenScreens 后会自动锁定，使用 %@ 解锁。导入的 SSH 密钥保存在钥匙串中。";

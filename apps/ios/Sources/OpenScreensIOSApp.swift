@@ -6,13 +6,16 @@ struct OpenScreensIOSApp: App {
     @State private var connections = ConnectionStore()
     @State private var settings = SettingsStore()
     @State private var sshKeys = SSHKeyVault()
+    @State private var lock = AppLock()
 
     var body: some Scene {
         WindowGroup {
             IOSRootView()
+                .appLockLifecycle()
                 .environment(connections)
                 .environment(settings)
                 .environment(sshKeys)
+                .environment(lock)
                 .preferredColorScheme(settings.settings.appearance.colorScheme)
                 .tint(Theme.Colors.accent)
         }
@@ -33,9 +36,11 @@ struct OpenScreensIOSApp: App {
                     }
                 }
             }
+            .appLockLifecycle()
             .environment(connections)
             .environment(settings)
             .environment(sshKeys)
+            .environment(lock)
             .preferredColorScheme(settings.settings.appearance.colorScheme)
             .tint(Theme.Colors.accent)
         }

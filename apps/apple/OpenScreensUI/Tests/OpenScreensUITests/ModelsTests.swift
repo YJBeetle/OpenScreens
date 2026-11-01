@@ -75,6 +75,33 @@ final class ConnectionProfileTests: XCTestCase {
     }
 }
 
+final class AppSettingsTests: XCTestCase {
+    func testToolbarDockRoundTripsAndDefaultsToBottom() throws {
+        let encoded = try JSONEncoder().encode(AppSettings(toolbarDock: .left))
+        var object = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: encoded) as? [String: Any]
+        )
+        XCTAssertEqual(object["toolbarDock"] as? String, "left")
+
+        var legacy = object
+        legacy.removeValue(forKey: "toolbarDock")
+        let decoded = try JSONDecoder().decode(
+            AppSettings.self,
+            from: JSONSerialization.data(withJSONObject: legacy)
+        )
+        XCTAssertEqual(decoded.toolbarDock, .bottom)
+
+        object["toolbarDock"] = "right"
+        let right = try JSONDecoder().decode(
+            AppSettings.self,
+            from: JSONSerialization.data(withJSONObject: object)
+        )
+        XCTAssertEqual(right.toolbarDock, .right)
+        XCTAssertEqual(right.toolbarDock.orientation, .vertical)
+        XCTAssertEqual(ToolbarDock.bottom.orientation, .horizontal)
+    }
+}
+
 @MainActor
 final class ConnectionStoreTests: XCTestCase {
     private func temporaryFileURL() -> URL {

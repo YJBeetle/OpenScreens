@@ -8,12 +8,13 @@ struct SessionToolbar: View {
     let items: [SessionToolbarItem]
     let onDownload: () -> Void
     let onDisconnect: () -> Void
+    var showsDragHandle = false
 
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     private var buttonSize: CGFloat {
         #if os(iOS)
-        orientation == .vertical || horizontalSizeClass == .compact ? 34 : 40
+        horizontalSizeClass == .regular ? 40 : (orientation == .vertical ? 34 : 40)
         #else
         40
         #endif
@@ -21,6 +22,10 @@ struct SessionToolbar: View {
 
     var body: some View {
         FloatingBar(orientation: orientation) {
+            if showsDragHandle {
+                ToolbarDragHandle(orientation: orientation)
+            }
+
             ForEach(items) { item in
                 toolbarItem(item)
             }
@@ -205,6 +210,30 @@ struct SessionToolbar: View {
             get: { model.scaling },
             set: { model.setScaling($0) }
         )
+    }
+
+    /// Grab area for moving the floating toolbar between screen edges.
+    private struct ToolbarDragHandle: View {
+        let orientation: FloatingBarOrientation
+
+        var body: some View {
+            Group {
+                if orientation == .horizontal {
+                    VStack(spacing: 3) { dot; dot; dot }
+                        .frame(width: 10, height: 30)
+                } else {
+                    HStack(spacing: 3) { dot; dot; dot }
+                        .frame(width: 30, height: 10)
+                }
+            }
+            .accessibilityHidden(true)
+        }
+
+        private var dot: some View {
+            Circle()
+                .fill(.secondary.opacity(0.7))
+                .frame(width: 3, height: 3)
+        }
     }
 
     private func menuIcon(_ systemImage: String, title: String) -> some View {

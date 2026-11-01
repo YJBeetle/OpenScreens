@@ -12,6 +12,7 @@ public struct SessionScreen: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.displayScale) private var displayScale
     @Environment(\.verticalSizeClass) private var verticalSizeClass
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     private let model: SessionViewModel
     private let onClose: () -> Void
@@ -23,6 +24,8 @@ public struct SessionScreen: View {
     @State private var appliedChromeDefault = false
     @State private var pinchStart: (zoom: CGFloat, pan: CGSize, focal: CGPoint)?
     @State private var pressIndicator: PressIndicator?
+    @State private var toolbarDrag: CGSize = .zero
+    @State private var toolbarSize: CGSize = .zero
 
     #if os(macOS)
     @FocusState private var keyboardFocused: Bool
@@ -404,22 +407,9 @@ public struct SessionScreen: View {
                         Spacer(minLength: 0)
                     }
                     Spacer(minLength: 0)
-                    if !usesVerticalToolbar {
-                        HStack {
-                            Spacer(minLength: 0)
-                            sessionToolbar(orientation: .horizontal)
-                            Spacer(minLength: 0)
-                        }
-                    }
                 }
 
-                if usesVerticalToolbar {
-                    HStack {
-                        Spacer(minLength: 0)
-                        sessionToolbar(orientation: .vertical)
-                    }
-                    .padding(.trailing, 4)
-                }
+                toolbarChrome
             }
             .padding(.horizontal, 12)
             .padding(.top, 10)
@@ -453,6 +443,108 @@ public struct SessionScreen: View {
         #endif
     }
 
+    /// iPad sessions let the toolbar dock to any edge; other layouts keep the
+    /// fixed bottom bar or compact-height rail.
+    private var isToolbarDockable: Bool {
+        #if os(iOS)
+        horizontalSizeClass == .regular
+        #else
+        false
+        #endif
+    }
+
+    @ViewBuilder
+    private var toolbarChrome: some View {
+        if isToolbarDockable {
+            GeometryReader { proxy in
+                let dock = settings.settings.toolbarDock
+                sessionToolbar(orientation: dock.orientation)
+                    .onGeometryChange(for: CGSize.self, of: { $0.size }) { toolbarSize = $0 }
+                    .contentShape(Capsule(style: .continuous))
+                    .offset(toolbarDrag)
+                    .highPriorityGesture(toolbarDragGesture(in: proxy.size))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: alignment(for: dock))
+                    .padding(dockPadding(for: dock))
+            }
+        } else if usesVerticalToolbar {
+            HStack {
+                Spacer(minLength: 0)
+                sessionToolbar(orientation: .vertical)
+            }
+            .padding(.trailing, 4)
+        } else {
+            VStack {
+                Spacer(minLength: 0)
+                HStack {
+                    Spacer(minLength: 0)
+                    sessionToolbar(orientation: .horizontal)
+                    Spacer(minLength: 0)
+                }
+            }
+        }
+    }
+
+    private func alignment(for dock: ToolbarDock) -> Alignment {
+        switch dock {
+        case .bottom: .bottom
+        case .left: .leading
+        case .right: .trailing
+        }
+    }
+
+    private func dockPadding(for dock: ToolbarDock) -> EdgeInsets {
+        switch dock {
+        case .bottom: EdgeInsets()
+        case .left: EdgeInsets(top: 0, leading: 4, bottom: 0, trailing: 0)
+        case .right: EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 4)
+        }
+    }
+
+    private func toolbarDragGesture(in size: CGSize) -> some Gesture {
+        DragGesture(minimumDistance: 8)
+            .onChanged { value in
+                toolbarDrag = value.translation
+            }
+            .onEnded { value in
+                let dock = snappedDock(for: value.translation, in: size)
+                withAnimation(.snappy(duration: 0.22)) {
+                    toolbarDrag = .zero
+                    if let dock, dock != settings.settings.toolbarDock {
+                        settings.settings.toolbarDock = dock
+                    }
+                }
+            }
+    }
+
+    private func snappedDock(for translation: CGSize, in size: CGSize) -> ToolbarDock? {
+        guard toolbarSize.width > 0, toolbarSize.height > 0 else { return nil }
+        let origin = dockCenter(for: settings.settings.toolbarDock, in: size)
+        let center = CGPoint(
+            x: origin.x + translation.width,
+            y: origin.y + translation.height
+        )
+        let distances: [(dock: ToolbarDock, distance: CGFloat)] = [
+            (.left, center.x),
+            (.right, size.width - center.x),
+            (.bottom, size.height - center.y)
+        ]
+        guard let nearest = distances.min(by: { $0.distance < $1.distance }),
+              nearest.distance <= 140
+        else { return nil }
+        return nearest.dock
+    }
+
+    private func dockCenter(for dock: ToolbarDock, in size: CGSize) -> CGPoint {
+        switch dock {
+        case .bottom:
+            CGPoint(x: size.width / 2, y: size.height - toolbarSize.height / 2)
+        case .left:
+            CGPoint(x: 4 + toolbarSize.width / 2, y: size.height / 2)
+        case .right:
+            CGPoint(x: size.width - 4 - toolbarSize.width / 2, y: size.height / 2)
+        }
+    }
+
     private func sessionToolbar(orientation: FloatingBarOrientation) -> some View {
         SessionToolbar(
             model: model,
@@ -464,7 +556,8 @@ public struct SessionScreen: View {
                 downloadPath = ""
                 showingDownloadDialog = true
             },
-            onDisconnect: requestClose
+            onDisconnect: requestClose,
+            showsDragHandle: isToolbarDockable
         )
     }
 

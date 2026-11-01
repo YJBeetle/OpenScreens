@@ -100,6 +100,20 @@ public enum LibrarySortOrder: String, Codable, CaseIterable, Identifiable, Senda
     }
 }
 
+/// Screen edge the session toolbar is docked to. The toolbar can be dragged
+/// between edges on iPad; left and right rails stack vertically.
+public enum ToolbarDock: String, Codable, CaseIterable, Identifiable, Sendable {
+    case bottom
+    case left
+    case right
+
+    public var id: String { rawValue }
+
+    public var orientation: FloatingBarOrientation {
+        self == .bottom ? .horizontal : .vertical
+    }
+}
+
 public struct AppSettings: Codable, Hashable, Sendable {
     public var appearance: AppAppearance
     public var tileDensity: TileDensity
@@ -111,6 +125,7 @@ public struct AppSettings: Codable, Hashable, Sendable {
     public var updateChannel: UpdateChannel
     public var showToolbarOnLaunch: Bool
     public var toolbarItems: [SessionToolbarItem]
+    public var toolbarDock: ToolbarDock
 
     public init(
         appearance: AppAppearance = .system,
@@ -122,7 +137,8 @@ public struct AppSettings: Codable, Hashable, Sendable {
         confirmDisconnect: Bool = true,
         updateChannel: UpdateChannel = .release,
         showToolbarOnLaunch: Bool = true,
-        toolbarItems: [SessionToolbarItem] = SessionToolbarItem.allCases
+        toolbarItems: [SessionToolbarItem] = SessionToolbarItem.allCases,
+        toolbarDock: ToolbarDock = .bottom
     ) {
         self.appearance = appearance
         self.tileDensity = tileDensity
@@ -134,11 +150,13 @@ public struct AppSettings: Codable, Hashable, Sendable {
         self.updateChannel = updateChannel
         self.showToolbarOnLaunch = showToolbarOnLaunch
         self.toolbarItems = toolbarItems
+        self.toolbarDock = toolbarDock
     }
 
     private enum CodingKeys: String, CodingKey {
         case appearance, tileDensity, librarySort, defaultCursorMode, sharedClipboard
         case autoReconnect, confirmDisconnect, updateChannel, showToolbarOnLaunch, toolbarItems
+        case toolbarDock
     }
 
     public init(from decoder: Decoder) throws {
@@ -154,6 +172,7 @@ public struct AppSettings: Codable, Hashable, Sendable {
         showToolbarOnLaunch = try container.decodeIfPresent(Bool.self, forKey: .showToolbarOnLaunch) ?? true
         toolbarItems = try container.decodeIfPresent([SessionToolbarItem].self, forKey: .toolbarItems)
             ?? SessionToolbarItem.allCases
+        toolbarDock = try container.decodeIfPresent(ToolbarDock.self, forKey: .toolbarDock) ?? .bottom
     }
 }
 

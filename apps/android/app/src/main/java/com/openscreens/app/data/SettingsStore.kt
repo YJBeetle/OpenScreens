@@ -13,12 +13,17 @@ class SettingsStore(context: Context) {
             preferences.getString("updateChannel", null),
             UpdateChannel.Release,
         ),
+        librarySort = enumValueOrDefault(
+            preferences.getString("librarySort", null),
+            LibrarySortOrder.Az,
+        ),
     )
 
     fun save(settings: AppSettings) {
         preferences.edit()
             .putString("themeMode", settings.themeMode.name)
             .putString("updateChannel", settings.updateChannel.name)
+            .putString("librarySort", settings.librarySort.name)
             .apply()
     }
 

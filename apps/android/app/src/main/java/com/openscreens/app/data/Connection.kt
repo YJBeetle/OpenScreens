@@ -32,6 +32,8 @@ data class Connection(
     /** Two-finger pinch magnifies the remote image; off reserves two fingers for scrolling. */
     val zoomEnabled: Boolean = true,
     val lastConnectedAt: Long? = null,
+    /** User-created library folder, when the connection belongs to one. */
+    val groupId: String? = null,
 ) {
     val address: String
         get() = "$host:$port"
@@ -39,6 +41,26 @@ data class Connection(
     companion object {
         const val DEFAULT_VNC_PORT = 5900
     }
+}
+
+data class ConnectionGroup(
+    val id: String = UUID.randomUUID().toString(),
+    val name: String,
+)
+
+/** How the library orders saved connections. */
+enum class LibrarySortOrder { Manual, Az, Za, Recent }
+
+/** Applies the chosen library order; manual keeps the stored sequence. */
+fun List<Connection>.sortedForLibrary(sort: LibrarySortOrder): List<Connection> = when (sort) {
+    LibrarySortOrder.Manual -> this
+    LibrarySortOrder.Az -> sortedWith(
+        compareBy(String.CASE_INSENSITIVE_ORDER) { connection: Connection -> connection.name },
+    )
+    LibrarySortOrder.Za -> sortedWith(
+        compareByDescending(String.CASE_INSENSITIVE_ORDER) { connection: Connection -> connection.name },
+    )
+    LibrarySortOrder.Recent -> sortedByDescending { it.lastConnectedAt ?: 0L }
 }
 
 data class SshCredentials(

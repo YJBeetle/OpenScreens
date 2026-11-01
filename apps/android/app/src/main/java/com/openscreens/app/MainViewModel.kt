@@ -5,6 +5,7 @@ import androidx.lifecycle.AndroidViewModel
 import com.openscreens.app.data.AppSettings
 import com.openscreens.app.data.Connection
 import com.openscreens.app.data.ConnectionStore
+import com.openscreens.app.data.LibrarySortOrder
 import com.openscreens.app.data.QualityPreset
 import com.openscreens.app.data.UpdateChannel
 import com.openscreens.app.data.SettingsStore
@@ -19,6 +20,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val connectionStore = ConnectionStore(application)
     val connections = connectionStore.connections
+    val groups = connectionStore.groups
 
     private val sshKeyStore = SshKeyStore(application)
     val sshKeys = sshKeyStore.keys
@@ -38,6 +40,27 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun markConnected(id: String) {
         connectionStore.markConnected(id)
+    }
+
+    fun addGroup(name: String) {
+        connectionStore.addGroup(name)
+    }
+
+    fun renameGroup(id: String, name: String) {
+        connectionStore.renameGroup(id, name)
+    }
+
+    fun deleteGroup(id: String) {
+        connectionStore.deleteGroup(id)
+    }
+
+    fun moveConnection(id: String, offset: Int, orderedIds: List<String>) {
+        connectionStore.moveConnection(id, offset, orderedIds)
+    }
+
+    fun setLibrarySort(sort: LibrarySortOrder) {
+        _settings.update { it.copy(librarySort = sort) }
+        settingsStore.save(_settings.value)
     }
 
     fun sshKey(id: String?): SshKey? = sshKeyStore.find(id)

@@ -27,8 +27,12 @@ class ConnectionStore(
     initial: List<Connection>? = null,
 ) {
     private val file = File(context.applicationContext.filesDir, "connections.enc")
-    private val _connections = MutableStateFlow(initial ?: load() ?: sampleConnections())
+    private val loaded = if (initial == null) load() else null
+    private val _connections = MutableStateFlow(initial ?: loaded?.connections ?: sampleConnections())
     val connections: StateFlow<List<Connection>> = _connections.asStateFlow()
+
+    private val _groups = MutableStateFlow(loaded?.groups.orEmpty())
+    val groups: StateFlow<List<ConnectionGroup>> = _groups.asStateFlow()
 
     init {
         if (initial == null && !file.exists()) {
@@ -37,6 +41,8 @@ class ConnectionStore(
     }
 
     fun find(id: String): Connection? = _connections.value.firstOrNull { it.id == id }
+
+    fun findGroup(id: String): ConnectionGroup? = _groups.value.firstOrNull { it.id == id }
 
     fun save(connection: Connection) {
         _connections.update { current ->
@@ -59,7 +65,53 @@ class ConnectionStore(
         persist()
     }
 
-    private fun load(): List<Connection>? {
+    fun addGroup(name: String): ConnectionGroup {
+        val group = ConnectionGroup(name = name.trim().ifEmpty { DEFAULT_GROUP_NAME })
+        _groups.update { it + group }
+        persist()
+        return group
+    }
+
+    fun renameGroup(id: String, name: String) {
+        val trimmed = name.trim()
+        if (trimmed.isEmpty()) return
+        _groups.update { groups ->
+            groups.map { if (it.id == id) it.copy(name = trimmed) else it }
+        }
+        persist()
+    }
+
+    /** Removes a folder; its connections stay in the library without a group. */
+    fun deleteGroup(id: String) {
+        _groups.update { groups -> groups.filterNot { it.id == id } }
+        _connections.update { connections ->
+            connections.map {
+                if (it.groupId == id) it.copy(groupId = null) else it
+            }
+        }
+        persist()
+    }
+
+    /** Moves a connection past its neighbour in the supplied manual order. */
+    fun moveConnection(id: String, offset: Int, orderedIds: List<String>) {
+        val index = orderedIds.indexOf(id)
+        val neighbourIndex = index + offset
+        if (index < 0 || neighbourIndex !in orderedIds.indices) return
+        val neighbourId = orderedIds[neighbourIndex]
+        _connections.update { current ->
+            val from = current.indexOfFirst { it.id == id }
+            val to = current.indexOfFirst { it.id == neighbourId }
+            if (from < 0 || to < 0) return@update current
+            current.toMutableList().also { list ->
+                val moved = list[from]
+                list[from] = list[to]
+                list[to] = moved
+            }
+        }
+        persist()
+    }
+
+    private fun load(): StoredLibrary? {
         if (!file.exists()) return null
         return runCatching {
             decode(String(decrypt(file.readBytes()), Charsets.UTF_8))
@@ -70,13 +122,17 @@ class ConnectionStore(
 
     private fun persist() {
         runCatching {
-            file.writeBytes(encrypt(encode(_connections.value).toByteArray(Charsets.UTF_8)))
+            val payload = encode(_connections.value, _groups.value)
+            file.writeBytes(encrypt(payload.toByteArray(Charsets.UTF_8)))
         }.onFailure { error ->
             Log.e(TAG, "Unable to save connections", error)
         }
     }
 
-    private fun encode(connections: List<Connection>): String {
+    private fun encode(
+        connections: List<Connection>,
+        groups: List<ConnectionGroup>,
+    ): String {
         val array = JSONArray()
         connections.forEach { connection ->
             val item = JSONObject()
@@ -105,17 +161,28 @@ class ConnectionStore(
                 )
             }
             connection.lastConnectedAt?.let { item.put("lastConnectedAt", it) }
+            connection.groupId?.let { item.put("groupId", it) }
             array.put(item)
         }
+        val groupArray = JSONArray()
+        groups.forEach { group ->
+            groupArray.put(
+                JSONObject()
+                    .put("id", group.id)
+                    .put("name", group.name),
+            )
+        }
         return JSONObject()
-            .put("version", 1)
+            .put("version", 2)
             .put("connections", array)
+            .put("groups", groupArray)
             .toString()
     }
 
-    private fun decode(text: String): List<Connection> {
-        val array = JSONObject(text).getJSONArray("connections")
-        return buildList {
+    private fun decode(text: String): StoredLibrary {
+        val root = JSONObject(text)
+        val array = root.getJSONArray("connections")
+        val connections = buildList {
             for (index in 0 until array.length()) {
                 val item = array.getJSONObject(index)
                 val ssh = item.optJSONObject("ssh")?.let {
@@ -156,10 +223,26 @@ class ConnectionStore(
                         } else {
                             null
                         },
+                        groupId = item.optString("groupId").takeIf { it.isNotBlank() },
                     ),
                 )
             }
         }
+        val groupsArray = root.optJSONArray("groups")
+        val groups = buildList {
+            if (groupsArray != null) {
+                for (index in 0 until groupsArray.length()) {
+                    val item = groupsArray.getJSONObject(index)
+                    add(
+                        ConnectionGroup(
+                            id = item.getString("id"),
+                            name = item.getString("name"),
+                        ),
+                    )
+                }
+            }
+        }
+        return StoredLibrary(connections = connections, groups = groups)
     }
 
     private fun secretKey(): SecretKey {
@@ -199,11 +282,17 @@ class ConnectionStore(
         return cipher.doFinal(payload.copyOfRange(ivEnd, payload.size))
     }
 
+    private data class StoredLibrary(
+        val connections: List<Connection>,
+        val groups: List<ConnectionGroup>,
+    )
+
     private companion object {
         const val TAG = "ConnectionStore"
         const val KEYSTORE = "AndroidKeyStore"
         const val KEY_ALIAS = "openscreens.connections"
         const val TRANSFORMATION = "AES/GCM/NoPadding"
+        const val DEFAULT_GROUP_NAME = "Group"
     }
 }
 

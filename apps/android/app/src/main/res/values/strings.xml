@@ -12,6 +12,18 @@
     <string name="library_sort_az">A–Z</string>
     <string name="library_sort_za">Z–A</string>
     <string name="library_sort_recent">Recent</string>
+    <string name="library_sort_manual">Manual</string>
+    <string name="library_group_all">All</string>
+    <string name="library_new_group">New Group</string>
+    <string name="library_group_name">Group name</string>
+    <string name="library_group_create">Create</string>
+    <string name="library_group_rename">Rename</string>
+    <string name="library_rename_group">Rename Group</string>
+    <string name="library_delete_group_title">Delete Group</string>
+    <string name="library_delete_group_body">%1$s will be deleted. Its connections stay in your library.</string>
+    <string name="library_delete_group_action">Delete</string>
+    <string name="library_move_up">Move Up</string>
+    <string name="library_move_down">Move Down</string>
     <string name="library_count">%1$d devices</string>
     <string name="library_no_results">No matching connections</string>
     <string name="library_empty_title">Your library is empty</string>
@@ -43,6 +55,8 @@
     <string name="editor_port">Port</string>
     <string name="editor_username">Username</string>
     <string name="editor_username_optional">Optional. Required by Apple Screen Sharing.</string>
+    <string name="editor_group">Group</string>
+    <string name="editor_group_none">None</string>
     <string name="editor_vnc_password">VNC password</string>
     <string name="editor_optional">Optional</string>
     <string name="editor_color">Color</string>

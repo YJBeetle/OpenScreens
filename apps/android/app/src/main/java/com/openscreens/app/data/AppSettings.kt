@@ -9,4 +9,5 @@ enum class UpdateChannel { Release, PreRelease, Snapshot }
 data class AppSettings(
     val themeMode: ThemeMode = ThemeMode.System,
     val updateChannel: UpdateChannel = UpdateChannel.Release,
+    val librarySort: LibrarySortOrder = LibrarySortOrder.Az,
 )

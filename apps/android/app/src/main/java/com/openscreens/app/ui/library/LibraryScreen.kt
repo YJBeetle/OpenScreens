@@ -2,8 +2,11 @@ package com.openscreens.app.ui.library
 
 import androidx.annotation.StringRes
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,8 +22,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -28,9 +31,12 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ViewList
 import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.ArrowDownward
+import androidx.compose.material.icons.outlined.ArrowUpward
 import androidx.compose.material.icons.outlined.Bolt
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.GridView
 import androidx.compose.material.icons.outlined.Monitor
@@ -81,26 +87,44 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.openscreens.app.R
 import com.openscreens.app.data.Connection
+import com.openscreens.app.data.ConnectionGroup
+import com.openscreens.app.data.LibrarySortOrder
+import com.openscreens.app.data.sortedForLibrary
 import com.openscreens.app.ui.theme.ThemedSystemBarIcons
 import com.openscreens.app.ui.theme.autoAccent
 import com.openscreens.app.ui.theme.gradient
 import java.net.URI
-
-private enum class LibrarySort(@StringRes val labelRes: Int) {
-    Az(R.string.library_sort_az),
-    Za(R.string.library_sort_za),
-    Recent(R.string.library_sort_recent),
-}
 
 private enum class LibraryView(@StringRes val labelRes: Int) {
     Grid(R.string.library_view_grid),
     List(R.string.library_view_list),
 }
 
+@StringRes
+private fun LibrarySortOrder.labelRes(): Int = when (this) {
+    LibrarySortOrder.Manual -> R.string.library_sort_manual
+    LibrarySortOrder.Az -> R.string.library_sort_az
+    LibrarySortOrder.Za -> R.string.library_sort_za
+    LibrarySortOrder.Recent -> R.string.library_sort_recent
+}
+
+private sealed interface GroupDialog {
+    data object Create : GroupDialog
+
+    data class Rename(val group: ConnectionGroup) : GroupDialog
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LibraryScreen(
     connections: List<Connection>,
+    groups: List<ConnectionGroup>,
+    sort: LibrarySortOrder,
+    onSortChange: (LibrarySortOrder) -> Unit,
+    onAddGroup: (String) -> Unit,
+    onRenameGroup: (id: String, name: String) -> Unit,
+    onDeleteGroup: (id: String) -> Unit,
+    onMoveConnection: (id: String, offset: Int, orderedIds: List<String>) -> Unit,
     onOpenConnection: (Connection) -> Unit,
     onOpenInNewWindow: (Connection) -> Unit,
     onAddConnection: () -> Unit,
@@ -111,7 +135,9 @@ fun LibraryScreen(
     ThemedSystemBarIcons()
     var searchActive by rememberSaveable { mutableStateOf(false) }
     var query by rememberSaveable { mutableStateOf("") }
-    var sort by rememberSaveable { mutableStateOf(LibrarySort.Az) }
+    var selectedGroupId by rememberSaveable { mutableStateOf<String?>(null) }
+    var groupDialog by remember { mutableStateOf<GroupDialog?>(null) }
+    var deleteGroup by remember { mutableStateOf<ConnectionGroup?>(null) }
     var view by rememberSaveable { mutableStateOf(LibraryView.Grid) }
     var viewMenuExpanded by remember { mutableStateOf(false) }
     var moreMenuExpanded by remember { mutableStateOf(false) }
@@ -125,26 +151,28 @@ fun LibraryScreen(
         }
     }
 
-    val visible = remember(connections, query, sort) {
-        val filtered = if (query.isBlank()) {
+    LaunchedEffect(groups, selectedGroupId) {
+        val selected = selectedGroupId
+        if (selected != null && groups.none { it.id == selected }) {
+            selectedGroupId = null
+        }
+    }
+
+    val visible = remember(connections, query, sort, selectedGroupId) {
+        val scoped = if (selectedGroupId == null) {
             connections
         } else {
-            connections.filter { connection ->
+            connections.filter { it.groupId == selectedGroupId }
+        }
+        val filtered = if (query.isBlank()) {
+            scoped
+        } else {
+            scoped.filter { connection ->
                 connection.name.contains(query, ignoreCase = true) ||
                     connection.address.contains(query, ignoreCase = true)
             }
         }
-        when (sort) {
-            LibrarySort.Az -> filtered.sortedWith(
-                compareBy(String.CASE_INSENSITIVE_ORDER) { connection: Connection -> connection.name },
-            )
-            LibrarySort.Za -> filtered.sortedWith(
-                compareByDescending(String.CASE_INSENSITIVE_ORDER) { connection: Connection ->
-                    connection.name
-                },
-            )
-            LibrarySort.Recent -> filtered.sortedByDescending { it.lastConnectedAt ?: 0L }
-        }
+        filtered.sortedForLibrary(sort)
     }
 
     Scaffold(
@@ -239,7 +267,7 @@ fun LibraryScreen(
                                     viewMenuExpanded = false
                                 },
                                 onSortSelected = {
-                                    sort = it
+                                    onSortChange(it)
                                     viewMenuExpanded = false
                                 },
                             )
@@ -285,6 +313,15 @@ fun LibraryScreen(
                     .fillMaxSize()
                     .padding(innerPadding),
             ) {
+                GroupChipsRow(
+                    groups = groups,
+                    selectedGroupId = selectedGroupId,
+                    onSelect = { selectedGroupId = it },
+                    onCreate = { groupDialog = GroupDialog.Create },
+                    onRename = { groupDialog = GroupDialog.Rename(it) },
+                    onDelete = { deleteGroup = it },
+                    modifier = Modifier.padding(top = 8.dp),
+                )
                 Text(
                     text = stringResource(R.string.library_count, visible.size),
                     style = MaterialTheme.typography.bodySmall,
@@ -310,6 +347,7 @@ fun LibraryScreen(
                         )
                     }
                 } else {
+                    val visibleIds = remember(visible) { visible.map { it.id } }
                     when (view) {
                         LibraryView.Grid -> LazyVerticalGrid(
                             columns = GridCells.Fixed(2),
@@ -324,12 +362,23 @@ fun LibraryScreen(
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
                             verticalArrangement = Arrangement.spacedBy(12.dp),
                         ) {
-                            items(visible, key = { it.id }) { connection ->
+                            itemsIndexed(visible, key = { _, it -> it.id }) { index, connection ->
+                                val manual = sort == LibrarySortOrder.Manual
                                 ConnectionCard(
                                     connection = connection,
                                     onClick = { onOpenConnection(connection) },
                                     onEdit = { onEditConnection(connection) },
                                     onOpenInNewWindow = { onOpenInNewWindow(connection) },
+                                    onMoveUp = if (manual && index > 0) {
+                                        ({ onMoveConnection(connection.id, -1, visibleIds) })
+                                    } else {
+                                        null
+                                    },
+                                    onMoveDown = if (manual && index < visible.lastIndex) {
+                                        ({ onMoveConnection(connection.id, 1, visibleIds) })
+                                    } else {
+                                        null
+                                    },
                                 )
                             }
                         }
@@ -344,12 +393,23 @@ fun LibraryScreen(
                             ),
                             verticalArrangement = Arrangement.spacedBy(10.dp),
                         ) {
-                            items(visible, key = { it.id }) { connection ->
+                            itemsIndexed(visible, key = { _, it -> it.id }) { index, connection ->
+                                val manual = sort == LibrarySortOrder.Manual
                                 ConnectionRow(
                                     connection = connection,
                                     onClick = { onOpenConnection(connection) },
                                     onEdit = { onEditConnection(connection) },
                                     onOpenInNewWindow = { onOpenInNewWindow(connection) },
+                                    onMoveUp = if (manual && index > 0) {
+                                        ({ onMoveConnection(connection.id, -1, visibleIds) })
+                                    } else {
+                                        null
+                                    },
+                                    onMoveDown = if (manual && index < visible.lastIndex) {
+                                        ({ onMoveConnection(connection.id, 1, visibleIds) })
+                                    } else {
+                                        null
+                                    },
                                 )
                             }
                         }
@@ -368,16 +428,224 @@ fun LibraryScreen(
             },
         )
     }
+
+    when (val dialog = groupDialog) {
+        is GroupDialog.Create -> GroupNameDialog(
+            title = stringResource(R.string.library_new_group),
+            initialName = "",
+            confirmLabel = stringResource(R.string.library_group_create),
+            onDismiss = { groupDialog = null },
+            onConfirm = { name ->
+                groupDialog = null
+                onAddGroup(name)
+            },
+        )
+
+        is GroupDialog.Rename -> GroupNameDialog(
+            title = stringResource(R.string.library_rename_group),
+            initialName = dialog.group.name,
+            confirmLabel = stringResource(R.string.library_group_rename),
+            onDismiss = { groupDialog = null },
+            onConfirm = { name ->
+                groupDialog = null
+                onRenameGroup(dialog.group.id, name)
+            },
+        )
+
+        null -> Unit
+    }
+
+    deleteGroup?.let { group ->
+        AlertDialog(
+            onDismissRequest = { deleteGroup = null },
+            title = { Text(stringResource(R.string.library_delete_group_title)) },
+            text = { Text(stringResource(R.string.library_delete_group_body, group.name)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        deleteGroup = null
+                        onDeleteGroup(group.id)
+                    },
+                ) {
+                    Text(
+                        text = stringResource(R.string.library_delete_group_action),
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { deleteGroup = null }) {
+                    Text(stringResource(R.string.library_cancel))
+                }
+            },
+        )
+    }
+}
+
+@Composable
+private fun GroupChipsRow(
+    groups: List<ConnectionGroup>,
+    selectedGroupId: String?,
+    onSelect: (String?) -> Unit,
+    onCreate: () -> Unit,
+    onRename: (ConnectionGroup) -> Unit,
+    onDelete: (ConnectionGroup) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        LibraryChip(
+            label = stringResource(R.string.library_group_all),
+            selected = selectedGroupId == null,
+            onClick = { onSelect(null) },
+        )
+        groups.forEach { group ->
+            var menuExpanded by remember { mutableStateOf(false) }
+            Box {
+                LibraryChip(
+                    label = group.name,
+                    selected = selectedGroupId == group.id,
+                    onClick = { onSelect(group.id) },
+                    onLongClick = { menuExpanded = true },
+                )
+                DropdownMenu(
+                    expanded = menuExpanded,
+                    onDismissRequest = { menuExpanded = false },
+                ) {
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.library_rename_group)) },
+                        leadingIcon = { Icon(Icons.Outlined.Edit, contentDescription = null) },
+                        onClick = {
+                            menuExpanded = false
+                            onRename(group)
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.library_delete_group_title)) },
+                        leadingIcon = { Icon(Icons.Outlined.Delete, contentDescription = null) },
+                        onClick = {
+                            menuExpanded = false
+                            onDelete(group)
+                        },
+                    )
+                }
+            }
+        }
+        LibraryChip(
+            label = stringResource(R.string.library_new_group),
+            selected = false,
+            icon = Icons.Outlined.Add,
+            onClick = onCreate,
+        )
+    }
+}
+
+@Composable
+private fun LibraryChip(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    onLongClick: (() -> Unit)? = null,
+    icon: ImageVector? = null,
+) {
+    val container = if (selected) {
+        MaterialTheme.colorScheme.secondaryContainer
+    } else {
+        Color.Transparent
+    }
+    val content = if (selected) {
+        MaterialTheme.colorScheme.onSecondaryContainer
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    Row(
+        modifier = Modifier
+            .clip(CircleShape)
+            .background(container)
+            .border(
+                width = 1.dp,
+                color = if (selected) Color.Transparent else MaterialTheme.colorScheme.outlineVariant,
+                shape = CircleShape,
+            )
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            .padding(horizontal = 14.dp, vertical = 7.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        icon?.let {
+            Icon(
+                imageVector = it,
+                contentDescription = null,
+                tint = content,
+                modifier = Modifier.size(16.dp),
+            )
+        }
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelLarge,
+            color = content,
+        )
+    }
+}
+
+@Composable
+private fun GroupNameDialog(
+    title: String,
+    initialName: String,
+    confirmLabel: String,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit,
+) {
+    var name by rememberSaveable(initialName) { mutableStateOf(initialName) }
+    val focusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(Unit) { focusRequester.requestFocus() }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            OutlinedTextField(
+                value = name,
+                onValueChange = { name = it },
+                singleLine = true,
+                label = { Text(stringResource(R.string.library_group_name)) },
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .focusRequester(focusRequester),
+            )
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onConfirm(name) },
+                enabled = name.isNotBlank(),
+            ) {
+                Text(confirmLabel)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.library_cancel))
+            }
+        },
+    )
 }
 
 @Composable
 private fun ViewOptionsMenu(
     expanded: Boolean,
     view: LibraryView,
-    sort: LibrarySort,
+    sort: LibrarySortOrder,
     onDismiss: () -> Unit,
     onViewSelected: (LibraryView) -> Unit,
-    onSortSelected: (LibrarySort) -> Unit,
+    onSortSelected: (LibrarySortOrder) -> Unit,
 ) {
     DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
         LibraryView.entries.forEach { option ->
@@ -396,9 +664,9 @@ private fun ViewOptionsMenu(
             )
         }
         HorizontalDivider(Modifier.padding(vertical = 4.dp))
-        LibrarySort.entries.forEach { option ->
+        LibrarySortOrder.entries.forEach { option ->
             DropdownMenuItem(
-                text = { Text(stringResource(option.labelRes)) },
+                text = { Text(stringResource(option.labelRes())) },
                 leadingIcon = { MenuLead(selected = option == sort) },
                 onClick = { onSortSelected(option) },
             )
@@ -505,6 +773,8 @@ private fun ConnectionCard(
     onClick: () -> Unit,
     onEdit: () -> Unit,
     onOpenInNewWindow: () -> Unit,
+    onMoveUp: (() -> Unit)? = null,
+    onMoveDown: (() -> Unit)? = null,
 ) {
     val gradient = (connection.accent ?: autoAccent(connection.name)).gradient
     val thumbnailDescription = stringResource(R.string.library_connection_thumbnail)
@@ -603,6 +873,11 @@ private fun ConnectionCard(
                 onEdit()
             },
         )
+        MoveMenuItems(
+            onMoveUp = onMoveUp,
+            onMoveDown = onMoveDown,
+            onDismiss = { menuExpanded = false },
+        )
     }
     }
 }
@@ -613,6 +888,8 @@ private fun ConnectionRow(
     onClick: () -> Unit,
     onEdit: () -> Unit,
     onOpenInNewWindow: () -> Unit,
+    onMoveUp: (() -> Unit)? = null,
+    onMoveDown: (() -> Unit)? = null,
 ) {
     val gradient = (connection.accent ?: autoAccent(connection.name)).gradient
     val editDescription = stringResource(R.string.library_edit_connection)
@@ -704,7 +981,42 @@ private fun ConnectionRow(
                 onEdit()
             },
         )
+        MoveMenuItems(
+            onMoveUp = onMoveUp,
+            onMoveDown = onMoveDown,
+            onDismiss = { menuExpanded = false },
+        )
     }
+    }
+}
+
+@Composable
+private fun MoveMenuItems(
+    onMoveUp: (() -> Unit)?,
+    onMoveDown: (() -> Unit)?,
+    onDismiss: () -> Unit,
+) {
+    if (onMoveUp == null && onMoveDown == null) return
+    HorizontalDivider(Modifier.padding(vertical = 4.dp))
+    onMoveUp?.let { move ->
+        DropdownMenuItem(
+            text = { Text(stringResource(R.string.library_move_up)) },
+            leadingIcon = { Icon(Icons.Outlined.ArrowUpward, contentDescription = null) },
+            onClick = {
+                onDismiss()
+                move()
+            },
+        )
+    }
+    onMoveDown?.let { move ->
+        DropdownMenuItem(
+            text = { Text(stringResource(R.string.library_move_down)) },
+            leadingIcon = { Icon(Icons.Outlined.ArrowDownward, contentDescription = null) },
+            onClick = {
+                onDismiss()
+                move()
+            },
+        )
     }
 }
 

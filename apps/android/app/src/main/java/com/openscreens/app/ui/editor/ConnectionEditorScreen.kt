@@ -79,6 +79,7 @@ import androidx.compose.ui.unit.dp
 import com.openscreens.app.R
 import com.openscreens.app.data.Connection
 import com.openscreens.app.data.ConnectionAccent
+import com.openscreens.app.data.ConnectionGroup
 import com.openscreens.app.data.QualityPreset
 import com.openscreens.app.data.SshAuthMode
 import com.openscreens.app.ui.common.label
@@ -100,6 +101,7 @@ fun ConnectionEditorScreen(
     connection: Connection?,
     initialDraft: Connection? = null,
     sshKeys: List<SshKey> = emptyList(),
+    groups: List<ConnectionGroup> = emptyList(),
     onSave: (Connection) -> Unit,
     onCancel: () -> Unit,
 ) {
@@ -125,6 +127,8 @@ fun ConnectionEditorScreen(
     var username by rememberSaveable(editorKey) {
         mutableStateOf(seed?.username.orEmpty())
     }
+    var groupId by rememberSaveable(editorKey) { mutableStateOf(seed?.groupId) }
+    var groupMenuExpanded by remember { mutableStateOf(false) }
     var sshEnabled by rememberSaveable(editorKey) { mutableStateOf(seed?.ssh != null) }
     var sshHost by rememberSaveable(editorKey) {
         mutableStateOf(seed?.ssh?.host.orEmpty())
@@ -300,6 +304,7 @@ fun ConnectionEditorScreen(
                 vncPassword = vncPassword,
                 quality = quality,
                 zoomEnabled = zoomEnabled,
+                groupId = groupId,
                 ssh = ssh,
                 wireGuardConfig = wireGuardConfig?.takeIf { it.isNotBlank() },
                 openVpnConfig = openVpnConfig?.takeIf { it.isNotBlank() },
@@ -423,6 +428,45 @@ fun ConnectionEditorScreen(
                         imeAction = ImeAction.Next,
                     ),
                 )
+
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        text = stringResource(R.string.editor_group),
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    Box {
+                        OutlinedButton(
+                            onClick = { groupMenuExpanded = true },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text(
+                                text = groups.firstOrNull { it.id == groupId }?.name
+                                    ?: stringResource(R.string.editor_group_none),
+                            )
+                        }
+                        DropdownMenu(
+                            expanded = groupMenuExpanded,
+                            onDismissRequest = { groupMenuExpanded = false },
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.editor_group_none)) },
+                                onClick = {
+                                    groupId = null
+                                    groupMenuExpanded = false
+                                },
+                            )
+                            groups.forEach { group ->
+                                DropdownMenuItem(
+                                    text = { Text(group.name) },
+                                    onClick = {
+                                        groupId = group.id
+                                        groupMenuExpanded = false
+                                    },
+                                )
+                            }
+                        }
+                    }
+                }
 
                 PasswordField(
                     value = vncPassword,

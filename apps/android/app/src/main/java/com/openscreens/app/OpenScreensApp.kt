@@ -26,6 +26,7 @@ fun OpenScreensApp(viewModel: MainViewModel = viewModel()) {
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val route by viewModel.route.collectAsStateWithLifecycle()
     val connections by viewModel.connections.collectAsStateWithLifecycle()
+    val groups by viewModel.groups.collectAsStateWithLifecycle()
     val sshKeys by viewModel.sshKeys.collectAsStateWithLifecycle()
 
     val darkTheme = when (settings.themeMode) {
@@ -45,6 +46,13 @@ fun OpenScreensApp(viewModel: MainViewModel = viewModel()) {
             when (val current = route) {
                 Route.Library -> LibraryScreen(
                     connections = connections,
+                    groups = groups,
+                    sort = settings.librarySort,
+                    onSortChange = viewModel::setLibrarySort,
+                    onAddGroup = viewModel::addGroup,
+                    onRenameGroup = viewModel::renameGroup,
+                    onDeleteGroup = viewModel::deleteGroup,
+                    onMoveConnection = viewModel::moveConnection,
                     onOpenConnection = { viewModel.navigate(Route.Session(it.id)) },
                     onOpenInNewWindow = { connection ->
                         val intent = Intent(context, SessionWindowActivity::class.java)
@@ -96,6 +104,7 @@ fun OpenScreensApp(viewModel: MainViewModel = viewModel()) {
                     connection = current.connectionId?.let(viewModel::connection),
                     initialDraft = current.draft,
                     sshKeys = sshKeys,
+                    groups = groups,
                     onSave = {
                         viewModel.saveConnection(it)
                         if (current.draft != null) {

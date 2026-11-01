@@ -7,13 +7,16 @@ struct OpenScreensMacApp: App {
     @State private var settings = SettingsStore()
     @State private var sshKeys = SSHKeyVault()
     @State private var updater = AppUpdater()
+    @State private var nearby = NearbyDiscovery()
 
     var body: some Scene {
         Window("OpenScreens", id: MacSceneID.library) {
             MacLibraryView()
+                .nearbyDiscoveryLifecycle()
                 .environment(connections)
                 .environment(settings)
                 .environment(sshKeys)
+                .environment(nearby)
                 .preferredColorScheme(settings.settings.appearance.colorScheme)
                 .tint(Theme.Colors.accent)
                 .onAppear {

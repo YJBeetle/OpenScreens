@@ -126,6 +126,8 @@ public struct AppSettings: Codable, Hashable, Sendable {
     public var showToolbarOnLaunch: Bool
     public var toolbarItems: [SessionToolbarItem]
     public var toolbarDock: ToolbarDock
+    /// Browse for computers advertising VNC over Bonjour on the local network.
+    public var discoverNearby: Bool
     /// iOS-only privacy gate: require Face ID / Touch ID when returning to the app.
     public var requireBiometrics: Bool
 
@@ -141,6 +143,7 @@ public struct AppSettings: Codable, Hashable, Sendable {
         showToolbarOnLaunch: Bool = true,
         toolbarItems: [SessionToolbarItem] = SessionToolbarItem.allCases,
         toolbarDock: ToolbarDock = .bottom,
+        discoverNearby: Bool = true,
         requireBiometrics: Bool = false
     ) {
         self.appearance = appearance
@@ -154,13 +157,14 @@ public struct AppSettings: Codable, Hashable, Sendable {
         self.showToolbarOnLaunch = showToolbarOnLaunch
         self.toolbarItems = toolbarItems
         self.toolbarDock = toolbarDock
+        self.discoverNearby = discoverNearby
         self.requireBiometrics = requireBiometrics
     }
 
     private enum CodingKeys: String, CodingKey {
         case appearance, tileDensity, librarySort, defaultCursorMode, sharedClipboard
         case autoReconnect, confirmDisconnect, updateChannel, showToolbarOnLaunch, toolbarItems
-        case toolbarDock, requireBiometrics
+        case toolbarDock, discoverNearby, requireBiometrics
     }
 
     public init(from decoder: Decoder) throws {
@@ -177,6 +181,7 @@ public struct AppSettings: Codable, Hashable, Sendable {
         toolbarItems = try container.decodeIfPresent([SessionToolbarItem].self, forKey: .toolbarItems)
             ?? SessionToolbarItem.allCases
         toolbarDock = try container.decodeIfPresent(ToolbarDock.self, forKey: .toolbarDock) ?? .bottom
+        discoverNearby = try container.decodeIfPresent(Bool.self, forKey: .discoverNearby) ?? true
         requireBiometrics = try container.decodeIfPresent(Bool.self, forKey: .requireBiometrics) ?? false
     }
 }

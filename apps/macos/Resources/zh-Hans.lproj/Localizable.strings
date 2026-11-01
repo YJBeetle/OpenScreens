@@ -69,6 +69,8 @@
 /* MARK: - Tiles */
 "Discovered nearby" = "附近发现";
 "%@ · Nearby" = "%@ · 附近";
+"Save to Library" = "保存到连接库";
+"Nearby discovery is unavailable. Allow local network access for OpenScreens in Settings." = "附近发现不可用。请在设置中允许 OpenScreens 访问本地网络。";
 "Tile colour" = "卡片颜色";
 "Tile Colour" = "卡片颜色";
 "Connects to this remote screen" = "连接到这台远程屏幕";
@@ -303,7 +305,8 @@
 "Confirm Before Disconnecting" = "断开前确认";
 "Defaults apply to new connections. Existing connections keep their own settings." = "默认设置会应用于新连接。现有连接保留各自的设置。";
 "Restore Sample Connections" = "恢复示例连接";
-"Adds the demo computers back to your library without removing anything you saved." = "将演示电脑重新加入连接库，不会移除你已保存的内容。";
+"Discover Nearby Computers" = "自动发现附近电脑";
+"OpenScreens uses Bonjour to find computers sharing their screen on your local network. Local network access may be requested the first time. Restoring samples adds the demo computers without removing anything you saved." = "OpenScreens 使用 Bonjour 发现本地网络中共享屏幕的电脑。首次使用时系统可能会请求本地网络权限。恢复示例只会重新加入演示电脑，不会移除你已保存的内容。";
 "Restore sample connections?" = "恢复示例连接？";
 "Restore Samples" = "恢复示例";
 "The demo hosts are added to your library again. Existing connections are kept." = "演示主机会重新加入连接库，现有连接会保留。";

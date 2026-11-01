@@ -35,8 +35,14 @@
 	<string>public.app-category.utilities</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>$(MACOSX_DEPLOYMENT_TARGET)</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_rfb._tcp</string>
+	</array>
 	<key>NSHumanReadableCopyright</key>
 	<string>AGPL-3.0 · OpenScreens contributors</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>OpenScreens discovers nearby computers that share their screen on your local network.</string>
 	<key>OpenScreensBuildVersion</key>
 	<string>$(OPENSCREENS_BUILD_VERSION)</string>
 	<key>SUEnableAutomaticChecks</key>

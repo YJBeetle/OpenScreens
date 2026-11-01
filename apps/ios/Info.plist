@@ -35,8 +35,14 @@
 	<true/>
 	<key>OpenScreensBuildVersion</key>
 	<string>$(OPENSCREENS_BUILD_VERSION)</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_rfb._tcp</string>
+	</array>
 	<key>NSFaceIDUsageDescription</key>
 	<string>Unlock OpenScreens with Face ID.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>OpenScreens discovers nearby computers that share their screen on your local network.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>OpenScreens saves screenshots of remote sessions to your photo library.</string>
 	<key>UIApplicationSceneManifest</key>

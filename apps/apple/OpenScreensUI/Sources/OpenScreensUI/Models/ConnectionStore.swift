@@ -16,6 +16,7 @@ public final class ConnectionStore {
     @ObservationIgnored private let fileURL: URL
     @ObservationIgnored private let encoder: JSONEncoder
     @ObservationIgnored private let decoder: JSONDecoder
+    @ObservationIgnored private var dismissedDiscovered: Set<String> = []
 
     public init(fileURL: URL? = nil, seedDemoData: Bool = true) {
         self.fileURL = fileURL ?? Self.defaultFileURL()
@@ -23,8 +24,11 @@ public final class ConnectionStore {
         self.decoder = Self.makeDecoder()
 
         if let stored = Self.load(from: self.fileURL, decoder: decoder) {
-            self.connections = stored.connections
+            self.connections = stored.connections.filter { !$0.isDiscovered }
             self.groups = stored.groups ?? []
+            if self.connections.count != stored.connections.count {
+                persist()
+            }
         } else if seedDemoData {
             self.connections = Self.sampleConnections()
             self.groups = []
@@ -102,14 +106,89 @@ public final class ConnectionStore {
     }
 
     public func update(_ profile: ConnectionProfile) {
-        guard let index = connections.firstIndex(where: { $0.id == profile.id }) else { return }
-        connections[index] = profile
+        var stored = profile
+        if stored.isDiscovered {
+            stored.isDiscovered = false
+            stored.section = .custom
+        }
+        if let index = connections.firstIndex(where: { $0.id == profile.id }) {
+            connections[index] = stored
+        } else if profile.isDiscovered {
+            // The service can disappear while its editor is open.
+            connections.append(stored)
+        } else {
+            return
+        }
         persist()
     }
 
     public func delete(id: UUID) {
+        guard let profile = connections.first(where: { $0.id == id }) else { return }
         connections.removeAll { $0.id == id }
+        if profile.isDiscovered {
+            dismissedDiscovered.insert(Self.endpointKey(host: profile.host, port: profile.port))
+            return
+        }
         persist()
+    }
+
+    /// Keeps a discovered computer in the saved library.
+    @discardableResult
+    public func saveDiscovered(id: UUID) -> ConnectionProfile? {
+        guard let index = connections.firstIndex(where: { $0.id == id }),
+              connections[index].isDiscovered
+        else { return nil }
+        connections[index].isDiscovered = false
+        connections[index].section = .custom
+        persist()
+        return connections[index]
+    }
+
+    /// Reconciles the transient Nearby section with the current Bonjour results.
+    public func syncDiscovered(_ computers: [DiscoveredComputer]) {
+        let savedKeys = Set(
+            connections
+                .filter { !$0.isDiscovered }
+                .map { Self.endpointKey(host: $0.host, port: $0.port) }
+        )
+        var previous: [String: ConnectionProfile] = [:]
+        for profile in connections where profile.isDiscovered {
+            previous[Self.endpointKey(host: profile.host, port: profile.port)] = profile
+        }
+
+        var seen = Set<String>()
+        var discovered: [ConnectionProfile] = []
+        for computer in computers {
+            let key = Self.endpointKey(host: computer.host, port: computer.port)
+            guard !savedKeys.contains(key),
+                  !dismissedDiscovered.contains(key),
+                  seen.insert(key).inserted
+            else { continue }
+
+            if var existing = previous[key] {
+                existing.name = computer.name
+                existing.host = computer.host
+                existing.port = computer.port
+                discovered.append(existing)
+            } else {
+                discovered.append(
+                    ConnectionProfile(
+                        name: computer.name,
+                        host: computer.host,
+                        port: computer.port,
+                        section: .nearby,
+                        authentication: .vncPassword,
+                        isDiscovered: true
+                    )
+                )
+            }
+        }
+
+        connections = connections.filter { !$0.isDiscovered } + discovered
+    }
+
+    private static func endpointKey(host: String, port: Int) -> String {
+        "\(host.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()):\(port)"
     }
 
     @discardableResult
@@ -185,19 +264,6 @@ public final class ConnectionStore {
     public static func sampleConnections(referenceDate: Date = .now) -> [ConnectionProfile] {
         [
             ConnectionProfile(
-                name: "Studio Mac",
-                host: "studio-mac.local",
-                platform: .macos,
-                section: .nearby,
-                palette: .ocean,
-                authentication: .macOSAccount,
-                username: "designer",
-                isFavorite: true,
-                isDiscovered: true,
-                createdAt: referenceDate.addingTimeInterval(-86_400 * 21),
-                lastConnectedAt: referenceDate.addingTimeInterval(-3_600)
-            ),
-            ConnectionProfile(
                 name: "Lab Workstation",
                 host: "10.20.0.14",
                 platform: .linux,
@@ -261,7 +327,11 @@ public final class ConnectionStore {
     }
 
     private func persist() {
-        let payload = StoreFile(version: 2, connections: connections, groups: groups)
+        let payload = StoreFile(
+            version: 2,
+            connections: connections.filter { !$0.isDiscovered },
+            groups: groups
+        )
         do {
             try FileManager.default.createDirectory(
                 at: fileURL.deletingLastPathComponent(),

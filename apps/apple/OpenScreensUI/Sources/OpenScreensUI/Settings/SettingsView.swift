@@ -176,13 +176,15 @@ public struct SettingsView: View {
             #endif
 
             Section {
+                Toggle("Discover Nearby Computers", isOn: $settings.settings.discoverNearby)
+
                 Button("Restore Sample Connections") {
                     confirmingRestore = true
                 }
             } header: {
                 Text("Library")
             } footer: {
-                Text("Adds the demo computers back to your library without removing anything you saved.")
+                Text("OpenScreens uses Bonjour to find computers sharing their screen on your local network. Local network access may be requested the first time. Restoring samples adds the demo computers without removing anything you saved.")
             }
 
             Section {

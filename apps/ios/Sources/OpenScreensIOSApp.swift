@@ -7,15 +7,18 @@ struct OpenScreensIOSApp: App {
     @State private var settings = SettingsStore()
     @State private var sshKeys = SSHKeyVault()
     @State private var lock = AppLock()
+    @State private var nearby = NearbyDiscovery()
 
     var body: some Scene {
         WindowGroup {
             IOSRootView()
                 .appLockLifecycle()
+                .nearbyDiscoveryLifecycle()
                 .environment(connections)
                 .environment(settings)
                 .environment(sshKeys)
                 .environment(lock)
+                .environment(nearby)
                 .preferredColorScheme(settings.settings.appearance.colorScheme)
                 .tint(Theme.Colors.accent)
         }

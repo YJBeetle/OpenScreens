@@ -58,13 +58,23 @@ struct ConnectionGrid: View {
                             Label("Edit…", systemImage: "pencil")
                         }
 
-                        Button {
-                            onDuplicate(profile)
-                        } label: {
-                            Label("Duplicate", systemImage: "plus.square.on.square")
+                        if profile.isDiscovered {
+                            Button {
+                                store.saveDiscovered(id: profile.id)
+                            } label: {
+                                Label("Save to Library", systemImage: "square.and.arrow.down")
+                            }
+                        } else {
+                            Button {
+                                onDuplicate(profile)
+                            } label: {
+                                Label("Duplicate", systemImage: "plus.square.on.square")
+                            }
                         }
 
-                        if settings.settings.librarySort == .manual, let onMove {
+                        if !profile.isDiscovered,
+                           settings.settings.librarySort == .manual,
+                           let onMove {
                             Divider()
                             Button {
                                 onMove(profile, -1)
@@ -145,6 +155,7 @@ public struct LibrarySectionView: View {
 
     @Environment(ConnectionStore.self) private var store
     @Environment(SettingsStore.self) private var settings
+    @Environment(NearbyDiscovery.self) private var nearby
 
     public init(
         section: LibrarySection,
@@ -259,6 +270,9 @@ public struct LibrarySectionView: View {
     private var emptyExplanation: String {
         switch section {
         case .nearby:
+            if let failure = nearby.failureMessage {
+                return failure
+            }
             return NSLocalizedString(
                 "Computers discovered on this network appear here. You can also add one manually.",
                 comment: "Empty library explanation"

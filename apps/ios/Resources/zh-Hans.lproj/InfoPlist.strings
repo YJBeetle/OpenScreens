@@ -1,2 +1,3 @@
 "NSPhotoLibraryAddUsageDescription" = "OpenScreens 会把远端会话的截图存储到你的相册。";
 "NSFaceIDUsageDescription" = "使用 Face ID 解锁 OpenScreens。";
+"NSLocalNetworkUsageDescription" = "OpenScreens 会在本地网络上发现共享屏幕的电脑。";

@@ -138,6 +138,22 @@ final class AppSettingsTests: XCTestCase {
         XCTAssertEqual(ToolbarDock.bottom.orientation, .horizontal)
     }
 
+    func testNearbyDiscoveryDefaultsOn() throws {
+        let encoded = try JSONEncoder().encode(AppSettings(discoverNearby: false))
+        let object = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: encoded) as? [String: Any]
+        )
+        XCTAssertEqual(object["discoverNearby"] as? Bool, false)
+
+        var legacy = object
+        legacy.removeValue(forKey: "discoverNearby")
+        let decoded = try JSONDecoder().decode(
+            AppSettings.self,
+            from: JSONSerialization.data(withJSONObject: legacy)
+        )
+        XCTAssertTrue(decoded.discoverNearby)
+    }
+
     func testBiometricLockRoundTripsAndDefaultsOff() throws {
         let encoded = try JSONEncoder().encode(AppSettings(requireBiometrics: true))
         let object = try XCTUnwrap(
@@ -216,8 +232,100 @@ final class ConnectionStoreTests: XCTestCase {
     func testSamplesAreAvailable() {
         let samples = ConnectionStore.sampleConnections()
         XCTAssertFalse(samples.isEmpty)
-        XCTAssertTrue(samples.contains { $0.section == .nearby })
         XCTAssertTrue(samples.allSatisfy { $0.isValid })
+        XCTAssertTrue(samples.allSatisfy { !$0.isDiscovered && $0.section != .nearby })
+    }
+
+    func testDiscoverySyncsIntoTemporaryNearbyEntries() throws {
+        let url = temporaryFileURL()
+        defer { removeStore(at: url) }
+        let store = ConnectionStore(fileURL: url, seedDemoData: false)
+
+        store.syncDiscovered([
+            DiscoveredComputer(name: "Studio", host: "Studio.local", port: 5900),
+            DiscoveredComputer(name: "Studio Duplicate", host: "studio.local", port: 5900),
+            DiscoveredComputer(name: "Lab", host: "lab.local", port: 5901),
+        ])
+        XCTAssertEqual(store.count(in: .nearby), 2)
+        XCTAssertEqual(store.profiles(in: .nearby, sort: .name).map(\.name), ["Lab", "Studio"])
+
+        let studio = try XCTUnwrap(store.profiles(in: .nearby).first { $0.name == "Studio" })
+        XCTAssertTrue(studio.isDiscovered)
+        XCTAssertEqual(studio.host, "Studio.local")
+        XCTAssertEqual(studio.endpoint, "Studio.local")
+
+        store.syncDiscovered([DiscoveredComputer(name: "Studio Renamed", host: "studio.local", port: 5900)])
+        XCTAssertEqual(store.count(in: .nearby), 1)
+        XCTAssertEqual(store.connection(id: studio.id)?.name, "Studio Renamed")
+
+        let reloaded = ConnectionStore(fileURL: url, seedDemoData: false)
+        XCTAssertTrue(reloaded.connections.isEmpty)
+        XCTAssertEqual(reloaded.count(in: .nearby), 0)
+    }
+
+    func testDiscoveredEntriesCanBeSavedOrDismissed() throws {
+        let url = temporaryFileURL()
+        defer { removeStore(at: url) }
+        let store = ConnectionStore(fileURL: url, seedDemoData: false)
+
+        store.syncDiscovered([
+            DiscoveredComputer(name: "Studio", host: "studio.local", port: 5900),
+            DiscoveredComputer(name: "Lab", host: "lab.local", port: 5901),
+        ])
+        let studio = try XCTUnwrap(store.profiles(in: .nearby).first { $0.host == "studio.local" })
+        let lab = try XCTUnwrap(store.profiles(in: .nearby).first { $0.host == "lab.local" })
+
+        let saved = try XCTUnwrap(store.saveDiscovered(id: studio.id))
+        XCTAssertFalse(saved.isDiscovered)
+        XCTAssertEqual(saved.section, .custom)
+        XCTAssertEqual(store.count(in: .custom), 1)
+
+        store.delete(id: lab.id)
+        XCTAssertEqual(store.count(in: .nearby), 0)
+
+        store.syncDiscovered([
+            DiscoveredComputer(name: "Studio", host: "studio.local", port: 5900),
+            DiscoveredComputer(name: "Lab", host: "lab.local", port: 5901),
+        ])
+        XCTAssertEqual(store.count(in: .nearby), 0)
+        XCTAssertEqual(store.count(in: .custom), 1)
+
+        let reloaded = ConnectionStore(fileURL: url, seedDemoData: false)
+        XCTAssertEqual(reloaded.connections.count, 1)
+        XCTAssertEqual(reloaded.profiles(in: .custom).first?.host, "studio.local")
+    }
+
+    func testSavingEditedDiscoveredConnectionPromotesIt() throws {
+        let url = temporaryFileURL()
+        defer { removeStore(at: url) }
+        let store = ConnectionStore(fileURL: url, seedDemoData: false)
+
+        store.syncDiscovered([DiscoveredComputer(name: "Studio", host: "studio.local", port: 5900)])
+        var profile = try XCTUnwrap(store.profiles(in: .nearby).first)
+        profile.name = "My Studio"
+        profile.username = "designer"
+        store.update(profile)
+
+        XCTAssertEqual(store.count(in: .nearby), 0)
+        XCTAssertEqual(store.count(in: .custom), 1)
+        XCTAssertEqual(store.profiles(in: .custom).first?.name, "My Studio")
+        XCTAssertEqual(store.profiles(in: .custom).first?.isDiscovered, false)
+    }
+
+    func testEditingDiscoveredConnectionAfterServiceDisappearsStillSaves() throws {
+        let url = temporaryFileURL()
+        defer { removeStore(at: url) }
+        let store = ConnectionStore(fileURL: url, seedDemoData: false)
+
+        store.syncDiscovered([DiscoveredComputer(name: "Studio", host: "studio.local", port: 5900)])
+        var profile = try XCTUnwrap(store.profiles(in: .nearby).first)
+        store.syncDiscovered([])
+        XCTAssertTrue(store.connections.isEmpty)
+
+        profile.name = "Studio Saved"
+        store.update(profile)
+        XCTAssertEqual(store.count(in: .custom), 1)
+        XCTAssertEqual(store.profiles(in: .custom).first?.name, "Studio Saved")
     }
 
     func testGroupsPersistAndFilterConnections() {

@@ -378,3 +378,11 @@
 "Open a remote screen in OpenScreens." = "在 OpenScreens 中打开远程屏幕。";
 "Enter a hostname or IP address." = "请输入主机名或 IP 地址。";
 "The port must be between 1 and 65535." = "端口必须在 1 到 65535 之间。";
+
+/* MARK: - Hot corners */
+"Hot Corners" = "触发角";
+"Top Left" = "左上角";
+"Top Right" = "右上角";
+"Bottom Left" = "左下角";
+"Bottom Right" = "右下角";
+"Show Dock" = "显示 Dock";

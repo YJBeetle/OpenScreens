@@ -80,6 +80,8 @@ struct SessionToolbar: View {
             }
         case .display:
             displayMenu
+        case .hotCorners:
+            hotCornersMenu
         case .observe:
             FloatingIconButton(
                 systemImage: model.isObserving ? "eye.fill" : "eye",
@@ -171,6 +173,36 @@ struct SessionToolbar: View {
         model.profile.controls.sharedClipboard
             ? NSLocalizedString("Send or fetch clipboard text", comment: "Clipboard hint")
             : NSLocalizedString("Shared clipboard is turned off for this connection", comment: "Clipboard hint")
+    }
+
+    /// Parks the remote pointer on a screen edge, so the host's hot corners
+    /// fire and an auto-hidden Dock appears without pixel-hunting.
+    private var hotCornersMenu: some View {
+        Menu {
+            ForEach(RemoteHotCorner.corners) { corner in
+                Button {
+                    model.jumpPointer(to: corner.normalizedPoint)
+                } label: {
+                    Label(corner.title, systemImage: corner.systemImage)
+                }
+            }
+
+            Divider()
+
+            Button {
+                model.jumpPointer(to: RemoteHotCorner.dock.normalizedPoint)
+            } label: {
+                Label(
+                    RemoteHotCorner.dock.title,
+                    systemImage: RemoteHotCorner.dock.systemImage
+                )
+            }
+        } label: {
+            menuIcon("square.grid.3x3", title: "Hot Corners")
+        }
+        .menuIndicator(.hidden)
+        .buttonStyle(.plain)
+        .accessibilityLabel("Hot Corners")
     }
 
     private var displayMenu: some View {

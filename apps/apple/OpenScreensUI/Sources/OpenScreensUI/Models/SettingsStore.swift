@@ -185,6 +185,7 @@ public enum SessionToolbarItem: String, Codable, CaseIterable, Identifiable, Sen
     case clipboard
     case download
     case display
+    case hotCorners
     case observe
     case screenshot
 
@@ -198,6 +199,7 @@ public enum SessionToolbarItem: String, Codable, CaseIterable, Identifiable, Sen
         case .clipboard: NSLocalizedString("Clipboard", comment: "Toolbar item")
         case .download: NSLocalizedString("Download", comment: "Toolbar item")
         case .display: NSLocalizedString("Display options", comment: "Toolbar item")
+        case .hotCorners: NSLocalizedString("Hot Corners", comment: "Toolbar item")
         case .observe: NSLocalizedString("Observe Mode", comment: "Toolbar item")
         case .screenshot: NSLocalizedString("Screenshot", comment: "Toolbar item")
         }
@@ -211,6 +213,7 @@ public enum SessionToolbarItem: String, Codable, CaseIterable, Identifiable, Sen
         case .clipboard: "doc.on.clipboard"
         case .download: "arrow.down.doc"
         case .display: "display"
+        case .hotCorners: "square.grid.3x3"
         case .observe: "eye"
         case .screenshot: "camera"
         }

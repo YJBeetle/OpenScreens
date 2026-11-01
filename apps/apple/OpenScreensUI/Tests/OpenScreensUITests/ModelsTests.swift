@@ -75,6 +75,20 @@ final class ConnectionProfileTests: XCTestCase {
     }
 }
 
+final class RemoteHotCornerTests: XCTestCase {
+    func testCornersParkOnFramebufferEdges() {
+        XCTAssertEqual(RemoteHotCorner.topLeft.normalizedPoint, CGPoint(x: 0, y: 0))
+        XCTAssertEqual(RemoteHotCorner.topRight.normalizedPoint, CGPoint(x: 1, y: 0))
+        XCTAssertEqual(RemoteHotCorner.bottomLeft.normalizedPoint, CGPoint(x: 0, y: 1))
+        XCTAssertEqual(RemoteHotCorner.bottomRight.normalizedPoint, CGPoint(x: 1, y: 1))
+        XCTAssertEqual(RemoteHotCorner.dock.normalizedPoint, CGPoint(x: 0.5, y: 1))
+        XCTAssertEqual(
+            RemoteHotCorner.corners,
+            [.topLeft, .topRight, .bottomLeft, .bottomRight]
+        )
+    }
+}
+
 final class AppSettingsTests: XCTestCase {
     func testToolbarDockRoundTripsAndDefaultsToBottom() throws {
         let encoded = try JSONEncoder().encode(AppSettings(toolbarDock: .left))

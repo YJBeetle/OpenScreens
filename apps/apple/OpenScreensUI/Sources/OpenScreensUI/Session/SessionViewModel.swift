@@ -1,6 +1,53 @@
 import CoreGraphics
 import Foundation
 import Observation
+
+/// Screen-edge pointer targets: the four hot corners and the Dock edge.
+public enum RemoteHotCorner: String, CaseIterable, Identifiable, Sendable {
+    case topLeft
+    case topRight
+    case bottomLeft
+    case bottomRight
+    case dock
+
+    public var id: String { rawValue }
+
+    public var title: String {
+        switch self {
+        case .topLeft: NSLocalizedString("Top Left", comment: "Hot corner")
+        case .topRight: NSLocalizedString("Top Right", comment: "Hot corner")
+        case .bottomLeft: NSLocalizedString("Bottom Left", comment: "Hot corner")
+        case .bottomRight: NSLocalizedString("Bottom Right", comment: "Hot corner")
+        case .dock: NSLocalizedString("Show Dock", comment: "Hot corner")
+        }
+    }
+
+    public var systemImage: String {
+        switch self {
+        case .topLeft: "arrow.up.left"
+        case .topRight: "arrow.up.right"
+        case .bottomLeft: "arrow.down.left"
+        case .bottomRight: "arrow.down.right"
+        case .dock: "dock.rectangle"
+        }
+    }
+
+    /// Normalized framebuffer position on the target edge. The transport
+    /// clamps 1.0 to the last pixel column or row.
+    public var normalizedPoint: CGPoint {
+        switch self {
+        case .topLeft: CGPoint(x: 0, y: 0)
+        case .topRight: CGPoint(x: 1, y: 0)
+        case .bottomLeft: CGPoint(x: 0, y: 1)
+        case .bottomRight: CGPoint(x: 1, y: 1)
+        case .dock: CGPoint(x: 0.5, y: 1)
+        }
+    }
+
+    public static var corners: [RemoteHotCorner] {
+        [.topLeft, .topRight, .bottomLeft, .bottomRight]
+    }
+}
 import OpenScreensCanvas
 import SwiftUI
 
@@ -418,6 +465,20 @@ public final class SessionViewModel {
         queuePointer([
             PointerEvent(action: .up, button: button, x: remoteCursor.x, y: remoteCursor.y)
         ])
+    }
+
+    /// Parks the remote pointer on a normalized framebuffer point without
+    /// clicking, so remote hot corners and an auto-hidden Dock react. Works in
+    /// trackpad mode too, where an absolute move would otherwise be unavailable.
+    public func jumpPointer(to normalized: CGPoint) {
+        guard state.isConnected, !isObserving else { return }
+        let target = CGPoint(
+            x: min(max(normalized.x, 0), 1),
+            y: min(max(normalized.y, 0), 1)
+        )
+        remoteCursor = target
+        dragAnchor = nil
+        queuePointer([PointerEvent(action: .move, x: target.x, y: target.y)])
     }
 
     /// Tracks the pointer on pointer-capable platforms and forwards absolute

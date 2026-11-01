@@ -23,12 +23,14 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.automirrored.outlined.ViewList
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.ArrowDownward
@@ -41,11 +43,14 @@ import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.GridView
 import androidx.compose.material.icons.outlined.Monitor
 import androidx.compose.material.icons.outlined.MoreVert
-import androidx.compose.material.icons.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.Sensors
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
@@ -54,6 +59,8 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -83,12 +90,14 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.openscreens.app.R
 import com.openscreens.app.data.Connection
 import com.openscreens.app.data.ConnectionGroup
 import com.openscreens.app.data.LibrarySortOrder
+import com.openscreens.app.data.NearbyServer
 import com.openscreens.app.data.sortedForLibrary
 import com.openscreens.app.ui.theme.ThemedSystemBarIcons
 import com.openscreens.app.ui.theme.autoAccent
@@ -98,6 +107,11 @@ import java.net.URI
 private enum class LibraryView(@StringRes val labelRes: Int) {
     Grid(R.string.library_view_grid),
     List(R.string.library_view_list),
+}
+
+private enum class LibraryTab(@StringRes val labelRes: Int) {
+    Nearby(R.string.library_tab_nearby),
+    Library(R.string.library_tab_library),
 }
 
 @StringRes
@@ -119,6 +133,8 @@ private sealed interface GroupDialog {
 fun LibraryScreen(
     connections: List<Connection>,
     groups: List<ConnectionGroup>,
+    nearby: List<NearbyServer>,
+    discoverNearby: Boolean,
     sort: LibrarySortOrder,
     onSortChange: (LibrarySortOrder) -> Unit,
     onAddGroup: (String) -> Unit,
@@ -131,8 +147,10 @@ fun LibraryScreen(
     onEditConnection: (Connection) -> Unit,
     onOpenSettings: () -> Unit,
     onQuickConnect: (host: String, port: Int, username: String?) -> Unit,
+    onOpenNearby: (NearbyServer) -> Unit,
 ) {
     ThemedSystemBarIcons()
+    var tab by rememberSaveable { mutableStateOf(LibraryTab.Library) }
     var searchActive by rememberSaveable { mutableStateOf(false) }
     var query by rememberSaveable { mutableStateOf("") }
     var selectedGroupId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -175,9 +193,10 @@ fun LibraryScreen(
         filtered.sortedForLibrary(sort)
     }
 
+    val showingSearch = searchActive && tab == LibraryTab.Library
     Scaffold(
         topBar = {
-            if (searchActive) {
+            if (showingSearch) {
                 TopAppBar(
                     navigationIcon = {
                         IconButton(
@@ -224,16 +243,23 @@ fun LibraryScreen(
                 TopAppBar(
                     title = {
                         Text(
-                            text = stringResource(R.string.library_title),
+                            text = stringResource(
+                                when (tab) {
+                                    LibraryTab.Nearby -> R.string.library_nearby_title
+                                    LibraryTab.Library -> R.string.library_title
+                                },
+                            ),
                             fontWeight = FontWeight.SemiBold,
                         )
                     },
                     actions = {
-                        IconButton(onClick = { searchActive = true }) {
-                            Icon(
-                                imageVector = Icons.Outlined.Search,
-                                contentDescription = stringResource(R.string.library_search),
-                            )
+                        if (tab == LibraryTab.Library) {
+                            IconButton(onClick = { searchActive = true }) {
+                                Icon(
+                                    imageVector = Icons.Outlined.Search,
+                                    contentDescription = stringResource(R.string.library_search),
+                                )
+                            }
                         }
                         IconButton(onClick = onAddConnection) {
                             Icon(
@@ -247,30 +273,32 @@ fun LibraryScreen(
                                 contentDescription = stringResource(R.string.library_quick_connect),
                             )
                         }
-                        Box {
-                            IconButton(onClick = { viewMenuExpanded = true }) {
-                                Icon(
-                                    imageVector = when (view) {
-                                        LibraryView.Grid -> Icons.Outlined.GridView
-                                        LibraryView.List -> Icons.AutoMirrored.Outlined.ViewList
+                        if (tab == LibraryTab.Library) {
+                            Box {
+                                IconButton(onClick = { viewMenuExpanded = true }) {
+                                    Icon(
+                                        imageVector = when (view) {
+                                            LibraryView.Grid -> Icons.Outlined.GridView
+                                            LibraryView.List -> Icons.AutoMirrored.Outlined.ViewList
+                                        },
+                                        contentDescription = stringResource(R.string.library_view_options),
+                                    )
+                                }
+                                ViewOptionsMenu(
+                                    expanded = viewMenuExpanded,
+                                    view = view,
+                                    sort = sort,
+                                    onDismiss = { viewMenuExpanded = false },
+                                    onViewSelected = {
+                                        view = it
+                                        viewMenuExpanded = false
                                     },
-                                    contentDescription = stringResource(R.string.library_view_options),
+                                    onSortSelected = {
+                                        onSortChange(it)
+                                        viewMenuExpanded = false
+                                    },
                                 )
                             }
-                            ViewOptionsMenu(
-                                expanded = viewMenuExpanded,
-                                view = view,
-                                sort = sort,
-                                onDismiss = { viewMenuExpanded = false },
-                                onViewSelected = {
-                                    view = it
-                                    viewMenuExpanded = false
-                                },
-                                onSortSelected = {
-                                    onSortChange(it)
-                                    viewMenuExpanded = false
-                                },
-                            )
                         }
                         Box {
                             IconButton(onClick = { moreMenuExpanded = true }) {
@@ -299,8 +327,47 @@ fun LibraryScreen(
                 )
             }
         },
+        bottomBar = {
+            NavigationBar {
+                NavigationBarItem(
+                    selected = tab == LibraryTab.Nearby,
+                    onClick = {
+                        tab = LibraryTab.Nearby
+                        searchActive = false
+                        query = ""
+                        focusManager.clearFocus()
+                    },
+                    icon = {
+                        if (nearby.isEmpty()) {
+                            Icon(Icons.Outlined.Sensors, contentDescription = null)
+                        } else {
+                            BadgedBox(badge = { Badge { Text(nearby.size.toString()) } }) {
+                                Icon(Icons.Outlined.Sensors, contentDescription = null)
+                            }
+                        }
+                    },
+                    label = { Text(stringResource(R.string.library_tab_nearby)) },
+                )
+                NavigationBarItem(
+                    selected = tab == LibraryTab.Library,
+                    onClick = { tab = LibraryTab.Library },
+                    icon = { Icon(Icons.Outlined.GridView, contentDescription = null) },
+                    label = { Text(stringResource(R.string.library_tab_library)) },
+                )
+            }
+        },
     ) { innerPadding ->
-        if (connections.isEmpty()) {
+        if (tab == LibraryTab.Nearby) {
+            NearbyContent(
+                servers = nearby,
+                discoveryEnabled = discoverNearby,
+                onOpen = onOpenNearby,
+                onOpenSettings = onOpenSettings,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding),
+            )
+        } else if (connections.isEmpty()) {
             EmptyLibrary(
                 onAddConnection = onAddConnection,
                 modifier = Modifier
@@ -859,7 +926,7 @@ private fun ConnectionCard(
     DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
         DropdownMenuItem(
             text = { Text(stringResource(R.string.session_open_in_new_window)) },
-            leadingIcon = { Icon(Icons.Outlined.OpenInNew, contentDescription = null) },
+            leadingIcon = { Icon(Icons.AutoMirrored.Outlined.OpenInNew, contentDescription = null) },
             onClick = {
                 menuExpanded = false
                 onOpenInNewWindow()
@@ -967,7 +1034,7 @@ private fun ConnectionRow(
     DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
         DropdownMenuItem(
             text = { Text(stringResource(R.string.session_open_in_new_window)) },
-            leadingIcon = { Icon(Icons.Outlined.OpenInNew, contentDescription = null) },
+            leadingIcon = { Icon(Icons.AutoMirrored.Outlined.OpenInNew, contentDescription = null) },
             onClick = {
                 menuExpanded = false
                 onOpenInNewWindow()
@@ -1017,6 +1084,166 @@ private fun MoveMenuItems(
                 move()
             },
         )
+    }
+}
+
+@Composable
+private fun NearbyContent(
+    servers: List<NearbyServer>,
+    discoveryEnabled: Boolean,
+    onOpen: (NearbyServer) -> Unit,
+    onOpenSettings: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    when {
+        !discoveryEnabled -> NearbyEmpty(
+            title = stringResource(R.string.library_nearby_off_title),
+            body = stringResource(R.string.library_nearby_off_body),
+            modifier = modifier,
+        ) {
+            TextButton(onClick = onOpenSettings) {
+                Text(stringResource(R.string.library_nearby_off_action))
+            }
+        }
+
+        servers.isEmpty() -> NearbyEmpty(
+            title = stringResource(R.string.library_nearby_empty_title),
+            body = stringResource(R.string.library_nearby_empty_body),
+            modifier = modifier,
+        ) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(22.dp),
+                strokeWidth = 2.dp,
+            )
+        }
+
+        else -> LazyColumn(
+            modifier = modifier,
+            contentPadding = PaddingValues(
+                start = 16.dp,
+                end = 16.dp,
+                top = 12.dp,
+                bottom = 24.dp,
+            ),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            item {
+                Text(
+                    text = stringResource(R.string.library_nearby_count, servers.size),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(bottom = 2.dp),
+                )
+            }
+            items(servers, key = { it.id }) { server ->
+                NearbyRow(server = server, onClick = { onOpen(server) })
+            }
+        }
+    }
+}
+
+@Composable
+private fun NearbyEmpty(
+    title: String,
+    body: String,
+    modifier: Modifier = Modifier,
+    action: @Composable () -> Unit,
+) {
+    Column(
+        modifier = modifier.padding(32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(76.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.primaryContainer),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = Icons.Outlined.Sensors,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                modifier = Modifier.size(34.dp),
+            )
+        }
+        Spacer(Modifier.height(20.dp))
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleLarge,
+        )
+        Spacer(Modifier.height(8.dp))
+        Text(
+            text = body,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+        )
+        Spacer(Modifier.height(20.dp))
+        action()
+    }
+}
+
+@Composable
+private fun NearbyRow(server: NearbyServer, onClick: () -> Unit) {
+    val gradient = autoAccent(server.name).gradient
+    val description = stringResource(R.string.library_nearby_open, server.name)
+
+    ElevatedCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .semantics { contentDescription = description },
+        shape = RoundedCornerShape(18.dp),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(56.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(Brush.linearGradient(listOf(gradient.start, gradient.end))),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Monitor,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(24.dp),
+                )
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Text(
+                    text = server.name,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = server.address,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontFamily = FontFamily.Monospace,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Icon(
+                imageVector = Icons.Outlined.Add,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+            )
+        }
     }
 }
 

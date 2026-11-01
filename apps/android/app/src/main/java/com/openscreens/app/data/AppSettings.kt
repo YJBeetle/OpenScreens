@@ -10,4 +10,6 @@ data class AppSettings(
     val themeMode: ThemeMode = ThemeMode.System,
     val updateChannel: UpdateChannel = UpdateChannel.Release,
     val librarySort: LibrarySortOrder = LibrarySortOrder.Az,
+    /** Browse for computers advertising VNC over Bonjour on the local network. */
+    val discoverNearby: Boolean = true,
 )

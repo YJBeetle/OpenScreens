@@ -6,6 +6,8 @@ import com.openscreens.app.data.AppSettings
 import com.openscreens.app.data.Connection
 import com.openscreens.app.data.ConnectionStore
 import com.openscreens.app.data.LibrarySortOrder
+import com.openscreens.app.data.NearbyDiscovery
+import com.openscreens.app.data.NearbyServer
 import com.openscreens.app.data.QualityPreset
 import com.openscreens.app.data.UpdateChannel
 import com.openscreens.app.data.SettingsStore
@@ -13,6 +15,7 @@ import com.openscreens.app.data.SshKey
 import com.openscreens.app.data.SshKeyStore
 import com.openscreens.app.data.ThemeMode
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 
@@ -29,8 +32,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _settings = MutableStateFlow(settingsStore.load())
     val settings = _settings.asStateFlow()
 
+    private val nearbyDiscovery = NearbyDiscovery(application)
+    val nearby: StateFlow<List<NearbyServer>> = nearbyDiscovery.servers
+
     private val _route = MutableStateFlow<Route>(Route.Library)
     val route = _route.asStateFlow()
+
+    init {
+        if (_settings.value.discoverNearby) {
+            nearbyDiscovery.start()
+        }
+    }
+
+    override fun onCleared() {
+        nearbyDiscovery.stop()
+        super.onCleared()
+    }
 
     fun connection(id: String): Connection? = connectionStore.find(id)
 
@@ -61,6 +78,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun setLibrarySort(sort: LibrarySortOrder) {
         _settings.update { it.copy(librarySort = sort) }
         settingsStore.save(_settings.value)
+    }
+
+    fun setDiscoverNearby(enabled: Boolean) {
+        if (_settings.value.discoverNearby == enabled) return
+        _settings.update { it.copy(discoverNearby = enabled) }
+        settingsStore.save(_settings.value)
+        if (enabled) nearbyDiscovery.start() else nearbyDiscovery.stop()
     }
 
     fun sshKey(id: String?): SshKey? = sshKeyStore.find(id)

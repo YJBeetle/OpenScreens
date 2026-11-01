@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -33,6 +34,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -71,6 +73,7 @@ fun SettingsScreen(
     settings: AppSettings,
     sshKeyCount: Int,
     onThemeModeChange: (ThemeMode) -> Unit,
+    onDiscoverNearbyChange: (Boolean) -> Unit,
     updateChannel: UpdateChannel,
     onUpdateChannelChange: (UpdateChannel) -> Unit,
     onManageSshKeys: () -> Unit,
@@ -203,6 +206,42 @@ fun SettingsScreen(
                 }
             }
 
+
+            Spacer(Modifier.height(4.dp))
+            SectionHeader(stringResource(R.string.settings_library))
+            SettingsCard {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .toggleable(
+                            value = settings.discoverNearby,
+                            role = Role.Switch,
+                            onValueChange = onDiscoverNearbyChange,
+                        )
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                        Text(
+                            text = stringResource(R.string.settings_discover_nearby),
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                        Text(
+                            text = stringResource(R.string.settings_discover_nearby_hint),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Switch(
+                        checked = settings.discoverNearby,
+                        onCheckedChange = null,
+                    )
+                }
+            }
 
             Spacer(Modifier.height(4.dp))
             SectionHeader(stringResource(R.string.settings_updates))

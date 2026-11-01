@@ -42,6 +42,16 @@
     <string name="library_view_list">列表</string>
     <string name="library_more">更多</string>
     <string name="library_cancel">取消</string>
+    <string name="library_tab_nearby">附近</string>
+    <string name="library_tab_library">连接库</string>
+    <string name="library_nearby_title">附近</string>
+    <string name="library_nearby_count">附近 %1$d 台</string>
+    <string name="library_nearby_empty_title">附近没有电脑</string>
+    <string name="library_nearby_empty_body">在此网络中共享屏幕的电脑会显示在这里。</string>
+    <string name="library_nearby_off_title">附近发现已关闭</string>
+    <string name="library_nearby_off_body">在设置中开启发现，即可查找本地网络中的电脑。</string>
+    <string name="library_nearby_off_action">打开设置</string>
+    <string name="library_nearby_open">打开 %1$s</string>
 
     <!-- 连接编辑器 -->
     <string name="editor_new_title">新建连接</string>
@@ -208,6 +218,9 @@
     <string name="settings_back">返回</string>
 
     <string name="settings_security">安全</string>
+    <string name="settings_library">连接库</string>
+    <string name="settings_discover_nearby">自动发现附近电脑</string>
+    <string name="settings_discover_nearby_hint">使用 Bonjour 查找本地网络中共享屏幕的电脑。</string>
     <string name="settings_ssh_keys">SSH 密钥</string>
     <string name="settings_ssh_keys_count">已保存 %1$d 个</string>
     <string name="settings_manage">管理</string>

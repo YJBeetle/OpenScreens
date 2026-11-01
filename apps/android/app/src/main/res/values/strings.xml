@@ -42,6 +42,16 @@
     <string name="library_view_list">List</string>
     <string name="library_more">More</string>
     <string name="library_cancel">Cancel</string>
+    <string name="library_tab_nearby">Nearby</string>
+    <string name="library_tab_library">Library</string>
+    <string name="library_nearby_title">Nearby</string>
+    <string name="library_nearby_count">%1$d nearby</string>
+    <string name="library_nearby_empty_title">No nearby computers</string>
+    <string name="library_nearby_empty_body">Computers sharing their screen on this network appear here.</string>
+    <string name="library_nearby_off_title">Nearby discovery is off</string>
+    <string name="library_nearby_off_body">Turn on discovery in Settings to find computers on your local network.</string>
+    <string name="library_nearby_off_action">Open Settings</string>
+    <string name="library_nearby_open">Open %1$s</string>
 
     <!-- Connection editor -->
     <string name="editor_new_title">New connection</string>
@@ -210,6 +220,9 @@
     <string name="settings_back">Back</string>
 
     <string name="settings_security">Security</string>
+    <string name="settings_library">Library</string>
+    <string name="settings_discover_nearby">Discover nearby computers</string>
+    <string name="settings_discover_nearby_hint">Use Bonjour to find computers sharing their screen on your local network.</string>
     <string name="settings_ssh_keys">SSH keys</string>
     <string name="settings_ssh_keys_count">%1$d saved</string>
     <string name="settings_manage">Manage</string>

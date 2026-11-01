@@ -27,6 +27,7 @@ fun OpenScreensApp(viewModel: MainViewModel = viewModel()) {
     val route by viewModel.route.collectAsStateWithLifecycle()
     val connections by viewModel.connections.collectAsStateWithLifecycle()
     val groups by viewModel.groups.collectAsStateWithLifecycle()
+    val nearby by viewModel.nearby.collectAsStateWithLifecycle()
     val sshKeys by viewModel.sshKeys.collectAsStateWithLifecycle()
 
     val darkTheme = when (settings.themeMode) {
@@ -47,6 +48,8 @@ fun OpenScreensApp(viewModel: MainViewModel = viewModel()) {
                 Route.Library -> LibraryScreen(
                     connections = connections,
                     groups = groups,
+                    nearby = nearby,
+                    discoverNearby = settings.discoverNearby,
                     sort = settings.librarySort,
                     onSortChange = viewModel::setLibrarySort,
                     onAddGroup = viewModel::addGroup,
@@ -80,12 +83,25 @@ fun OpenScreensApp(viewModel: MainViewModel = viewModel()) {
                             ),
                         )
                     },
+                    onOpenNearby = { server ->
+                        viewModel.navigate(
+                            Route.Editor(
+                                connectionId = null,
+                                draft = Connection(
+                                    name = server.name,
+                                    host = server.host,
+                                    port = server.port,
+                                ),
+                            ),
+                        )
+                    },
                 )
 
                 Route.Settings -> SettingsScreen(
                     settings = settings,
                     sshKeyCount = sshKeys.size,
                     onThemeModeChange = viewModel::setThemeMode,
+                    onDiscoverNearbyChange = viewModel::setDiscoverNearby,
                     updateChannel = settings.updateChannel,
                     onUpdateChannelChange = viewModel::setUpdateChannel,
                     onManageSshKeys = { viewModel.navigate(Route.SshKeys) },

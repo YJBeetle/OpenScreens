@@ -17,6 +17,7 @@ class SettingsStore(context: Context) {
             preferences.getString("librarySort", null),
             LibrarySortOrder.Az,
         ),
+        discoverNearby = preferences.getBoolean("discoverNearby", true),
     )
 
     fun save(settings: AppSettings) {
@@ -24,6 +25,7 @@ class SettingsStore(context: Context) {
             .putString("themeMode", settings.themeMode.name)
             .putString("updateChannel", settings.updateChannel.name)
             .putString("librarySort", settings.librarySort.name)
+            .putBoolean("discoverNearby", settings.discoverNearby)
             .apply()
     }
 

@@ -138,6 +138,21 @@ final class AppSettingsTests: XCTestCase {
         XCTAssertEqual(ToolbarDock.bottom.orientation, .horizontal)
     }
 
+    func testLibraryLayoutRoundTripsAndDefaultsToGrid() throws {
+        let encoded = try JSONEncoder().encode(AppSettings(libraryLayout: .list))
+        var object = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: encoded) as? [String: Any]
+        )
+        XCTAssertEqual(object["libraryLayout"] as? String, "list")
+
+        object.removeValue(forKey: "libraryLayout")
+        let decoded = try JSONDecoder().decode(
+            AppSettings.self,
+            from: JSONSerialization.data(withJSONObject: object)
+        )
+        XCTAssertEqual(decoded.libraryLayout, .grid)
+    }
+
     func testNearbyDiscoveryDefaultsOn() throws {
         let encoded = try JSONEncoder().encode(AppSettings(discoverNearby: false))
         let object = try XCTUnwrap(
@@ -227,6 +242,55 @@ final class ConnectionStoreTests: XCTestCase {
         XCTAssertEqual(store.search("10.0.0").count, 1)
         XCTAssertEqual(store.search("DESIGNER").count, 1)
         XCTAssertEqual(store.search("missing").count, 0)
+    }
+
+    func testMoveToIndexReordersManualList() {
+        let url = temporaryFileURL()
+        defer { removeStore(at: url) }
+        let store = ConnectionStore(fileURL: url, seedDemoData: false)
+        let a = ConnectionProfile(name: "A", host: "a.local")
+        let b = ConnectionProfile(name: "B", host: "b.local")
+        let c = ConnectionProfile(name: "C", host: "c.local")
+        store.add(a)
+        store.add(b)
+        store.add(c)
+
+        let ids = [a.id, b.id, c.id]
+        store.move(id: c.id, toIndex: 0, within: ids)
+        XCTAssertEqual(
+            store.profiles(in: .custom, sort: .manual).map(\.name),
+            ["C", "A", "B"]
+        )
+
+        store.move(id: c.id, toIndex: 3, within: [c.id, a.id, b.id])
+        XCTAssertEqual(
+            store.profiles(in: .custom, sort: .manual).map(\.name),
+            ["A", "B", "C"]
+        )
+    }
+
+    func testConnectionCountTracksSessionsAndSorts() {
+        let url = temporaryFileURL()
+        defer { removeStore(at: url) }
+        let store = ConnectionStore(fileURL: url, seedDemoData: false)
+        let quiet = ConnectionProfile(name: "Quiet", host: "quiet.local")
+        let busy = ConnectionProfile(name: "Busy", host: "busy.local")
+        store.add(quiet)
+        store.add(busy)
+
+        store.markConnected(id: busy.id)
+        store.markConnected(id: busy.id)
+        store.markConnected(id: quiet.id)
+
+        XCTAssertEqual(store.connection(id: busy.id)?.connectionCount, 2)
+        XCTAssertEqual(store.connection(id: quiet.id)?.connectionCount, 1)
+        XCTAssertEqual(
+            store.profiles(in: .custom, sort: .connectionCount).map(\.name),
+            ["Busy", "Quiet"]
+        )
+
+        let reloaded = ConnectionStore(fileURL: url, seedDemoData: false)
+        XCTAssertEqual(reloaded.connection(id: busy.id)?.connectionCount, 2)
     }
 
     func testSamplesAreAvailable() {

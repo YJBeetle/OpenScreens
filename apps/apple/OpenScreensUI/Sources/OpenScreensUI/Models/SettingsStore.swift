@@ -68,6 +68,27 @@ public enum TileDensity: String, Codable, CaseIterable, Identifiable, Sendable {
     }
 }
 
+public enum LibraryLayout: String, Codable, CaseIterable, Identifiable, Sendable {
+    case grid
+    case list
+
+    public var id: String { rawValue }
+
+    public var title: String {
+        switch self {
+        case .grid: NSLocalizedString("Grid", comment: "Library layout")
+        case .list: NSLocalizedString("List", comment: "Library layout")
+        }
+    }
+
+    public var systemImage: String {
+        switch self {
+        case .grid: "square.grid.2x2"
+        case .list: "list.bullet"
+        }
+    }
+}
+
 public enum UpdateChannel: String, Codable, CaseIterable, Identifiable, Sendable {
     case release
     case prerelease
@@ -87,6 +108,7 @@ public enum UpdateChannel: String, Codable, CaseIterable, Identifiable, Sendable
 public enum LibrarySortOrder: String, Codable, CaseIterable, Identifiable, Sendable {
     case name
     case lastConnected
+    case connectionCount
     case manual
 
     public var id: String { rawValue }
@@ -95,7 +117,8 @@ public enum LibrarySortOrder: String, Codable, CaseIterable, Identifiable, Senda
         switch self {
         case .name: NSLocalizedString("Name", comment: "Library sort order")
         case .lastConnected: NSLocalizedString("Last Connected", comment: "Library sort order")
-        case .manual: NSLocalizedString("Manual", comment: "Library sort order")
+        case .connectionCount: NSLocalizedString("Connection Count", comment: "Library sort order")
+        case .manual: NSLocalizedString("Custom Order", comment: "Library sort order")
         }
     }
 }
@@ -118,6 +141,7 @@ public struct AppSettings: Codable, Hashable, Sendable {
     public var appearance: AppAppearance
     public var tileDensity: TileDensity
     public var librarySort: LibrarySortOrder
+    public var libraryLayout: LibraryLayout
     public var defaultCursorMode: CursorMode
     public var sharedClipboard: Bool
     public var autoReconnect: Bool
@@ -135,6 +159,7 @@ public struct AppSettings: Codable, Hashable, Sendable {
         appearance: AppAppearance = .system,
         tileDensity: TileDensity = .comfortable,
         librarySort: LibrarySortOrder = .name,
+        libraryLayout: LibraryLayout = .grid,
         defaultCursorMode: CursorMode = .touch,
         sharedClipboard: Bool = true,
         autoReconnect: Bool = true,
@@ -149,6 +174,7 @@ public struct AppSettings: Codable, Hashable, Sendable {
         self.appearance = appearance
         self.tileDensity = tileDensity
         self.librarySort = librarySort
+        self.libraryLayout = libraryLayout
         self.defaultCursorMode = defaultCursorMode
         self.sharedClipboard = sharedClipboard
         self.autoReconnect = autoReconnect
@@ -162,7 +188,7 @@ public struct AppSettings: Codable, Hashable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case appearance, tileDensity, librarySort, defaultCursorMode, sharedClipboard
+        case appearance, tileDensity, librarySort, libraryLayout, defaultCursorMode, sharedClipboard
         case autoReconnect, confirmDisconnect, updateChannel, showToolbarOnLaunch, toolbarItems
         case toolbarDock, discoverNearby, requireBiometrics
     }
@@ -172,6 +198,7 @@ public struct AppSettings: Codable, Hashable, Sendable {
         appearance = try container.decode(AppAppearance.self, forKey: .appearance)
         tileDensity = try container.decode(TileDensity.self, forKey: .tileDensity)
         librarySort = try container.decodeIfPresent(LibrarySortOrder.self, forKey: .librarySort) ?? .name
+        libraryLayout = try container.decodeIfPresent(LibraryLayout.self, forKey: .libraryLayout) ?? .grid
         defaultCursorMode = try container.decode(CursorMode.self, forKey: .defaultCursorMode)
         sharedClipboard = try container.decode(Bool.self, forKey: .sharedClipboard)
         autoReconnect = try container.decode(Bool.self, forKey: .autoReconnect)

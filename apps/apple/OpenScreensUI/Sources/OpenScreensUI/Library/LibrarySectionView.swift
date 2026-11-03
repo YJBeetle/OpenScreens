@@ -38,63 +38,21 @@ struct ConnectionGrid: View {
                     }
                     .buttonStyle(TilePressStyle())
                     .contextMenu {
-                        Button {
-                            onConnect(profile)
-                        } label: {
-                            Label("Connect", systemImage: "play.fill")
-                        }
-
-                        if let onOpenInNewWindow {
-                            Button {
-                                onOpenInNewWindow(profile)
-                            } label: {
-                                Label("Open in New Window", systemImage: "rectangle.badge.plus")
-                            }
-                        }
-
-                        Button {
-                            onEdit(profile)
-                        } label: {
-                            Label("Edit…", systemImage: "pencil")
-                        }
-
-                        if profile.isDiscovered {
-                            Button {
-                                store.saveDiscovered(id: profile.id)
-                            } label: {
-                                Label("Save to Library", systemImage: "square.and.arrow.down")
-                            }
-                        } else {
-                            Button {
-                                onDuplicate(profile)
-                            } label: {
-                                Label("Duplicate", systemImage: "plus.square.on.square")
-                            }
-                        }
-
-                        if !profile.isDiscovered,
-                           settings.settings.librarySort == .manual,
-                           let onMove {
-                            Divider()
-                            Button {
-                                onMove(profile, -1)
-                            } label: {
-                                Label("Move Up", systemImage: "chevron.up")
-                            }
-                            Button {
-                                onMove(profile, 1)
-                            } label: {
-                                Label("Move Down", systemImage: "chevron.down")
-                            }
-                        }
-
-                        Divider()
-
-                        Button(role: .destructive) {
-                            pendingDeletion = profile
-                        } label: {
-                            Label("Delete…", systemImage: "trash")
-                        }
+                        ConnectionActionsMenu(
+                            profile: profile,
+                            canMove: settings.settings.librarySort == .manual,
+                            onConnect: { onConnect(profile) },
+                            onEdit: { onEdit(profile) },
+                            onDuplicate: { onDuplicate(profile) },
+                            onOpenInNewWindow: onOpenInNewWindow.map { action in
+                                { action(profile) }
+                            },
+                            onMove: onMove.map { move in
+                                { offset in move(profile, offset) }
+                            },
+                            onSaveDiscovered: { store.saveDiscovered(id: profile.id) },
+                            onRequestDelete: { pendingDeletion = profile }
+                        )
                     }
                     .accessibilityAction(named: "Edit") { onEdit(profile) }
                     .accessibilityAction(named: "Duplicate") { onDuplicate(profile) }
@@ -141,11 +99,232 @@ struct ConnectionGrid: View {
     }
 }
 
+private struct ConnectionActionsMenu: View {
+    let profile: ConnectionProfile
+    let canMove: Bool
+    let onConnect: () -> Void
+    let onEdit: () -> Void
+    let onDuplicate: () -> Void
+    let onOpenInNewWindow: (() -> Void)?
+    let onMove: ((Int) -> Void)?
+    let onSaveDiscovered: () -> Void
+    let onRequestDelete: () -> Void
+
+    var body: some View {
+        Button(action: onConnect) {
+            Label("Connect", systemImage: "play.fill")
+        }
+
+        if let onOpenInNewWindow {
+            Button(action: onOpenInNewWindow) {
+                Label("Open in New Window", systemImage: "rectangle.badge.plus")
+            }
+        }
+
+        Button(action: onEdit) {
+            Label("Edit…", systemImage: "pencil")
+        }
+
+        if profile.isDiscovered {
+            Button(action: onSaveDiscovered) {
+                Label("Save to Library", systemImage: "square.and.arrow.down")
+            }
+        } else {
+            Button(action: onDuplicate) {
+                Label("Duplicate", systemImage: "plus.square.on.square")
+            }
+        }
+
+        if canMove, let onMove {
+            Divider()
+            Button {
+                onMove(-1)
+            } label: {
+                Label("Move Up", systemImage: "chevron.up")
+            }
+            Button {
+                onMove(1)
+            } label: {
+                Label("Move Down", systemImage: "chevron.down")
+            }
+        }
+
+        Divider()
+
+        Button(role: .destructive, action: onRequestDelete) {
+            Label("Delete…", systemImage: "trash")
+        }
+    }
+}
+
+/// Compact rows shown when the library uses the list layout.
+struct ConnectionList: View {
+    let profiles: [ConnectionProfile]
+    let onConnect: (ConnectionProfile) -> Void
+    let onEdit: (ConnectionProfile) -> Void
+    let onDuplicate: (ConnectionProfile) -> Void
+    let onDelete: (ConnectionProfile) -> Void
+    var onOpenInNewWindow: ((ConnectionProfile) -> Void)? = nil
+    var onMove: ((ConnectionProfile, Int) -> Void)? = nil
+    var isReordering: Bool = false
+    var onReorder: ((UUID, Int) -> Void)? = nil
+
+    @Environment(SettingsStore.self) private var settings
+    @Environment(ConnectionStore.self) private var store
+    @State private var pendingDeletion: ConnectionProfile?
+
+    var body: some View {
+        List {
+            ForEach(profiles) { profile in
+                Group {
+                    if isReordering {
+                        ConnectionRow(profile: profile)
+                    } else {
+                        Button {
+                            onConnect(profile)
+                        } label: {
+                            ConnectionRow(profile: profile)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .contextMenu {
+                    ConnectionActionsMenu(
+                        profile: profile,
+                        canMove: settings.settings.librarySort == .manual,
+                        onConnect: { onConnect(profile) },
+                        onEdit: { onEdit(profile) },
+                        onDuplicate: { onDuplicate(profile) },
+                        onOpenInNewWindow: onOpenInNewWindow.map { action in
+                            { action(profile) }
+                        },
+                        onMove: onMove.map { move in
+                            { offset in move(profile, offset) }
+                        },
+                        onSaveDiscovered: { store.saveDiscovered(id: profile.id) },
+                        onRequestDelete: { pendingDeletion = profile }
+                    )
+                }
+                .accessibilityAction(named: "Edit") { onEdit(profile) }
+                .accessibilityAction(named: "Duplicate") { onDuplicate(profile) }
+            }
+            .onMove { offsets, destination in
+                guard let source = offsets.first, let onReorder else { return }
+                onReorder(profiles[source].id, destination)
+            }
+        }
+        .listStyle(.plain)
+        .modifier(ReorderEditMode(isActive: isReordering))
+        .confirmationDialog(
+            deletionTitle,
+            isPresented: deletionBinding,
+            titleVisibility: .visible
+        ) {
+            Button("Delete", role: .destructive) {
+                if let profile = pendingDeletion {
+                    onDelete(profile)
+                }
+                pendingDeletion = nil
+            }
+            Button("Cancel", role: .cancel) {
+                pendingDeletion = nil
+            }
+        } message: {
+            Text("This removes the connection from this device. You can add it again at any time.")
+        }
+    }
+
+    private var deletionTitle: String {
+        guard let profile = pendingDeletion else {
+            return NSLocalizedString("Delete Connection?", comment: "Delete confirmation")
+        }
+        return String(
+            format: NSLocalizedString("Delete “%@”?", comment: "Delete confirmation with name"),
+            profile.name
+        )
+    }
+
+    private var deletionBinding: Binding<Bool> {
+        Binding(
+            get: { pendingDeletion != nil },
+            set: { presented in
+                if !presented { pendingDeletion = nil }
+            }
+        )
+    }
+}
+
+private struct ReorderEditMode: ViewModifier {
+    let isActive: Bool
+
+    func body(content: Content) -> some View {
+        #if os(iOS)
+        content.environment(\.editMode, .constant(isActive ? .active : .inactive))
+        #else
+        content
+        #endif
+    }
+}
+
+private struct ConnectionRow: View {
+    let profile: ConnectionProfile
+
+    var body: some View {
+        HStack(spacing: 12) {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(profile.palette.gradient)
+                .frame(width: 44, height: 44)
+                .overlay {
+                    Image(systemName: profile.platform.symbolName)
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.92))
+                }
+                .overlay {
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .strokeBorder(Theme.Colors.tileStroke, lineWidth: 1)
+                }
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(profile.name)
+                    .font(.body.weight(.medium))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+
+                Text(profile.subtitle)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 8)
+
+            if profile.isFavorite {
+                Image(systemName: "star.fill")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
+            }
+
+            if profile.section == .nearby {
+                StatusDot(color: Theme.Colors.success, diameter: 7)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(profile.name), \(profile.platform.title), \(profile.subtitle)")
+        .accessibilityHint("Connects to this remote screen")
+        .accessibilityAddTraits(.isButton)
+    }
+}
+
 /// Complete content for one library section.
 public struct LibrarySectionView: View {
     private let section: LibrarySection
     private let groupID: UUID?
     private let searchText: String
+    private let layout: LibraryLayout
+    private let reordering: Bool
     private let onConnect: (ConnectionProfile) -> Void
     private let onEdit: (ConnectionProfile) -> Void
     private let onDuplicate: (ConnectionProfile) -> Void
@@ -161,6 +340,8 @@ public struct LibrarySectionView: View {
         section: LibrarySection,
         groupID: UUID? = nil,
         searchText: String = "",
+        layout: LibraryLayout = .grid,
+        reordering: Bool = false,
         onConnect: @escaping (ConnectionProfile) -> Void,
         onEdit: @escaping (ConnectionProfile) -> Void,
         onDuplicate: @escaping (ConnectionProfile) -> Void,
@@ -171,6 +352,8 @@ public struct LibrarySectionView: View {
         self.section = section
         self.groupID = groupID
         self.searchText = searchText
+        self.layout = layout
+        self.reordering = reordering
         self.onConnect = onConnect
         self.onEdit = onEdit
         self.onDuplicate = onDuplicate
@@ -191,6 +374,22 @@ public struct LibrarySectionView: View {
             )
             if profiles.isEmpty {
                 emptyState
+            } else if layout == .list {
+                ConnectionList(
+                    profiles: profiles,
+                    onConnect: onConnect,
+                    onEdit: onEdit,
+                    onDuplicate: onDuplicate,
+                    onDelete: onDelete,
+                    onOpenInNewWindow: onOpenInNewWindow,
+                    onMove: { profile, offset in
+                        store.move(id: profile.id, by: offset, within: profiles.map(\.id))
+                    },
+                    isReordering: reordering,
+                    onReorder: { id, destination in
+                        store.move(id: id, toIndex: destination, within: profiles.map(\.id))
+                    }
+                )
             } else {
                 ConnectionGrid(
                     profiles: profiles,
@@ -300,6 +499,7 @@ public struct LibrarySectionView: View {
 /// Global search across every local connection group.
 public struct LibrarySearchResultsView: View {
     private let query: String
+    private let layout: LibraryLayout
     private let onConnect: (ConnectionProfile) -> Void
     private let onEdit: (ConnectionProfile) -> Void
     private let onDuplicate: (ConnectionProfile) -> Void
@@ -310,6 +510,7 @@ public struct LibrarySearchResultsView: View {
 
     public init(
         query: String,
+        layout: LibraryLayout = .grid,
         onConnect: @escaping (ConnectionProfile) -> Void,
         onEdit: @escaping (ConnectionProfile) -> Void,
         onDuplicate: @escaping (ConnectionProfile) -> Void,
@@ -317,6 +518,7 @@ public struct LibrarySearchResultsView: View {
         onOpenInNewWindow: ((ConnectionProfile) -> Void)? = nil
     ) {
         self.query = query
+        self.layout = layout
         self.onConnect = onConnect
         self.onEdit = onEdit
         self.onDuplicate = onDuplicate
@@ -340,6 +542,15 @@ public struct LibrarySearchResultsView: View {
                 } description: {
                     Text("No connections match “\(trimmed)”.")
                 }
+            } else if layout == .list {
+                ConnectionList(
+                    profiles: results,
+                    onConnect: onConnect,
+                    onEdit: onEdit,
+                    onDuplicate: onDuplicate,
+                    onDelete: onDelete,
+                    onOpenInNewWindow: onOpenInNewWindow
+                )
             } else {
                 ConnectionGrid(
                     profiles: results,

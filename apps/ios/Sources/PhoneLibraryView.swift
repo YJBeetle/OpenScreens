@@ -23,6 +23,7 @@ struct PhoneLibraryView: View {
     @Environment(SettingsStore.self) private var settings
 
     @State private var tab: PhoneTab = .library
+    @State private var isReordering = false
     @State private var searchText = ""
     @State private var activeSheet: IOSLibrarySheet?
     @State private var activeProfile: ConnectionProfile?
@@ -80,6 +81,7 @@ struct PhoneLibraryView: View {
                 NavigationStack {
                     LibrarySearchResultsView(
                         query: searchText,
+                        layout: settings.settings.libraryLayout,
                         onConnect: openSession,
                         onEdit: edit,
                         onDuplicate: duplicate,
@@ -92,6 +94,11 @@ struct PhoneLibraryView: View {
             }
         }
         .background(Color(uiColor: .systemBackground))
+        .onChange(of: tab) { _, newTab in
+            if newTab != .library {
+                isReordering = false
+            }
+        }
         .sheet(item: $activeSheet, onDismiss: connectPendingLink) { sheet in
             switch sheet {
             case .editor(let route):
@@ -200,6 +207,8 @@ struct PhoneLibraryView: View {
                 LibrarySectionView(
                     section: .custom,
                     groupID: groupID,
+                    layout: settings.settings.libraryLayout,
+                    reordering: isReordering,
                     onConnect: openSession,
                     onEdit: edit,
                     onDuplicate: duplicate,
@@ -211,7 +220,7 @@ struct PhoneLibraryView: View {
                     }
                 )
             } else {
-                sectionContent(.custom)
+                sectionContent(.custom, reordering: isReordering)
             }
         }
     }
@@ -226,27 +235,110 @@ struct PhoneLibraryView: View {
     @ToolbarContentBuilder
     private func libraryToolbar(groupID: UUID?) -> some ToolbarContent {
         ToolbarItemGroup(placement: .topBarTrailing) {
-            Button {
-                activeSheet = .editor(IOSEditorRoute(mode: .create(.custom), groupID: groupID))
-            } label: {
-                Image(systemName: "plus")
-            }
-            .accessibilityLabel("New Connection")
+            if isReordering {
+                Button("Done") {
+                    isReordering = false
+                }
+            } else {
+                Button {
+                    activeSheet = .quickConnect
+                } label: {
+                    Image(systemName: "bolt.horizontal")
+                }
+                .accessibilityLabel("Quick Connect")
 
-            Button {
-                activeSheet = .quickConnect
-            } label: {
-                Image(systemName: "bolt.horizontal")
-            }
-            .accessibilityLabel("Quick Connect")
+                libraryViewMenu
 
-            Button {
-                activeSheet = .settings
-            } label: {
-                Image(systemName: "gearshape")
+                Button {
+                    activeSheet = .editor(IOSEditorRoute(mode: .create(.custom), groupID: groupID))
+                } label: {
+                    Image(systemName: "plus")
+                }
+                .accessibilityLabel("New Connection")
+
+                Menu {
+                    Button {
+                        activeSheet = .settings
+                    } label: {
+                        Label("Settings", systemImage: "gearshape")
+                    }
+
+                    Button {
+                        groupName = ""
+                        groupDialog = .create
+                    } label: {
+                        Label("New Group", systemImage: "folder.badge.plus")
+                    }
+                } label: {
+                    Image(systemName: "ellipsis")
+                }
+                .accessibilityLabel("More")
             }
-            .accessibilityLabel("Settings")
         }
+    }
+
+    private var libraryViewMenu: some View {
+        Menu {
+            Section {
+                Toggle(isOn: layoutOption(.grid)) {
+                    Label(LibraryLayout.grid.title, systemImage: LibraryLayout.grid.systemImage)
+                }
+                Toggle(isOn: layoutOption(.list)) {
+                    Label(LibraryLayout.list.title, systemImage: LibraryLayout.list.systemImage)
+                }
+            }
+
+            Section {
+                Toggle(isOn: sortOption(.name)) {
+                    Text(LibrarySortOrder.name.title)
+                }
+                Toggle(isOn: sortOption(.lastConnected)) {
+                    Text(LibrarySortOrder.lastConnected.title)
+                }
+                Toggle(isOn: sortOption(.connectionCount)) {
+                    Text(LibrarySortOrder.connectionCount.title)
+                }
+            }
+
+            Section {
+                Button {
+                    tab = .library
+                    settings.settings.librarySort = .manual
+                    settings.settings.libraryLayout = .list
+                    isReordering = true
+                } label: {
+                    Label(
+                        LibrarySortOrder.manual.title,
+                        systemImage: "cursorarrow.and.square.on.square.dashed"
+                    )
+                }
+            }
+        } label: {
+            Image(systemName: "square.grid.2x2")
+        }
+        .accessibilityLabel("View Options")
+    }
+
+    private func layoutOption(_ layout: LibraryLayout) -> Binding<Bool> {
+        Binding(
+            get: { settings.settings.libraryLayout == layout },
+            set: { selected in
+                if selected {
+                    settings.settings.libraryLayout = layout
+                }
+            }
+        )
+    }
+
+    private func sortOption(_ order: LibrarySortOrder) -> Binding<Bool> {
+        Binding(
+            get: { settings.settings.librarySort == order },
+            set: { selected in
+                if selected {
+                    settings.settings.librarySort = order
+                }
+            }
+        )
     }
 
     private var groupChips: some View {
@@ -316,9 +408,11 @@ struct PhoneLibraryView: View {
         .accessibilityAddTraits(selected ? .isSelected : [])
     }
 
-    private func sectionContent(_ section: LibrarySection) -> some View {
+    private func sectionContent(_ section: LibrarySection, reordering: Bool = false) -> some View {
         LibrarySectionView(
             section: section,
+            layout: settings.settings.libraryLayout,
+            reordering: reordering,
             onConnect: openSession,
             onEdit: edit,
             onDuplicate: duplicate,

@@ -29,7 +29,7 @@
 "Nearby" = "附近";
 "Links" = "链接";
 "Custom" = "自定义";
-"All Connections" = "全部连接";
+"All Connections" = "所有连接";
 "Library" = "连接库";
 "Library tabs" = "连接库标签页";
 "Services" = "服务";
@@ -370,8 +370,13 @@
 "Move Up" = "上移";
 "Move Down" = "下移";
 "Sort Connections" = "排序方式";
-"Last Connected" = "最近连接";
-"Manual" = "手动";
+"Last Connected" = "上次连接";
+"Connection Count" = "连接计数";
+"Custom Order" = "自定义顺序";
+"Grid" = "网格";
+"List" = "列表";
+"View Options" = "视图选项";
+"More" = "更多";
 "Long-press a connection and choose Move Up or Move Down to arrange it." = "长按连接并选择“上移”或“下移”来调整顺序。";
 "Open in New Window" = "在新窗口打开";
 "Session" = "会话";

@@ -85,6 +85,32 @@ public final class ConnectionStore {
             .sorted { Self.libraryOrder($0, $1, sort: .name) }
     }
 
+    /// Moves a connection to a new position in the supplied manual order.
+    public func move(id: UUID, toIndex destination: Int, within orderedIDs: [UUID]) {
+        guard let source = orderedIDs.firstIndex(of: id),
+              let sourceIndex = connections.firstIndex(where: { $0.id == id })
+        else { return }
+
+        var reordered = orderedIDs
+        reordered.move(
+            fromOffsets: IndexSet(integer: source),
+            toOffset: min(max(destination, 0), orderedIDs.count)
+        )
+        guard let position = reordered.firstIndex(of: id) else { return }
+
+        let profile = connections.remove(at: sourceIndex)
+        if position + 1 < reordered.count,
+           let anchor = connections.firstIndex(where: { $0.id == reordered[position + 1] }) {
+            connections.insert(profile, at: anchor)
+        } else if position > 0,
+                  let anchor = connections.firstIndex(where: { $0.id == reordered[position - 1] }) {
+            connections.insert(profile, at: anchor + 1)
+        } else {
+            connections.append(profile)
+        }
+        persist()
+    }
+
     /// Moves a connection past its neighbour in the supplied manual order.
     public func move(id: UUID, by offset: Int, within orderedIDs: [UUID]) {
         guard let position = orderedIDs.firstIndex(of: id),
@@ -229,6 +255,7 @@ public final class ConnectionStore {
         copy.name += " Copy"
         copy.createdAt = .now
         copy.lastConnectedAt = nil
+        copy.connectionCount = nil
         copy.isDiscovered = false
         copy.section = .custom
         connections.append(copy)
@@ -245,6 +272,7 @@ public final class ConnectionStore {
     public func markConnected(id: UUID) {
         guard let index = connections.firstIndex(where: { $0.id == id }) else { return }
         connections[index].lastConnectedAt = .now
+        connections[index].connectionCount = (connections[index].connectionCount ?? 0) + 1
         persist()
     }
 
@@ -272,7 +300,8 @@ public final class ConnectionStore {
                 authentication: .vncPassword,
                 username: "lab",
                 createdAt: referenceDate.addingTimeInterval(-86_400 * 12),
-                lastConnectedAt: referenceDate.addingTimeInterval(-86_400 * 2)
+                lastConnectedAt: referenceDate.addingTimeInterval(-86_400 * 2),
+                connectionCount: 14
             ),
             ConnectionProfile(
                 name: "Living Room PC",
@@ -293,7 +322,8 @@ public final class ConnectionStore {
                 authentication: .vncPassword,
                 username: "ci",
                 createdAt: referenceDate.addingTimeInterval(-86_400 * 8),
-                lastConnectedAt: referenceDate.addingTimeInterval(-86_400)
+                lastConnectedAt: referenceDate.addingTimeInterval(-86_400),
+                connectionCount: 6
             ),
             ConnectionProfile(
                 name: "Design Studio",
@@ -304,7 +334,8 @@ public final class ConnectionStore {
                 authentication: .macOSAccount,
                 username: "studio",
                 isFavorite: true,
-                createdAt: referenceDate.addingTimeInterval(-86_400 * 45)
+                createdAt: referenceDate.addingTimeInterval(-86_400 * 45),
+                connectionCount: 2
             ),
             ConnectionProfile(
                 name: "Archive Server",
@@ -384,6 +415,13 @@ public final class ConnectionStore {
         case .lastConnected:
             let left = lhs.lastConnectedAt ?? .distantPast
             let right = rhs.lastConnectedAt ?? .distantPast
+            if left != right {
+                return left > right
+            }
+            return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
+        case .connectionCount:
+            let left = lhs.connectionCount ?? 0
+            let right = rhs.connectionCount ?? 0
             if left != right {
                 return left > right
             }

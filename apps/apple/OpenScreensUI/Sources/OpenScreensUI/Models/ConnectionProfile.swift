@@ -152,6 +152,8 @@ public struct ConnectionProfile: Identifiable, Codable, Hashable, Sendable {
     public var openVpnConfig: String?
     public var createdAt: Date
     public var lastConnectedAt: Date?
+    /// Sessions started from this connection. Optional so older stores decode.
+    public var connectionCount: Int?
 
     public init(
         id: UUID = UUID(),
@@ -171,7 +173,8 @@ public struct ConnectionProfile: Identifiable, Codable, Hashable, Sendable {
         wireGuardConfig: String? = nil,
         openVpnConfig: String? = nil,
         createdAt: Date = .now,
-        lastConnectedAt: Date? = nil
+        lastConnectedAt: Date? = nil,
+        connectionCount: Int? = nil
     ) {
         self.id = id
         self.name = name
@@ -191,6 +194,7 @@ public struct ConnectionProfile: Identifiable, Codable, Hashable, Sendable {
         self.openVpnConfig = openVpnConfig
         self.createdAt = createdAt
         self.lastConnectedAt = lastConnectedAt
+        self.connectionCount = connectionCount
     }
 
     // MARK: - Derived values

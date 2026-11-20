@@ -19,7 +19,7 @@ internal class RemoteKeyboardBuffer {
         }
     }
 
-    suspend fun forward(send: (Char) -> Unit) {
+    suspend fun forward(send: (Int) -> Unit) {
         while (true) {
             snapshotFlow { field.composition == null && !SENTINEL.contentEquals(field.text) }.first { it }
             // Consume from the editor itself. Pending edits can accumulate before a
@@ -29,7 +29,7 @@ internal class RemoteKeyboardBuffer {
                 replace(0, length, SENTINEL)
                 placeCursorAtEnd()
             }
-            typed.forEach(send)
+            typed.codePoints().forEachOrdered { send(it) }
         }
     }
 }

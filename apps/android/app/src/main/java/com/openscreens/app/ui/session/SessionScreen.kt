@@ -883,7 +883,7 @@ fun SessionScreen(
             HiddenKeyboardField(
                 enabled = keyboardActive,
                 focusRequester = focusRequester,
-                onChar = { char -> sendKeysym(if (char == '\n') KEY_RETURN else x11Keysym(char)) },
+                onCodePoint = { code -> sendKeysym(if (code == '\n'.code) KEY_RETURN else x11Keysym(code)) },
                 onBackspace = { sendKeysym(KEY_BACKSPACE) },
                 onFocusChange = { focused -> if (!focused) keyboardActive = false },
                 modifier = Modifier.align(Alignment.TopStart),
@@ -2185,13 +2185,13 @@ private fun ToolbarButton(
 private fun HiddenKeyboardField(
     enabled: Boolean,
     focusRequester: FocusRequester,
-    onChar: (Char) -> Unit,
+    onCodePoint: (Int) -> Unit,
     onBackspace: () -> Unit,
     onFocusChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val buffer = remember(enabled) { RemoteKeyboardBuffer() }
-    val send by rememberUpdatedState(onChar)
+    val send by rememberUpdatedState(onCodePoint)
     LaunchedEffect(buffer) { if (enabled) buffer.forward { send(it) } }
     BasicTextField(
         // Dialog dismissal must not move IME focus into the remote session.
@@ -2575,8 +2575,7 @@ private fun remotePoint(
  * Maps a character to an X11 keysym. Printable Latin-1 keeps its code point; everything
  * else uses the Unicode keysym range, matching how RFB servers translate KeyEvents.
  */
-private fun x11Keysym(char: Char): Int {
-    val code = char.code
+private fun x11Keysym(code: Int): Int {
     return if (code in 0x20..0x7E || code in 0xA0..0xFF) {
         code
     } else {

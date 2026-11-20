@@ -721,6 +721,10 @@ public struct ConnectionEditorView: View {
         Section {
             Toggle("Start in Observe Mode", isOn: $draft.controls.startInObserveMode)
             Toggle("Use Shared Clipboard", isOn: $draft.controls.sharedClipboard)
+            Toggle("Remember Selected Display", isOn: Binding(
+                get: { draft.remembersSelectedDisplay },
+                set: { draft.rememberSelectedDisplay = $0 }
+            ))
         } header: {
             Text("Session")
         } footer: {
@@ -731,6 +735,14 @@ public struct ConnectionEditorView: View {
     @ViewBuilder
     private var advancedSection: some View {
         Section {
+            Picker("JPEG Quality", selection: Binding(
+                get: { draft.initialQuality },
+                set: { draft.quality = $0 }
+            )) {
+                ForEach(ConnectionQuality.allCases) { quality in
+                    Text(quality.title).tag(quality)
+                }
+            }
             Picker("Display Scaling", selection: $draft.controls.scaling) {
                 ForEach(RemoteContentMode.allCases) { mode in
                     Text(mode.title).tag(mode)

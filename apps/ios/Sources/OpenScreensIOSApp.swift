@@ -30,7 +30,7 @@ struct OpenScreensIOSApp: App {
         ) { $profileID in
             Group {
                 if let profileID, let profile = connections.connection(id: profileID) {
-                    IOSSessionWindow(profile: profile)
+                    IOSSessionWindow(profile: profile, store: connections)
                 } else {
                     ContentUnavailableView {
                         Label("Connection Not Found", systemImage: "questionmark.folder")

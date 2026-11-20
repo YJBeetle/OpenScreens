@@ -83,6 +83,16 @@ final class ConnectionProfileTests: XCTestCase {
         XCTAssertFalse(invalid.isValid)
     }
 
+    func testLegacyProfileDecodesWithoutStreamingPreferences() throws {
+        let original = ConnectionProfile(name: "Legacy", host: "legacy.local")
+        let data = try JSONEncoder().encode(original)
+        let profile = try JSONDecoder().decode(ConnectionProfile.self, from: data)
+        XCTAssertNil(profile.rememberSelectedDisplay)
+        XCTAssertNil(profile.preferredDisplayID)
+        XCTAssertTrue(profile.remembersSelectedDisplay)
+        XCTAssertEqual(profile.initialQuality.jpegLevel, 9)
+    }
+
     func testEndpointHidesDefaultPort() {
         let defaultPort = ConnectionProfile(name: "A", host: "a.local")
         XCTAssertEqual(defaultPort.endpoint, "a.local")
@@ -226,6 +236,32 @@ final class ConnectionStoreTests: XCTestCase {
 
     private func removeStore(at url: URL) {
         try? FileManager.default.removeItem(at: url.deletingLastPathComponent())
+    }
+
+    func testPreferredDisplaySurvivesAnOverlappingEdit() {
+        let url = temporaryFileURL()
+        defer { removeStore(at: url) }
+        let store = ConnectionStore(fileURL: url, seedDemoData: false)
+        var draft = ConnectionProfile(name: "Studio", host: "studio.local", rememberSelectedDisplay: true)
+        store.add(draft)
+
+        store.setPreferredDisplay(0, for: draft.id)
+        draft.name = "Renamed"
+        draft.quality = .balanced
+        store.update(draft)
+        XCTAssertEqual(store.connection(id: draft.id)?.preferredDisplayID, 0)
+
+        draft.rememberSelectedDisplay = false
+        store.update(draft)
+        store.setPreferredDisplay(42, for: draft.id)
+        let reloaded = ConnectionStore(fileURL: url, seedDemoData: false)
+        XCTAssertEqual(reloaded.connection(id: draft.id)?.preferredDisplayID, 0)
+        XCTAssertEqual(reloaded.connection(id: draft.id)?.quality, .balanced)
+
+        draft.rememberSelectedDisplay = true
+        reloaded.update(draft)
+        reloaded.setPreferredDisplay(nil, for: draft.id)
+        XCTAssertNil(reloaded.connection(id: draft.id)?.preferredDisplayID)
     }
 
     func testCRUDPersistsToDisk() {

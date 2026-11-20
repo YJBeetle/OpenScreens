@@ -129,6 +129,31 @@ public struct SSHProfile: Codable, Hashable, Sendable {
     }
 }
 
+/// Initial JPEG quality for RFB encodings that support it.
+public enum ConnectionQuality: String, Codable, CaseIterable, Identifiable, Sendable {
+    case low
+    case balanced
+    case high
+
+    public var id: String { rawValue }
+
+    public var title: String {
+        switch self {
+        case .low: NSLocalizedString("Low", comment: "Connection quality")
+        case .balanced: NSLocalizedString("Balanced", comment: "Connection quality")
+        case .high: NSLocalizedString("High", comment: "Connection quality")
+        }
+    }
+
+    public var jpegLevel: UInt8 {
+        switch self {
+        case .low: 3
+        case .balanced: 6
+        case .high: 9
+        }
+    }
+}
+
 /// A saved remote computer.
 public struct ConnectionProfile: Identifiable, Codable, Hashable, Sendable {
     public var id: UUID
@@ -154,6 +179,12 @@ public struct ConnectionProfile: Identifiable, Codable, Hashable, Sendable {
     public var lastConnectedAt: Date?
     /// Sessions started from this connection. Optional so older stores decode.
     public var connectionCount: Int?
+    /// Absent in older libraries, which started at high quality.
+    public var quality: ConnectionQuality?
+    /// Absent in older libraries. Display memory is enabled by default.
+    public var rememberSelectedDisplay: Bool?
+    /// Last display explicitly selected while remembering was enabled.
+    public var preferredDisplayID: Int?
 
     public init(
         id: UUID = UUID(),
@@ -174,7 +205,10 @@ public struct ConnectionProfile: Identifiable, Codable, Hashable, Sendable {
         openVpnConfig: String? = nil,
         createdAt: Date = .now,
         lastConnectedAt: Date? = nil,
-        connectionCount: Int? = nil
+        connectionCount: Int? = nil,
+        quality: ConnectionQuality? = nil,
+        rememberSelectedDisplay: Bool? = nil,
+        preferredDisplayID: Int? = nil
     ) {
         self.id = id
         self.name = name
@@ -195,6 +229,9 @@ public struct ConnectionProfile: Identifiable, Codable, Hashable, Sendable {
         self.createdAt = createdAt
         self.lastConnectedAt = lastConnectedAt
         self.connectionCount = connectionCount
+        self.quality = quality
+        self.rememberSelectedDisplay = rememberSelectedDisplay
+        self.preferredDisplayID = preferredDisplayID
     }
 
     /// Applies the launch choice to a session copy of the saved profile.
@@ -205,6 +242,9 @@ public struct ConnectionProfile: Identifiable, Codable, Hashable, Sendable {
     }
 
     // MARK: - Derived values
+
+    public var remembersSelectedDisplay: Bool { rememberSelectedDisplay ?? true }
+    public var initialQuality: ConnectionQuality { quality ?? .high }
 
     public var trimmedName: String { name.trimmingCharacters(in: .whitespacesAndNewlines) }
     public var trimmedHost: String { host.trimmingCharacters(in: .whitespacesAndNewlines) }

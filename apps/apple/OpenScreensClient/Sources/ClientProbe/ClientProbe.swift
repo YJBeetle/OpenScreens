@@ -29,6 +29,8 @@ struct ClientProbe {
                     print("curtain mode support: \(supported)")
                 case .viewport(let viewport):
                     print("viewport: \(viewport)")
+                case .framebufferSize(let width, let height):
+                    print("desktop: \(width)x\(height)")
                 case .displays(let displays):
                     print("displays: \(displays.map { "\($0.name) \($0.width)x\($0.height)" })")
                 case .frame(let frame):

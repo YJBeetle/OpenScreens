@@ -74,7 +74,7 @@ struct IPadLibraryView: View {
             }
         }
         .fullScreenCover(item: $activeProfile) { profile in
-            IOSSessionPresenter(profile: profile)
+            IOSSessionPresenter(profile: profile, store: store)
                 .environment(settings)
         }
     }

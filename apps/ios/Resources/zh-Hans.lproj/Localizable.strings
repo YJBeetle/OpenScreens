@@ -186,6 +186,12 @@
 "Session" = "会话";
 "Observe mode shows the screen without sending input. Shared clipboard enables manual send and fetch while connected." = "查看模式仅显示屏幕，不发送输入。共享剪贴板可在连接期间手动发送和获取内容。";
 "Display Scaling" = "显示缩放";
+"JPEG Quality" = "JPEG 画质";
+"Low" = "低";
+"Balanced" = "均衡";
+"High" = "高";
+"Remember Selected Display" = "记住所选显示器";
+"Invalid display ID." = "显示器 ID 无效。";
 "Scale to Fit" = "适应大小";
 "Scale to Fill" = "填满";
 "Stretch" = "拉伸";

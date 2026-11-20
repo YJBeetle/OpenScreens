@@ -68,15 +68,15 @@ public actor MockRemoteSession: RemoteSessionProtocol {
         keyTime = nil
         tick = 0
 
-        continuation.yield(.displays([
-            RemoteDisplay(id: 0, name: "Demo Display", width: frameWidth, height: frameHeight)
-        ]))
+        continuation.yield(.framebufferSize(width: frameWidth, height: frameHeight))
         continuation.yield(.state(.connected))
         continuation.yield(.frame(currentScene(at: Date()).fullFrame(at: 0)))
 
         connecting = false
         renderTask = Task { await self.runFrameLoop() }
     }
+
+    public func selectDisplay(_ id: Int?) async throws {}
 
     public func disconnect() async {
         guard !stopped else { return }

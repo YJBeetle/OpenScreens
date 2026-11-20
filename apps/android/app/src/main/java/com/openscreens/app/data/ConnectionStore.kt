@@ -188,6 +188,7 @@ class ConnectionStore(
                 .put("quality", connection.quality.name)
                 .put("zoomEnabled", connection.zoomEnabled)
                 .put("startInObserveMode", connection.startInObserveMode)
+                .put("platform", connection.platform.name)
                 .put("rememberSelectedDisplay", connection.rememberSelectedDisplay)
             connection.preferredDisplayId?.let { item.put("preferredDisplayId", it) }
             connection.accent?.let { item.put("accent", it.name) }
@@ -262,6 +263,8 @@ class ConnectionStore(
                                 item.optString("quality", QualityPreset.Balanced.name),
                             )
                         }.getOrDefault(QualityPreset.Balanced),
+                        platform = RemotePlatform.entries.firstOrNull { it.name == item.optString("platform") }
+                            ?: RemotePlatform.Other,
                         zoomEnabled = item.optBoolean("zoomEnabled", true),
                         startInObserveMode = item.optBoolean("startInObserveMode", false),
                         rememberSelectedDisplay = item.optBoolean("rememberSelectedDisplay", true),

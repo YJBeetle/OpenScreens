@@ -37,6 +37,7 @@ data class Connection(
     val startInObserveMode: Boolean = false,
     val rememberSelectedDisplay: Boolean = true,
     val preferredDisplayId: Int? = null,
+    val platform: RemotePlatform = RemotePlatform.Other,
 ) {
     val address: String
         get() = "$host:$port"
@@ -53,6 +54,7 @@ internal fun Connection.sameEndpoint(other: Connection): Boolean =
 internal fun List<Connection>.matchingEndpoint(target: Connection): Connection? = firstOrNull {
     it.sameEndpoint(target) && (target.username.isEmpty() || it.username == target.username)
 }
+enum class RemotePlatform { MacOS, Windows, Linux, Unix, Other }
 
 data class ConnectionGroup(
     val id: String = UUID.randomUUID().toString(),

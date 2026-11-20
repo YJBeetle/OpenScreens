@@ -1,0 +1,17 @@
+<resources>
+    <string name="remote_commands">远端命令</string>
+    <string name="remote_platform">远端操作系统：%1$s</string>
+    <string name="remote_platform_other">其他</string>
+    <string name="command_mission_control">调度中心</string>
+    <string name="command_app_windows">应用程序窗口</string>
+    <string name="command_left_space">移至左侧空间</string>
+    <string name="command_right_space">移至右侧空间</string>
+    <string name="command_desktop">显示桌面</string>
+    <string name="command_switch_apps">切换应用程序</string>
+    <string name="command_spotlight">聚焦搜索</string>
+    <string name="command_force_quit">强制退出…</string>
+    <string name="command_lock">锁定屏幕</string>
+    <string name="command_ctrl_alt_delete">Ctrl-Alt-Delete</string>
+    <string name="command_task_manager">任务管理器</string>
+    <string name="command_insert">插入键</string>
+</resources>

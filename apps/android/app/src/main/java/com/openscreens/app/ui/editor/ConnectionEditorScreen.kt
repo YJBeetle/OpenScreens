@@ -78,6 +78,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.openscreens.app.R
 import com.openscreens.app.data.Connection
+import com.openscreens.app.data.RemotePlatform
 import com.openscreens.app.data.ConnectionAccent
 import com.openscreens.app.data.ConnectionGroup
 import com.openscreens.app.data.QualityPreset
@@ -127,6 +128,7 @@ fun ConnectionEditorScreen(
     var rememberSelectedDisplay by rememberSaveable(editorKey) {
         mutableStateOf(seed?.rememberSelectedDisplay ?: true)
     }
+    var platform by rememberSaveable(editorKey) { mutableStateOf(seed?.platform ?: RemotePlatform.Other) }
     var zoomEnabled by rememberSaveable(editorKey) {
         mutableStateOf(seed?.zoomEnabled ?: true)
     }
@@ -312,6 +314,7 @@ fun ConnectionEditorScreen(
                 rememberSelectedDisplay = rememberSelectedDisplay,
                 zoomEnabled = zoomEnabled,
                 startInObserveMode = startInObserveMode,
+                platform = platform,
                 groupId = groupId,
                 ssh = ssh,
                 wireGuardConfig = wireGuardConfig?.takeIf { it.isNotBlank() },
@@ -475,6 +478,8 @@ fun ConnectionEditorScreen(
                         }
                     }
                 }
+
+                RemotePlatformPicker(platform) { platform = it }
 
                 PasswordField(
                     value = vncPassword,

@@ -50,6 +50,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.input.TextFieldLineLimits
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
@@ -120,11 +121,9 @@ import androidx.compose.ui.semantics.Role
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
@@ -2190,38 +2189,14 @@ private fun HiddenKeyboardField(
     onFocusChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var value by remember {
-        mutableStateOf(TextFieldValue(KEYBOARD_SENTINEL, TextRange(KEYBOARD_SENTINEL.length)))
-    }
-    var committed by remember { mutableStateOf(KEYBOARD_SENTINEL) }
-
+    val buffer = remember(enabled) { RemoteKeyboardBuffer() }
+    val send by rememberUpdatedState(onChar)
+    LaunchedEffect(buffer) { if (enabled) buffer.forward { send(it) } }
     BasicTextField(
         // Dialog dismissal must not move IME focus into the remote session.
         enabled = enabled,
-        value = value,
-        onValueChange = { next ->
-            if (next.composition != null) {
-                // Let the IME finish composing; nothing is sent until it commits.
-                value = next
-            } else {
-                val old = committed
-                val new = next.text
-                when {
-                    new.length > old.length && new.startsWith(old) ->
-                        new.substring(old.length).forEach(onChar)
-
-                    new.length < old.length && old.startsWith(new) ->
-                        repeat(old.length - new.length) { onBackspace() }
-
-                    new != old -> {
-                        repeat((old.length - 1).coerceAtLeast(0)) { onBackspace() }
-                        new.filter { it != KEYBOARD_SENTINEL_CHAR }.forEach(onChar)
-                    }
-                }
-                committed = KEYBOARD_SENTINEL
-                value = TextFieldValue(KEYBOARD_SENTINEL, TextRange(KEYBOARD_SENTINEL.length))
-            }
-        },
+        state = buffer.field,
+        inputTransformation = buffer.handleBackspace(onBackspace),
         modifier = modifier
             .size(1.dp)
             .alpha(0f)
@@ -2235,7 +2210,7 @@ private fun HiddenKeyboardField(
             showKeyboardOnFocus = true,
         ),
         cursorBrush = SolidColor(Color.Transparent),
-        singleLine = true,
+        lineLimits = TextFieldLineLimits.SingleLine,
     )
 }
 
@@ -2470,9 +2445,6 @@ private const val MODIFIER_CONTROL = 1
 private const val MODIFIER_ALT = 1 shl 1
 private const val MODIFIER_SHIFT = 1 shl 2
 private const val MODIFIER_META = 1 shl 3
-
-private const val KEYBOARD_SENTINEL_CHAR = '\u200B'
-private const val KEYBOARD_SENTINEL = "\u200B"
 
 private data class PendingDownload(val handle: Int, val root: File)
 

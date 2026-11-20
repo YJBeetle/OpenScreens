@@ -18,7 +18,7 @@
 - 文件传输：Android 上传选择器与按远端路径下载（带进度）；Apple 端拖放上传
 - Android 直接触摸/触控板模式、以视图中心为锚点的捏合缩放、双指平移
 - 用户态 WireGuard 传输（`rfb-tunnel` + `TunnelDialer`）与 Android wg-quick 配置导入；OpenVPN 与 WireGuard 运行时验收待做
-- Apple Adaptive DCT（1011）：type-0/type-2 解码已在真实 3.889 流上验证并默认优先协商；未实现的 type-1 增量会自动退回 ZRLE/Tight 并请求全量刷新
+- Apple Adaptive DCT（1011）：type-0/type-2 解码已在真实 3.889 流上验证并默认优先协商；type-1 系数细化和显式／顺序缓存读取已对照 Screens 5.9 的合成输入验证，遇到未支持的复制引用会退回标准编码并请求全量刷新
 
 ## 目录
 

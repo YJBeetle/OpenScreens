@@ -9,8 +9,7 @@
 //!   (`[2][64 B Y][64 B CbCr]`),
 //! * type 0: a tile update with a command bitstream and a coefficient
 //!   bitstream,
-//! * type 1: a refinement update. This decoder does not implement type 1 and
-//!   reports it as unsupported.
+//! * type 1: incremental updates of type-0 DCT tiles (skip and refine).
 //!
 //! Type 0 encodes 8x8 tiles as YCbCr 4:2:0 DCT coefficients. Quantisation
 //! tables and the framebuffer live in [`AdaptiveDctDecoder`], which callers
@@ -58,6 +57,123 @@ const ZIGZAG: [usize; 64] = [
 /// A decoded tile: Y, Cb and Cr planes in natural order.
 type Planes = [i16; 3 * 64];
 
+// Type 1 always refines the type-0 coefficients, even after another refinement.
+struct TileBase {
+    y: [i8; 64],
+    cb: i8,
+    cr: i8,
+    threshold: u8,
+}
+
+impl TileBase {
+    fn refine(
+        &self,
+        bits: &mut BitReader<'_>,
+        cr_limit: u8,
+        cb_limit: u8,
+    ) -> Result<Planes, DecodeError> {
+        if cr_limit >= 16 || cb_limit >= 21 {
+            return Err(DecodeError::InvalidData("invalid refinement chroma limits"));
+        }
+        let mut planes = [0; 192];
+        planes[0] = i16::from(self.y[0]);
+        let last = bits.read(6)? as usize;
+        for k in 1..=last {
+            let prior = self.y[k];
+            let within = k < usize::from(self.threshold);
+            let value = if self.threshold >= 15 && within {
+                adjust_one(bits, prior)?
+            } else if prior == 0 {
+                read_dc_rice(bits)? as i8
+            } else {
+                let width = if self.threshold >= 15 || within { 3 } else { 4 };
+                prior.wrapping_add(prior.signum() * bits.read(width)? as i8)
+            };
+            planes[ZIGZAG[k]] = i16::from(value);
+        }
+        for (offset, prior, limit) in [(128, self.cr, cr_limit), (64, self.cb, cb_limit)] {
+            planes[offset] = i16::from(adjust_one(bits, prior)?);
+            decode_chroma_ac(bits, limit, &mut planes[offset..offset + 64])?;
+        }
+        Ok(planes)
+    }
+}
+
+fn adjust_one(bits: &mut BitReader<'_>, prior: i8) -> Result<i8, DecodeError> {
+    Ok(match (bits.read(1)?, prior) {
+        (0, _) => prior,
+        (_, 0) => {
+            if bits.read(1)? == 0 {
+                1
+            } else {
+                -1
+            }
+        }
+        _ => prior.wrapping_add(prior.signum()),
+    })
+}
+
+// ITU-T T.81 Annex K, default luminance AC table, used for Apple chroma ACs.
+const AC_COUNTS: [u8; 16] = [0, 2, 1, 3, 3, 2, 4, 3, 5, 5, 4, 4, 0, 0, 1, 125];
+const AC_SYMBOLS: [u8; 162] = [
+    0x01, 0x02, 0x03, 0x00, 0x04, 0x11, 0x05, 0x12, 0x21, 0x31, 0x41, 0x06, 0x13, 0x51, 0x61, 0x07,
+    0x22, 0x71, 0x14, 0x32, 0x81, 0x91, 0xA1, 0x08, 0x23, 0x42, 0xB1, 0xC1, 0x15, 0x52, 0xD1, 0xF0,
+    0x24, 0x33, 0x62, 0x72, 0x82, 0x09, 0x0A, 0x16, 0x17, 0x18, 0x19, 0x1A, 0x25, 0x26, 0x27, 0x28,
+    0x29, 0x2A, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x3A, 0x43, 0x44, 0x45, 0x46, 0x47, 0x48, 0x49,
+    0x4A, 0x53, 0x54, 0x55, 0x56, 0x57, 0x58, 0x59, 0x5A, 0x63, 0x64, 0x65, 0x66, 0x67, 0x68, 0x69,
+    0x6A, 0x73, 0x74, 0x75, 0x76, 0x77, 0x78, 0x79, 0x7A, 0x83, 0x84, 0x85, 0x86, 0x87, 0x88, 0x89,
+    0x8A, 0x92, 0x93, 0x94, 0x95, 0x96, 0x97, 0x98, 0x99, 0x9A, 0xA2, 0xA3, 0xA4, 0xA5, 0xA6, 0xA7,
+    0xA8, 0xA9, 0xAA, 0xB2, 0xB3, 0xB4, 0xB5, 0xB6, 0xB7, 0xB8, 0xB9, 0xBA, 0xC2, 0xC3, 0xC4, 0xC5,
+    0xC6, 0xC7, 0xC8, 0xC9, 0xCA, 0xD2, 0xD3, 0xD4, 0xD5, 0xD6, 0xD7, 0xD8, 0xD9, 0xDA, 0xE1, 0xE2,
+    0xE3, 0xE4, 0xE5, 0xE6, 0xE7, 0xE8, 0xE9, 0xEA, 0xF1, 0xF2, 0xF3, 0xF4, 0xF5, 0xF6, 0xF7, 0xF8,
+    0xF9, 0xFA,
+];
+
+fn read_ac_symbol(bits: &mut BitReader<'_>) -> Result<u8, DecodeError> {
+    let (mut code, mut first, mut index) = (0u32, 0u32, 0usize);
+    for count in AC_COUNTS {
+        code = (code << 1) | bits.read(1)?;
+        let end = first + u32::from(count);
+        if code < end {
+            return Ok(AC_SYMBOLS[index + (code - first) as usize]);
+        }
+        first = end << 1;
+        index += usize::from(count);
+    }
+    Err(DecodeError::InvalidData("invalid refinement Huffman code"))
+}
+
+fn decode_chroma_ac(
+    bits: &mut BitReader<'_>,
+    limit: u8,
+    plane: &mut [i16],
+) -> Result<(), DecodeError> {
+    let mut k = 1;
+    while k <= usize::from(limit) {
+        let symbol = read_ac_symbol(bits)?;
+        match symbol {
+            0 => break,
+            0xf0 => k += 16,
+            _ => {
+                k += usize::from(symbol >> 4);
+                if k > usize::from(limit) {
+                    return Err(DecodeError::InvalidData("refinement AC run exceeds limit"));
+                }
+                let size = symbol & 15;
+                let raw = bits.read(size)? as i32;
+                let signed = if raw < 1 << (size - 1) {
+                    raw + 1 - (1 << size)
+                } else {
+                    raw
+                };
+                plane[ZIGZAG[k]] = i16::from(signed as i8);
+                k += 1;
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Persistent Adaptive DCT state: quantisation tables, tile predictor and
 /// the BGRA framebuffer.
 pub struct AdaptiveDctDecoder {
@@ -67,6 +183,9 @@ pub struct AdaptiveDctDecoder {
     framebuffer: Vec<u8>,
     quant_y: [u16; 64],
     quant_cbcr: [u16; 64],
+    bases: std::collections::HashMap<(u16, u16), TileBase>,
+    cache: Vec<[i8; 99]>,
+    cache_last_write: u16,
     cache_last_read: u16,
 }
 
@@ -87,6 +206,9 @@ impl AdaptiveDctDecoder {
             framebuffer: vec![0; usize::from(width) * usize::from(height) * 4],
             quant_y,
             quant_cbcr,
+            bases: Default::default(),
+            cache: Vec::new(),
+            cache_last_write: 0,
             cache_last_read: 0,
         }
     }
@@ -135,9 +257,10 @@ impl AdaptiveDctDecoder {
                 self.check_rect(rect)?;
                 self.decode_type0(message, rect)
             }
-            1 => Err(DecodeError::InvalidData(
-                "adaptive DCT type 1 (refine) is not implemented",
-            )),
+            1 => {
+                self.check_rect(rect)?;
+                self.decode_type1(message, rect)
+            }
             2 => self.decode_type2(message),
             _ => Err(DecodeError::InvalidData(
                 "invalid adaptive DCT message type",
@@ -214,6 +337,7 @@ impl AdaptiveDctDecoder {
         let fb_tiles_y = u32::from(self.height).div_ceil(8);
 
         let mut prev: Planes = [0; 3 * 64];
+        let mut previous_threshold = None;
         let mut last_single = [0xFFu8; 4];
         let mut last_a = [0u8; 4];
         let mut last_b = [0u8; 4];
@@ -236,6 +360,8 @@ impl AdaptiveDctDecoder {
                     ));
                 }
 
+                let key = (tile_x as u16, tile_y as u16);
+                self.bases.remove(&key);
                 match command {
                     0 => {
                         let tile = [0xFFu8; TILE_BYTES];
@@ -304,15 +430,27 @@ impl AdaptiveDctDecoder {
                         let planes = if duplicate {
                             prev
                         } else {
-                            let planes = decode_new_coefficients(
+                            let (planes, threshold) = decode_new_coefficients(
                                 &mut coefficients,
                                 &prev,
                                 threshold1,
                                 threshold2,
                             )?;
+                            previous_threshold = Some(threshold);
                             prev = planes;
                             planes
                         };
+                        if let Some(threshold) = previous_threshold {
+                            self.bases.insert(
+                                key,
+                                TileBase {
+                                    y: std::array::from_fn(|i| planes[ZIGZAG[i]] as i8),
+                                    cb: planes[64] as i8,
+                                    cr: planes[128] as i8,
+                                    threshold,
+                                },
+                            );
+                        }
                         let tile = self.idct_tile(&planes);
                         self.blit_tile(rect, column, row, &tile);
                     }
@@ -332,18 +470,101 @@ impl AdaptiveDctDecoder {
         Ok(())
     }
 
+    /// Forget coefficient history when another encoding writes the framebuffer.
+    pub fn invalidate_refinement_bases(&mut self) {
+        self.bases.clear();
+    }
+
+    /// Seed skipped type-1 tiles with the currently visible pixels (the RFB
+    /// server may interleave standard rectangles with DCT rectangles).
+    pub fn prepare_refinement(&mut self, rect: Rect, visible: &[u8]) -> Result<(), DecodeError> {
+        self.check_rect(rect)?;
+        if visible.len() != self.framebuffer.len() {
+            return Err(DecodeError::InvalidData(
+                "refinement framebuffer size mismatch",
+            ));
+        }
+        for row in usize::from(rect.y)..usize::from(rect.y) + usize::from(rect.height) {
+            let start = (row * usize::from(self.width) + usize::from(rect.x)) * 4;
+            let range = start..start + usize::from(rect.width) * 4;
+            self.framebuffer[range.clone()].copy_from_slice(&visible[range]);
+        }
+        Ok(())
+    }
+
+    fn decode_type1(&mut self, message: &[u8], rect: Rect) -> Result<(), DecodeError> {
+        if message.len() < 4 {
+            return Err(DecodeError::Incomplete);
+        }
+        let mut bits = BitReader::new(&message[3..]);
+        for row in 0..usize::from(rect.height).div_ceil(TILE) {
+            for col in 0..usize::from(rect.width).div_ceil(TILE) {
+                match bits.read(2)? {
+                    0 => continue,
+                    1 => {
+                        let key = (rect.x / 8 + col as u16, rect.y / 8 + row as u16);
+                        let base = self.bases.get(&key).ok_or(DecodeError::InvalidData(
+                            "adaptive DCT refinement without a base tile",
+                        ))?;
+                        let planes = base.refine(&mut bits, message[1], message[2])?;
+                        self.store_refined(&planes);
+                        self.blit_tile(rect, col, row, &self.idct_tile(&planes));
+                    }
+                    3 => {
+                        let index = if bits.read(1)? == 0 {
+                            bits.read(16)? as u16
+                        } else {
+                            self.cache_last_read + 1
+                        };
+                        self.copy_from_cache(index, rect, col, row)?;
+                    }
+                    _ => {
+                        return Err(DecodeError::InvalidData(
+                            "unsupported refinement tile reference",
+                        ));
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn store_refined(&mut self, planes: &Planes) {
+        let mut packed = [0; 99];
+        for (plane, dst) in [(0, 0..64), (64, 64..84), (128, 84..99)] {
+            for (i, dst) in dst.enumerate() {
+                packed[dst] = planes[plane + ZIGZAG[i]] as i8;
+            }
+        }
+        self.cache_last_write = next_cache_index(self.cache_last_write);
+        let slot = usize::from(self.cache_last_write - 1);
+        if slot == self.cache.len() {
+            self.cache.push(packed);
+        } else {
+            self.cache[slot] = packed;
+        }
+    }
+
     fn copy_from_cache(
         &mut self,
-        _index: u16,
-        _rect: Rect,
-        _column: usize,
-        _row: usize,
+        index: u16,
+        rect: Rect,
+        column: usize,
+        row: usize,
     ) -> Result<(), DecodeError> {
-        // The coefficient cache is only filled by type 1 (refine) messages,
-        // which this decoder does not implement.
-        Err(DecodeError::InvalidData(
-            "adaptive DCT tile cache reference requires type 1 support",
-        ))
+        let packed = index
+            .checked_sub(1)
+            .and_then(|slot| self.cache.get(usize::from(slot)))
+            .ok_or(DecodeError::InvalidData("missing adaptive DCT cache entry"))?;
+        let mut planes = [0; 192];
+        for (plane, src) in [(0, 0..64), (64, 64..84), (128, 84..99)] {
+            for (i, src) in src.enumerate() {
+                planes[plane + ZIGZAG[i]] = i16::from(packed[src]);
+            }
+        }
+        self.blit_tile(rect, column, row, &self.idct_tile(&planes));
+        self.cache_last_read = index;
+        Ok(())
     }
 
     fn idct_tile(&self, planes: &Planes) -> [u8; TILE_BYTES] {
@@ -578,7 +799,7 @@ fn decode_new_coefficients(
     prev: &Planes,
     threshold1: u8,
     threshold2: u8,
-) -> Result<Planes, DecodeError> {
+) -> Result<(Planes, u8), DecodeError> {
     let mut planes: Planes = [0; 3 * 64];
     let copy_chroma = reader.read(1)? == 1;
     let maximum = if reader.read(1)? == 1 {
@@ -644,7 +865,7 @@ fn decode_new_coefficients(
             k += 1;
         }
     }
-    Ok(planes)
+    Ok((planes, maximum))
 }
 
 /// The zero / end-of-block / run sub-code (`_decode_small_or_0_idct_coefficients`).
@@ -1328,14 +1549,53 @@ mod tests {
     }
 
     #[test]
+    fn refines_luma_and_chroma_then_replays_cache() {
+        // Synthetic 8x8 messages decoded offline by Screens 5.9 VNCKit.
+        // Each expected row repeats eight times in the reference framebuffer.
+        let mut decoder = AdaptiveDctDecoder::new(8, 8, PixelFormat::bgra8888());
+        let rect = rect(8, 8);
+        let base = [0, 15, 25, 0, 0, 7, 0x50, 0, 0x10, 0, 0];
+        decoder.decode_message(&base, rect).unwrap();
+        let first = [1, 1, 1, 0x41, 0x84, 0, 0, 0];
+        let second = [1, 2, 2, 0x41, 0xd4, 0xa0, 0, 0];
+        let first_row = [
+            0xff86817du32,
+            0xff86817d,
+            0xff84807d,
+            0xff81807e,
+            0xff7f8082,
+            0xff7c8083,
+            0xff7a7f83,
+            0xff7a7f83,
+        ]
+        .map(u32::to_le_bytes)
+        .concat();
+        let second_row = [126, 126, 127, 128, 128, 129, 130, 130]
+            .map(|y| [y, y, y, 255])
+            .concat();
+        for (message, row) in [
+            (&first[..], &first_row),
+            (&second[..], &second_row),
+            (&[1, 0, 0, 0xc0, 0, 0x20], &first_row), // explicit slot 1
+            (&[1, 0, 0, 0xe0], &second_row),         // next slot
+            (&[1, 0, 0, 0], &second_row),            // skip
+        ] {
+            decoder.decode_message(message, rect).unwrap();
+            assert_eq!(decoder.framebuffer(), row.repeat(8));
+        }
+        decoder.invalidate_refinement_bases();
+        assert!(decoder.decode_message(&first, rect).is_err());
+    }
+
+    #[test]
     fn reports_incomplete_and_unsupported_paths() {
         assert_eq!(
             decode_apple_dct(&[0, 0], 8, 8, &PixelFormat::bgra8888()).unwrap_err(),
             DecodeError::Incomplete
         );
         assert_eq!(
-            decode_apple_dct_message(&[1, 0, 0, 0], 8, 8, &PixelFormat::bgra8888()).unwrap_err(),
-            DecodeError::InvalidData("adaptive DCT type 1 (refine) is not implemented")
+            decode_apple_dct_message(&[1, 0, 0, 0x80], 8, 8, &PixelFormat::bgra8888()).unwrap_err(),
+            DecodeError::InvalidData("unsupported refinement tile reference")
         );
         assert!(decode_apple_dct_message(&[], 8, 8, &PixelFormat::bgra8888()).is_err());
         assert!(decode_apple_dct_message(&[2; 128], 8, 8, &PixelFormat::bgra8888()).is_err());

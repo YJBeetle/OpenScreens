@@ -1647,15 +1647,19 @@ where
             let framebuffer = state.framebuffer.clone();
             let mut failed = false;
             if let Some(decoder) = state.dct.as_mut() {
-                match decoder.decode_rect(
-                    &data,
-                    Rect {
-                        x,
-                        y,
-                        width,
-                        height,
-                    },
-                ) {
+                let rect = Rect {
+                    x,
+                    y,
+                    width,
+                    height,
+                };
+                let prepared = if data.get(4) == Some(&1) {
+                    let visible = framebuffer.lock().map_err(|_| SessionError::Closed)?;
+                    decoder.prepare_refinement(rect, visible.pixels())
+                } else {
+                    Ok(())
+                };
+                match prepared.and_then(|()| decoder.decode_rect(&data, rect)) {
                     Ok(_) => {
                         let stride = usize::from(frame_width) * 4;
                         let row_bytes = usize::from(width) * 4;
@@ -1731,6 +1735,9 @@ where
             height,
         };
         decode_rect(read, state, rect, encoding).await?;
+        if let Some(decoder) = &mut state.dct {
+            decoder.invalidate_refinement_bases();
+        }
         damaged.push(rect);
     }
 

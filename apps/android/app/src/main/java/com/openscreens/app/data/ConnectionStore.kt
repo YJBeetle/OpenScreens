@@ -3,8 +3,10 @@ package com.openscreens.app.data
 import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
+import android.util.AtomicFile
 import android.util.Log
 import java.io.File
+import java.io.FileNotFoundException
 import java.security.KeyStore
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
@@ -13,6 +15,7 @@ import javax.crypto.spec.GCMParameterSpec
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.getAndUpdate
 import kotlinx.coroutines.flow.update
 import org.json.JSONArray
 import org.json.JSONObject
@@ -26,7 +29,7 @@ class ConnectionStore(
     context: Context,
     initial: List<Connection>? = null,
 ) {
-    private val file = File(context.applicationContext.filesDir, "connections.enc")
+    private val file = AtomicFile(File(context.applicationContext.filesDir, "connections.enc"))
     private val loaded = if (initial == null) load() else null
     private val _connections = MutableStateFlow(initial ?: loaded?.connections ?: sampleConnections())
     val connections: StateFlow<List<Connection>> = _connections.asStateFlow()
@@ -35,7 +38,7 @@ class ConnectionStore(
     val groups: StateFlow<List<ConnectionGroup>> = _groups.asStateFlow()
 
     init {
-        if (initial == null && !file.exists()) {
+        if (initial == null && !file.baseFile.exists()) {
             persist()
         }
     }
@@ -50,19 +53,37 @@ class ConnectionStore(
             if (index == -1) {
                 current + connection
             } else {
-                current.toMutableList().also { it[index] = connection }
+                current.toMutableList().also {
+                    it[index] = connection.copy(preferredDisplayId = current[index].preferredDisplayId)
+                }
             }
         }
         persist()
     }
 
     fun markConnected(id: String, at: Long = System.currentTimeMillis()) {
-        _connections.update { current ->
-            current.map { connection ->
-                if (connection.id == id) connection.copy(lastConnectedAt = at) else connection
+        updateConnection(id) { it.copy(lastConnectedAt = at) }
+    }
+
+    fun setQuality(id: String, quality: QualityPreset) {
+        updateConnection(id) { it.copy(quality = quality) }
+    }
+
+    fun setPreferredDisplay(id: String, displayId: Int?) {
+        updateConnection(id) { connection ->
+            if (connection.rememberSelectedDisplay) {
+                connection.copy(preferredDisplayId = displayId)
+            } else {
+                connection
             }
         }
-        persist()
+    }
+
+    private fun updateConnection(id: String, transform: (Connection) -> Connection) {
+        val previous = _connections.getAndUpdate { current ->
+            current.map { if (it.id == id) transform(it) else it }
+        }
+        if (previous != _connections.value) persist()
     }
 
     fun addGroup(name: String): ConnectionGroup {
@@ -111,19 +132,28 @@ class ConnectionStore(
         persist()
     }
 
-    private fun load(): StoredLibrary? {
-        if (!file.exists()) return null
-        return runCatching {
-            decode(String(decrypt(file.readBytes()), Charsets.UTF_8))
-        }.onFailure { error ->
-            Log.e(TAG, "Unable to read saved connections", error)
-        }.getOrNull()
+    private fun load(): StoredLibrary? = try {
+        decode(String(decrypt(file.readFully()), Charsets.UTF_8))
+    } catch (_: FileNotFoundException) {
+        null
+    } catch (error: Exception) {
+        Log.e(TAG, "Unable to read saved connections", error)
+        null
     }
 
+    @Synchronized
     private fun persist() {
         runCatching {
             val payload = encode(_connections.value, _groups.value)
-            file.writeBytes(encrypt(payload.toByteArray(Charsets.UTF_8)))
+            val encrypted = encrypt(payload.toByteArray(Charsets.UTF_8))
+            val output = file.startWrite()
+            try {
+                output.write(encrypted)
+                file.finishWrite(output)
+            } catch (error: Exception) {
+                file.failWrite(output)
+                throw error
+            }
         }.onFailure { error ->
             Log.e(TAG, "Unable to save connections", error)
         }
@@ -144,6 +174,8 @@ class ConnectionStore(
                 .put("vncPassword", connection.vncPassword)
                 .put("quality", connection.quality.name)
                 .put("zoomEnabled", connection.zoomEnabled)
+                .put("rememberSelectedDisplay", connection.rememberSelectedDisplay)
+            connection.preferredDisplayId?.let { item.put("preferredDisplayId", it) }
             connection.accent?.let { item.put("accent", it.name) }
             connection.wireGuardConfig?.let { item.put("wireGuardConfig", it) }
             connection.openVpnConfig?.let { item.put("openVpnConfig", it) }
@@ -217,6 +249,8 @@ class ConnectionStore(
                             )
                         }.getOrDefault(QualityPreset.Balanced),
                         zoomEnabled = item.optBoolean("zoomEnabled", true),
+                        rememberSelectedDisplay = item.optBoolean("rememberSelectedDisplay", true),
+                        preferredDisplayId = item.opt("preferredDisplayId") as? Int,
                         ssh = ssh,
                         lastConnectedAt = if (item.has("lastConnectedAt") && !item.isNull("lastConnectedAt")) {
                             item.getLong("lastConnectedAt")
@@ -287,12 +321,18 @@ class ConnectionStore(
         val groups: List<ConnectionGroup>,
     )
 
-    private companion object {
-        const val TAG = "ConnectionStore"
-        const val KEYSTORE = "AndroidKeyStore"
-        const val KEY_ALIAS = "openscreens.connections"
-        const val TRANSFORMATION = "AES/GCM/NoPadding"
-        const val DEFAULT_GROUP_NAME = "Group"
+    companion object {
+        private const val TAG = "ConnectionStore"
+        private const val KEYSTORE = "AndroidKeyStore"
+        private const val KEY_ALIAS = "openscreens.connections"
+        private const val TRANSFORMATION = "AES/GCM/NoPadding"
+        private const val DEFAULT_GROUP_NAME = "Group"
+        private var instance: ConnectionStore? = null
+
+        // The library and detached session windows write the same saved profiles.
+        @Synchronized
+        fun shared(context: Context): ConnectionStore =
+            instance ?: ConnectionStore(context.applicationContext).also { instance = it }
     }
 }
 

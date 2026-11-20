@@ -21,7 +21,7 @@ import kotlinx.coroutines.flow.update
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
 
-    private val connectionStore = ConnectionStore(application)
+    private val connectionStore = ConnectionStore.shared(application)
     val connections = connectionStore.connections
     val groups = connectionStore.groups
 
@@ -122,8 +122,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun setConnectionQuality(id: String, quality: QualityPreset) {
-        val connection = connectionStore.find(id) ?: return
-        connectionStore.save(connection.copy(quality = quality))
+        connectionStore.setQuality(id, quality)
+    }
+
+    fun setPreferredDisplay(id: String, displayId: Int?) {
+        connectionStore.setPreferredDisplay(id, displayId)
     }
 
     fun setUpdateChannel(channel: UpdateChannel) {

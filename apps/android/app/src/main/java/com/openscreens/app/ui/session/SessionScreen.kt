@@ -94,6 +94,7 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -120,6 +121,8 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -150,11 +153,14 @@ import com.openscreens.app.session.SessionProvider
 import com.openscreens.app.ui.common.label
 import com.openscreens.app.ui.theme.SystemBarIconAppearance
 import com.openscreens.app.ui.theme.findActivity
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
@@ -177,6 +183,7 @@ fun SessionScreen(
     sshKey: SshKey?,
     quality: QualityPreset,
     onQualityChange: (QualityPreset) -> Unit,
+    onPreferredDisplayChange: (Int?) -> Unit,
     onConnected: () -> Unit,
     onExit: () -> Unit,
 ) {
@@ -212,6 +219,12 @@ fun SessionScreen(
     var trackpadMode by rememberSaveable { mutableStateOf(false) }
     var desktopScreens by remember { mutableStateOf<List<DisplayScreen>>(emptyList()) }
     var displayMenuExpanded by remember { mutableStateOf(false) }
+    var selectedDisplayId by remember(session) { mutableStateOf<Int?>(null) }
+    var pendingDisplayRestore by remember(session) {
+        mutableStateOf(connection.preferredDisplayId.takeIf { connection.rememberSelectedDisplay })
+    }
+    val currentConnection by rememberUpdatedState(connection)
+    val displaySwitch = remember(session) { Mutex() }
     var showDownloadDialog by remember { mutableStateOf(false) }
     var downloadRoot by remember { mutableStateOf<String?>(null) }
     var trackpadPointer by remember { mutableStateOf<IntOffset?>(null) }
@@ -326,6 +339,28 @@ fun SessionScreen(
     // The canvas stays dark in both app themes, so system bar icons stay light.
     SystemBarIconAppearance(darkIcons = false)
 
+    suspend fun selectDisplay(id: Int?, userInitiated: Boolean) {
+        try {
+            if (!userInitiated || id != selectedDisplayId) {
+                session.selectDisplay(id)
+            }
+            selectedDisplayId = id
+            if (userInitiated) {
+                onPreferredDisplayChange(id)
+            }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            if (userInitiated) {
+                scope.launch {
+                    snackbarHostState.showSnackbar(
+                        error.message ?: context.getString(R.string.session_displays),
+                    )
+                }
+            }
+        }
+    }
+
     LaunchedEffect(session) {
         session.events.collect { event ->
             when (event) {
@@ -333,6 +368,11 @@ fun SessionScreen(
                     status = SessionStatus.Connecting
                     cursor = null
                     cursorPosition = null
+                    desktopScreens = emptyList()
+                    displayMenuExpanded = false
+                    selectedDisplayId = null
+                    pendingDisplayRestore = currentConnection.preferredDisplayId
+                        .takeIf { currentConnection.rememberSelectedDisplay }
                     // A new session starts on a fresh transport: the old bitmap is
                     // cropped to a viewport the new session knows nothing about.
                     frame = null
@@ -366,6 +406,19 @@ fun SessionScreen(
                     if (!viewportFits(viewport, event.width, event.height)) {
                         frame = null
                         viewport = null
+                    }
+                    displaySwitch.withLock {
+                        if (status == SessionStatus.Connected) {
+                            val selected = selectedDisplayId
+                            val remembered = pendingDisplayRestore
+                            if (selected != null && desktopScreens.none { it.id == selected }) {
+                                selectedDisplayId = null
+                                selectDisplay(null, userInitiated = false)
+                            } else if (remembered != null && desktopScreens.any { it.id == remembered }) {
+                                pendingDisplayRestore = null
+                                selectDisplay(remembered, userInitiated = false)
+                            }
+                        }
                     }
                 }
                 is SessionEvent.Viewport -> viewport = event
@@ -1440,17 +1493,20 @@ fun SessionScreen(
                 trackpadMode = trackpadMode,
                 onTogglePointerMode = togglePointerMode,
                 displays = desktopScreens,
+                selectedDisplayId = selectedDisplayId,
                 displayMenuExpanded = displayMenuExpanded,
                 onDisplayMenuChange = { displayMenuExpanded = it },
                 onSelectDisplay = { id ->
                     displayMenuExpanded = false
                     scope.launch {
-                        runCatching { session.selectDisplay(id) }
-                            .onFailure { error ->
-                                snackbarHostState.showSnackbar(
-                                    error.message ?: context.getString(R.string.session_displays),
-                                )
+                        displaySwitch.withLock {
+                            if (status == SessionStatus.Connected &&
+                                (id == null || desktopScreens.any { it.id == id })
+                            ) {
+                                pendingDisplayRestore = null
+                                selectDisplay(id, userInitiated = true)
                             }
+                        }
                     }
                 },
                 onKeyboard = { keyboardActive = true },
@@ -1747,6 +1803,7 @@ private fun SessionToolbar(
     trackpadMode: Boolean,
     onTogglePointerMode: () -> Unit,
     displays: List<DisplayScreen>,
+    selectedDisplayId: Int?,
     displayMenuExpanded: Boolean,
     onDisplayMenuChange: (Boolean) -> Unit,
     onSelectDisplay: (Int?) -> Unit,
@@ -1808,19 +1865,32 @@ private fun SessionToolbar(
                         DropdownMenuItem(
                             text = { Text(stringResource(R.string.session_all_displays)) },
                             onClick = { onSelectDisplay(null) },
+                            modifier = Modifier.semantics { selected = selectedDisplayId == null },
+                            trailingIcon = {
+                                if (selectedDisplayId == null) {
+                                    Icon(Icons.Outlined.Check, contentDescription = null)
+                                }
+                            },
                         )
-                        displays.forEach { screen ->
+                        displays.forEachIndexed { index, screen ->
                             DropdownMenuItem(
                                 text = {
                                     Text(
                                         stringResource(
                                             R.string.session_display_entry,
+                                            index + 1,
                                             screen.width,
                                             screen.height,
                                         ),
                                     )
                                 },
                                 onClick = { onSelectDisplay(screen.id) },
+                                modifier = Modifier.semantics { selected = selectedDisplayId == screen.id },
+                                trailingIcon = {
+                                    if (selectedDisplayId == screen.id) {
+                                        Icon(Icons.Outlined.Check, contentDescription = null)
+                                    }
+                                },
                             )
                         }
                     }

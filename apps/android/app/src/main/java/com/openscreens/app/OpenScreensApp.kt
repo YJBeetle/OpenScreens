@@ -133,7 +133,7 @@ fun OpenScreensApp(viewModel: MainViewModel = viewModel()) {
                 )
 
                 is Route.Session -> {
-                    val connection = viewModel.connection(current.connectionId)
+                    val connection = connections.firstOrNull { it.id == current.connectionId }
                     if (connection == null) {
                         LaunchedEffect(Unit) { viewModel.back() }
                     } else {
@@ -142,6 +142,7 @@ fun OpenScreensApp(viewModel: MainViewModel = viewModel()) {
                             sshKey = viewModel.sshKey(connection.ssh?.keyId),
                             quality = connection.quality,
                             onQualityChange = { viewModel.setConnectionQuality(connection.id, it) },
+                            onPreferredDisplayChange = { viewModel.setPreferredDisplay(connection.id, it) },
                             onConnected = { viewModel.markConnected(connection.id) },
                             onExit = viewModel::back,
                         )

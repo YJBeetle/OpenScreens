@@ -8,10 +8,9 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.openscreens.app.data.ConnectionStore
 import com.openscreens.app.data.SettingsStore
 import com.openscreens.app.data.SshKeyStore
@@ -30,7 +29,7 @@ class SessionWindowActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        val connectionStore = ConnectionStore(applicationContext)
+        val connectionStore = ConnectionStore.shared(applicationContext)
         val sshKeyStore = SshKeyStore(applicationContext)
         val settingsStore = SettingsStore(applicationContext)
         val connection = intent.getStringExtra(EXTRA_CONNECTION_ID)?.let(connectionStore::find)
@@ -41,7 +40,8 @@ class SessionWindowActivity : ComponentActivity() {
 
         setContent {
             val settings = remember { settingsStore.load() }
-            var quality by remember { mutableStateOf(connection.quality) }
+            val connections by connectionStore.connections.collectAsStateWithLifecycle()
+            val current = connections.firstOrNull { it.id == connection.id } ?: connection
             val darkTheme = when (settings.themeMode) {
                 ThemeMode.System -> isSystemInDarkTheme()
                 ThemeMode.Light -> false
@@ -51,13 +51,11 @@ class SessionWindowActivity : ComponentActivity() {
             OpenScreensTheme(darkTheme = darkTheme) {
                 Surface(modifier = Modifier.fillMaxSize()) {
                     SessionScreen(
-                        connection = connection,
-                        sshKey = sshKeyStore.find(connection.ssh?.keyId),
-                        quality = quality,
-                        onQualityChange = { preset ->
-                            quality = preset
-                            connectionStore.save(connection.copy(quality = preset))
-                        },
+                        connection = current,
+                        sshKey = sshKeyStore.find(current.ssh?.keyId),
+                        quality = current.quality,
+                        onQualityChange = { connectionStore.setQuality(current.id, it) },
+                        onPreferredDisplayChange = { connectionStore.setPreferredDisplay(current.id, it) },
                         onConnected = { connectionStore.markConnected(connection.id) },
                         onExit = { finish() },
                     )

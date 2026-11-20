@@ -121,6 +121,9 @@ fun ConnectionEditorScreen(
     var quality by rememberSaveable(editorKey) {
         mutableStateOf(seed?.quality ?: QualityPreset.Balanced)
     }
+    var rememberSelectedDisplay by rememberSaveable(editorKey) {
+        mutableStateOf(seed?.rememberSelectedDisplay ?: true)
+    }
     var zoomEnabled by rememberSaveable(editorKey) {
         mutableStateOf(seed?.zoomEnabled ?: true)
     }
@@ -303,6 +306,7 @@ fun ConnectionEditorScreen(
                 username = username.trim(),
                 vncPassword = vncPassword,
                 quality = quality,
+                rememberSelectedDisplay = rememberSelectedDisplay,
                 zoomEnabled = zoomEnabled,
                 groupId = groupId,
                 ssh = ssh,
@@ -557,6 +561,26 @@ fun ConnectionEditorScreen(
                             )
                         }
                     }
+                }
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .toggleable(
+                            value = rememberSelectedDisplay,
+                            role = Role.Switch,
+                            onValueChange = { rememberSelectedDisplay = it },
+                        )
+                        .padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = stringResource(R.string.editor_remember_selected_display),
+                        style = MaterialTheme.typography.bodyLarge,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Spacer(Modifier.width(12.dp))
+                    Switch(checked = rememberSelectedDisplay, onCheckedChange = null)
                 }
 
                 Row(

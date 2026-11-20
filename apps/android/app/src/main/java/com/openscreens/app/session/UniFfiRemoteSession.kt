@@ -349,7 +349,9 @@ class UniFfiRemoteSession(
     }
 
     override suspend fun selectDisplay(displayId: Int?) {
-        session?.selectDisplay(displayId?.toUInt())
+        val current = checkNotNull(session)
+        current.selectDisplay(displayId?.toUInt())
+        check(session === current && !closed.get())
     }
 
     override suspend fun copyRegion(x: Int, y: Int, width: Int, height: Int): ByteArray {

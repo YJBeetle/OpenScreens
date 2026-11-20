@@ -132,6 +132,9 @@ fun ConnectionEditorScreen(
     var disconnectAction by rememberSaveable(editorKey) { mutableStateOf(seed?.disconnectAction ?: DisconnectAction.None) }
     var platform by rememberSaveable(editorKey) { mutableStateOf(seed?.platform ?: RemotePlatform.Other) }
     var sharedClipboard by rememberSaveable(editorKey) { mutableStateOf(seed?.sharedClipboard ?: true) }
+    var keepScreenAwake by rememberSaveable(editorKey) {
+        mutableStateOf(seed?.keepScreenAwake ?: false)
+    }
     var zoomEnabled by rememberSaveable(editorKey) {
         mutableStateOf(seed?.zoomEnabled ?: true)
     }
@@ -318,6 +321,7 @@ fun ConnectionEditorScreen(
                 quality = quality,
                 rememberSelectedDisplay = rememberSelectedDisplay,
                 zoomEnabled = zoomEnabled,
+                keepScreenAwake = keepScreenAwake,
                 startInObserveMode = startInObserveMode,
                 platform = platform,
                 disconnectAction = disconnectAction.takeIf { it in DisconnectAction.options(platform) } ?: DisconnectAction.None,
@@ -645,6 +649,32 @@ fun ConnectionEditorScreen(
                     }
                     Spacer(Modifier.width(12.dp))
                     Switch(checked = zoomEnabled, onCheckedChange = null)
+                }
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .toggleable(
+                            value = keepScreenAwake,
+                            role = Role.Switch,
+                            onValueChange = { keepScreenAwake = it },
+                        )
+                        .padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            stringResource(R.string.editor_keep_screen_awake),
+                            style = MaterialTheme.typography.bodyLarge,
+                        )
+                        Text(
+                            stringResource(R.string.editor_keep_screen_awake_hint),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Switch(checked = keepScreenAwake, onCheckedChange = null)
                 }
 
                 Row(

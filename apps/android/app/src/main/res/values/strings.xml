@@ -83,6 +83,8 @@
     <string name="editor_hide_password">Hide password</string>
     <string name="editor_start_in_observe_mode">Start in Observe Mode</string>
     <string name="editor_remember_selected_display">Remember Selected Display</string>
+    <string name="editor_keep_screen_awake">Keep screen awake</string>
+    <string name="editor_keep_screen_awake_hint">Keep this device’s display on while connected.</string>
     <string name="editor_zoom_toggle">Allow pinching to zoom</string>
     <string name="editor_observe_description">View the desktop with remote input disabled.</string>
     <string name="editor_zoom_description">Pinching magnifies the remote screen. Turn it off to reserve two-finger gestures for scrolling.</string>
@@ -144,6 +146,7 @@
     <string name="session_key_arrow_up">Up arrow</string>
     <string name="session_key_arrow_down">Down arrow</string>
     <string name="session_key_arrow_right">Right arrow</string>
+    <string name="session_more_actions">More session actions</string>
     <string name="session_hide_controls">Hide controls</string>
     <string name="session_show_controls">Show controls</string>
     <string name="session_scroll_up">scroll up</string>

@@ -54,39 +54,21 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.outlined.Backspace
-import androidx.compose.material.icons.automirrored.outlined.ExitToApp
 import androidx.compose.material.icons.automirrored.outlined.KeyboardReturn
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material.icons.outlined.Check
-import androidx.compose.material.icons.outlined.ContentPaste
-import androidx.compose.material.icons.outlined.SwapVert
-import androidx.compose.material.icons.outlined.Download
-import androidx.compose.material.icons.outlined.Fullscreen
-import androidx.compose.material.icons.outlined.FullscreenExit
-import androidx.compose.material.icons.outlined.UploadFile
 import androidx.compose.material.icons.outlined.Keyboard
 import androidx.compose.material.icons.outlined.KeyboardHide
 import androidx.compose.material.icons.outlined.Monitor
-import androidx.compose.material.icons.outlined.Mouse
-import androidx.compose.material.icons.outlined.PhotoCamera
-import androidx.compose.material.icons.outlined.TouchApp
-import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.Visibility
-import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
-import androidx.compose.material3.BottomAppBar
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.IconButtonDefaults
-import androidx.compose.material3.IconToggleButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SnackbarHost
@@ -133,7 +115,6 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.Role
 import androidx.lifecycle.Lifecycle
@@ -167,7 +148,6 @@ import com.openscreens.app.session.DisplayScreen
 import com.openscreens.app.session.SessionEvent
 import com.openscreens.app.session.uploadPickedFiles
 import com.openscreens.app.session.SessionProvider
-import com.openscreens.app.ui.common.label
 import com.openscreens.app.ui.theme.SystemBarIconAppearance
 import com.openscreens.app.ui.theme.findActivity
 import kotlinx.coroutines.CancellationException
@@ -249,7 +229,6 @@ fun SessionScreen(
     var pan by remember { mutableStateOf(Offset.Zero) }
     var pressIndicator by remember { mutableStateOf<PressIndicator?>(null) }
     var showClipboardDialog by remember(session) { mutableStateOf(false) }
-    var qualityMenuExpanded by remember { mutableStateOf(false) }
     var isFullscreen by rememberSaveable { mutableStateOf(true) }
     var isExiting by remember { mutableStateOf(false) }
     var chromeVisible by rememberSaveable { mutableStateOf(true) }
@@ -263,7 +242,6 @@ fun SessionScreen(
     var desktopScreens by remember { mutableStateOf<List<DisplayScreen>>(emptyList()) }
     var needsMacSessionChoice by remember(session) { mutableStateOf(false) }
     var supportsCurtainMode by remember(session) { mutableStateOf(false) }
-    var displayMenuExpanded by remember { mutableStateOf(false) }
     var selectedDisplayId by remember(session) { mutableStateOf<Int?>(null) }
     var pendingDisplayRestore by remember(session) {
         mutableStateOf(connection.preferredDisplayId.takeIf { connection.rememberSelectedDisplay })
@@ -420,6 +398,14 @@ fun SessionScreen(
     // When the soft keyboard is up, Back should close it before it disconnects.
     BackHandler(enabled = keyboardActive) { keyboardActive = false }
 
+    if (connection.keepScreenAwake && status == SessionStatus.Connected && foreground && !isExiting) {
+        DisposableEffect(view) {
+            val wasKeepingScreenOn = view.keepScreenOn
+            view.keepScreenOn = true
+            onDispose { view.keepScreenOn = wasKeepingScreenOn }
+        }
+    }
+
     DisposableEffect(isFullscreen) {
         val controller = view.context.findActivity()?.window?.let {
             WindowCompat.getInsetsController(it, view)
@@ -497,7 +483,6 @@ fun SessionScreen(
                     cursor = null
                     cursorPosition = null
                     desktopScreens = emptyList()
-                    displayMenuExpanded = false
                     selectedDisplayId = null
                     pendingDisplayRestore = currentConnection.preferredDisplayId
                         .takeIf { currentConnection.rememberSelectedDisplay }
@@ -820,7 +805,6 @@ fun SessionScreen(
     }
 
     val selectQuality: (QualityPreset) -> Unit = { preset ->
-        qualityMenuExpanded = false
         onQualityChange(preset)
         session.setQuality(preset)
     }
@@ -1716,19 +1700,19 @@ fun SessionScreen(
             )
         } else if (chromeVisible) {
             SessionToolbar(
-                commands = {
-                    RemoteCommandMenu(connection.platform, enabled = status == SessionStatus.Connected) { command ->
-                        if (!observing && status == SessionStatus.Connected) {
-                            sendChord(command.keysym, command.modifiers, session::sendKey)
-                            lastAction = context.getString(R.string.session_key_sent, context.getString(command.title))
-                        }
+                platform = connection.platform,
+                onCommand = { command ->
+                    if (!observing && status == SessionStatus.Connected) {
+                        sendChord(command.keysym, command.modifiers, session::sendKey)
+                        lastAction = context.getString(
+                            R.string.session_key_sent,
+                            context.getString(command.title),
+                        )
                     }
                 },
                 observing = observing,
                 onObserveModeChange = toggleObserveMode,
                 quality = quality,
-                qualityMenuExpanded = qualityMenuExpanded,
-                onQualityMenuChange = { qualityMenuExpanded = it },
                 onQualitySelected = selectQuality,
                 isFullscreen = isFullscreen,
                 trackpadMode = trackpadMode,
@@ -1736,7 +1720,6 @@ fun SessionScreen(
                 displays = desktopScreens,
                 supportsCurtainMode = status == SessionStatus.Connected && supportsCurtainMode,
                 onCurtainRequest = { enabled ->
-                    displayMenuExpanded = false
                     scope.launch {
                         runCatching { session.requestCurtainMode(enabled) }.onFailure { error ->
                             snackbarHostState.showSnackbar(error.message ?: context.getString(R.string.session_curtain_error))
@@ -1744,10 +1727,7 @@ fun SessionScreen(
                     }
                 },
                 selectedDisplayId = selectedDisplayId,
-                displayMenuExpanded = displayMenuExpanded,
-                onDisplayMenuChange = { displayMenuExpanded = it },
                 onSelectDisplay = { id ->
-                    displayMenuExpanded = false
                     scope.launch {
                         displaySwitch.withLock {
                             if (status == SessionStatus.Connected &&
@@ -1760,7 +1740,7 @@ fun SessionScreen(
                     }
                 },
                 onKeyboard = { keyboardActive = true },
-                clipboardEnabled = status == SessionStatus.Connected,
+                connected = status == SessionStatus.Connected,
                 onClipboard = { showClipboardDialog = true },
                 onUpload = { sendFilePicker.launch(arrayOf("*/*")) },
                 onDownload = { showDownloadDialog = true },
@@ -1775,7 +1755,8 @@ fun SessionScreen(
                 onDisconnect = requestExit,
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .windowInsetsPadding(WindowInsets.safeDrawing),
+                    .windowInsetsPadding(WindowInsets.safeDrawing)
+                    .touchBarrier(),
             )
         } else {
             ChromeRestoreButton(
@@ -2170,239 +2151,6 @@ private fun SessionTopBar(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-        }
-    }
-}
-
-@Composable
-private fun SessionToolbar(
-    commands: @Composable () -> Unit,
-    observing: Boolean,
-    onObserveModeChange: (Boolean) -> Unit,
-    trackpadMode: Boolean,
-    onTogglePointerMode: () -> Unit,
-    displays: List<DisplayScreen>,
-    supportsCurtainMode: Boolean,
-    onCurtainRequest: (Boolean) -> Unit,
-    selectedDisplayId: Int?,
-    displayMenuExpanded: Boolean,
-    onDisplayMenuChange: (Boolean) -> Unit,
-    onSelectDisplay: (Int?) -> Unit,
-    quality: QualityPreset,
-    qualityMenuExpanded: Boolean,
-    onQualityMenuChange: (Boolean) -> Unit,
-    onQualitySelected: (QualityPreset) -> Unit,
-    isFullscreen: Boolean,
-    onKeyboard: () -> Unit,
-    clipboardEnabled: Boolean,
-    onClipboard: () -> Unit,
-    onUpload: () -> Unit,
-    onDownload: () -> Unit,
-    canUpload: Boolean,
-    canDownload: Boolean,
-    onShowFileTransfers: () -> Unit,
-    onScreenshot: () -> Unit,
-    onToggleFullscreen: () -> Unit,
-    onHideChrome: () -> Unit,
-    onDisconnect: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    BottomAppBar(
-        modifier = modifier.touchBarrier(),
-        windowInsets = WindowInsets(0, 0, 0, 0),
-    ) {
-        Row(
-            modifier = Modifier
-                .horizontalScroll(rememberScrollState())
-                .padding(horizontal = 6.dp, vertical = 2.dp),
-            horizontalArrangement = Arrangement.spacedBy(2.dp),
-        ) {
-            IconToggleButton(
-                checked = observing,
-                onCheckedChange = onObserveModeChange,
-                colors = IconButtonDefaults.iconToggleButtonColors(
-                    contentColor = Color.White,
-                    checkedContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                    checkedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                ),
-            ) {
-                Icon(
-                    imageVector = Icons.Outlined.Visibility,
-                    contentDescription = stringResource(R.string.session_observe_mode),
-                )
-            }
-            if (!observing) {
-                ToolbarButton(
-                    icon = if (trackpadMode) Icons.Outlined.Mouse else Icons.Outlined.TouchApp,
-                    label = stringResource(
-                        if (trackpadMode) {
-                            R.string.session_pointer_trackpad
-                        } else {
-                            R.string.session_pointer_direct
-                        },
-                    ),
-                    onClick = onTogglePointerMode,
-                )
-            }
-            if (displays.isNotEmpty() || (supportsCurtainMode && !observing)) {
-                Box {
-                    ToolbarButton(
-                        icon = Icons.Outlined.Monitor,
-                        label = stringResource(R.string.session_displays),
-                        onClick = { onDisplayMenuChange(true) },
-                    )
-                    DropdownMenu(
-                        expanded = displayMenuExpanded,
-                        onDismissRequest = { onDisplayMenuChange(false) },
-                    ) {
-                        if (supportsCurtainMode && !observing) {
-                            DropdownMenuItem(
-                                text = { Text(stringResource(R.string.session_enable_curtain)) },
-                                onClick = { onCurtainRequest(true) },
-                            )
-                            DropdownMenuItem(
-                                text = { Text(stringResource(R.string.session_disable_curtain)) },
-                                onClick = { onCurtainRequest(false) },
-                            )
-                        }
-                        if (displays.isNotEmpty()) {
-                            DropdownMenuItem(
-                                text = { Text(stringResource(R.string.session_all_displays)) },
-                                onClick = { onSelectDisplay(null) },
-                                modifier = Modifier.semantics { selected = selectedDisplayId == null },
-                                trailingIcon = {
-                                    if (selectedDisplayId == null) {
-                                        Icon(Icons.Outlined.Check, contentDescription = null)
-                                    }
-                                },
-                            )
-                        }
-                        displays.forEachIndexed { index, screen ->
-                            DropdownMenuItem(
-                                text = {
-                                    Text(
-                                        stringResource(
-                                            R.string.session_display_entry,
-                                            index + 1,
-                                            screen.width,
-                                            screen.height,
-                                        ),
-                                    )
-                                },
-                                onClick = { onSelectDisplay(screen.id) },
-                                modifier = Modifier.semantics { selected = selectedDisplayId == screen.id },
-                                trailingIcon = {
-                                    if (selectedDisplayId == screen.id) {
-                                        Icon(Icons.Outlined.Check, contentDescription = null)
-                                    }
-                                },
-                            )
-                        }
-                    }
-                }
-            }
-            if (!observing) {
-                ToolbarButton(
-                    icon = Icons.Outlined.Keyboard,
-                    label = stringResource(R.string.session_keyboard),
-                    onClick = onKeyboard,
-                )
-                commands()
-                ToolbarButton(
-                    icon = Icons.Outlined.ContentPaste,
-                    label = stringResource(R.string.session_clipboard),
-                    onClick = onClipboard,
-                    enabled = clipboardEnabled,
-                )
-            }
-            Box {
-                var expanded by remember { mutableStateOf(false) }
-                ToolbarButton(
-                    icon = Icons.Outlined.SwapVert,
-                    label = stringResource(R.string.session_file_transfers),
-                    onClick = { expanded = true },
-                )
-                DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.session_send_file)) },
-                        leadingIcon = { Icon(Icons.Outlined.UploadFile, contentDescription = null) },
-                        enabled = canUpload && !observing,
-                        onClick = {
-                            expanded = false
-                            onUpload()
-                        },
-                    )
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.session_download)) },
-                        leadingIcon = { Icon(Icons.Outlined.Download, contentDescription = null) },
-                        enabled = canDownload,
-                        onClick = {
-                            expanded = false
-                            onDownload()
-                        },
-                    )
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.session_file_transfers)) },
-                        leadingIcon = { Icon(Icons.Outlined.SwapVert, contentDescription = null) },
-                        onClick = {
-                            expanded = false
-                            onShowFileTransfers()
-                        },
-                    )
-                }
-            }
-            Box {
-                ToolbarButton(
-                    icon = Icons.Outlined.Tune,
-                    label = stringResource(R.string.session_quality),
-                    onClick = { onQualityMenuChange(true) },
-                )
-                DropdownMenu(
-                    expanded = qualityMenuExpanded,
-                    onDismissRequest = { onQualityMenuChange(false) },
-                ) {
-                    QualityPreset.entries.forEach { preset ->
-                        DropdownMenuItem(
-                            text = { Text(preset.label()) },
-                            onClick = { onQualitySelected(preset) },
-                            trailingIcon = {
-                                if (preset == quality) {
-                                    Icon(
-                                        imageVector = Icons.Outlined.Check,
-                                        contentDescription = null,
-                                    )
-                                }
-                            },
-                        )
-                    }
-                }
-            }
-            ToolbarButton(
-                icon = if (isFullscreen) Icons.Outlined.FullscreenExit else Icons.Outlined.Fullscreen,
-                label = stringResource(
-                    if (isFullscreen) {
-                        R.string.session_exit_fullscreen
-                    } else {
-                        R.string.session_enter_fullscreen
-                    },
-                ),
-                onClick = onToggleFullscreen,
-            )
-            ToolbarButton(
-                icon = Icons.Outlined.PhotoCamera,
-                label = stringResource(R.string.session_screenshot),
-                onClick = onScreenshot,
-            )
-            ToolbarButton(
-                icon = Icons.Outlined.VisibilityOff,
-                label = stringResource(R.string.session_hide_controls),
-                onClick = onHideChrome,
-            )
-            ToolbarButton(
-                icon = Icons.AutoMirrored.Outlined.ExitToApp,
-                label = stringResource(R.string.session_disconnect),
-                onClick = onDisconnect,
-            )
         }
     }
 }

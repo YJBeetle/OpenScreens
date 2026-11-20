@@ -41,6 +41,7 @@ data class Connection(
     val disconnectAction: DisconnectAction = DisconnectAction.None,
     val requestMacSharing: Boolean = false,
     val sharedClipboard: Boolean = true,
+    val keepScreenAwake: Boolean = false,
 ) {
     val address: String
         get() = "$host:$port"

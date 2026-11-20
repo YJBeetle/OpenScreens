@@ -180,7 +180,11 @@ public final class ConnectionStore {
         }
         guard OpenScreensCredentials.setPassword(password, for: current.id) else { return false }
         current.username = username
-        current.authentication = username.isEmpty ? .vncPassword : .macOSAccount
+        if username.isEmpty {
+            current.authentication = .vncPassword
+        } else if !current.authentication.requiresUsername {
+            current.authentication = .macOSAccount
+        }
         update(current)
         return true
     }

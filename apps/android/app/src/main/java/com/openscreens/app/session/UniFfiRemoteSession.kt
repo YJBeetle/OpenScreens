@@ -230,7 +230,7 @@ class UniFfiRemoteSession(
         } catch (error: Exception) {
             connected.close()
             if (error is CancellationException) throw error
-            _events.emit(SessionEvent.Failed(describe(error)))
+            _events.emit(failureEvent(error))
             return
         }
         session = connected

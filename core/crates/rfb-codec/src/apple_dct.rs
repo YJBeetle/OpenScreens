@@ -94,6 +94,10 @@ impl TileBase {
         for (offset, prior, limit) in [(128, self.cr, cr_limit), (64, self.cb, cb_limit)] {
             planes[offset] = i16::from(adjust_one(bits, prior)?);
             decode_chroma_ac(bits, limit, &mut planes[offset..offset + 64])?;
+            // The reference consumes up to 15/20 ACs but stores 15/20 total
+            // coefficients per chroma plane, including DC.
+            let packed_len = if offset == 128 { 15 } else { 20 };
+            planes[offset + ZIGZAG[packed_len]] = 0;
         }
         Ok(planes)
     }
@@ -184,6 +188,9 @@ pub struct AdaptiveDctDecoder {
     quant_y: [u16; 64],
     quant_cbcr: [u16; 64],
     bases: std::collections::HashMap<(u16, u16), TileBase>,
+    // Sources recorded by a type-0 horizontal MatchPrevious in the latest update.
+    // VNCKit compares source/destination generation stamps before copying.
+    horizontal_repeats: std::collections::HashSet<(u16, u16)>,
     cache: Vec<[i8; 99]>,
     cache_last_write: u16,
     cache_last_read: u16,
@@ -207,6 +214,7 @@ impl AdaptiveDctDecoder {
             quant_y,
             quant_cbcr,
             bases: Default::default(),
+            horizontal_repeats: Default::default(),
             cache: Vec::new(),
             cache_last_write: 0,
             cache_last_read: 0,
@@ -325,6 +333,7 @@ impl AdaptiveDctDecoder {
             ));
         }
 
+        self.horizontal_repeats.clear();
         let mut commands = BitReader::new(&message[6..data_offset]);
         // The command bitstream starts with one unused bit.
         commands.read(1)?;
@@ -372,6 +381,9 @@ impl AdaptiveDctDecoder {
                             return Err(DecodeError::InvalidData(
                                 "adaptive DCT repeat tile without a previous tile",
                             ));
+                        }
+                        if column > 0 && self.bases.contains_key(&(key.0 - 1, key.1)) {
+                            self.horizontal_repeats.insert(key);
                         }
                         let source = tiles_done - 1;
                         let source_column = (source % rect_tiles_x) as usize;
@@ -473,6 +485,7 @@ impl AdaptiveDctDecoder {
     /// Forget coefficient history when another encoding writes the framebuffer.
     pub fn invalidate_refinement_bases(&mut self) {
         self.bases.clear();
+        self.horizontal_repeats.clear();
     }
 
     /// Seed skipped type-1 tiles with the currently visible pixels (the RFB
@@ -499,16 +512,21 @@ impl AdaptiveDctDecoder {
         let mut bits = BitReader::new(&message[3..]);
         for row in 0..usize::from(rect.height).div_ceil(TILE) {
             for col in 0..usize::from(rect.width).div_ceil(TILE) {
+                let key = (rect.x / 8 + col as u16, rect.y / 8 + row as u16);
                 match bits.read(2)? {
                     0 => continue,
                     1 => {
-                        let key = (rect.x / 8 + col as u16, rect.y / 8 + row as u16);
                         let base = self.bases.get(&key).ok_or(DecodeError::InvalidData(
                             "adaptive DCT refinement without a base tile",
                         ))?;
                         let planes = base.refine(&mut bits, message[1], message[2])?;
                         self.store_refined(&planes);
                         self.blit_tile(rect, col, row, &self.idct_tile(&planes));
+                    }
+                    2 if self.horizontal_repeats.contains(&key) => {
+                        let mut tile = [0; TILE_BYTES];
+                        self.read_tile(usize::from(key.0 - 1), usize::from(key.1), &mut tile);
+                        self.blit_tile(rect, col, row, &tile);
                     }
                     3 => {
                         let index = if bits.read(1)? == 0 {
@@ -1585,6 +1603,41 @@ mod tests {
         }
         decoder.invalidate_refinement_bases();
         assert!(decoder.decode_message(&first, rect).is_err());
+    }
+
+    #[test]
+    fn refreshes_a_horizontal_repeat_from_the_refined_source() {
+        // The same two synthetic rectangles in Screens 5.9 produce a gray
+        // 16x8 frame, then [132,126,131,255] across both halves.
+        let mut decoder = AdaptiveDctDecoder::new(16, 8, PixelFormat::bgra8888());
+        decoder
+            .decode_message(&[0, 15, 25, 0, 0, 8, 0x51, 0, 0, 0x10, 0, 0], rect(16, 8))
+            .unwrap();
+        decoder
+            .decode_message(&[1, 0, 0, 0x40, 0xa8, 0, 0], rect(16, 8))
+            .unwrap();
+        assert_eq!(decoder.framebuffer(), [132, 126, 131, 255].repeat(16 * 8));
+        // A newer type-0 update invalidates the matched generation.
+        decoder
+            .decode_message(&[0, 15, 25, 0, 0, 7, 0x50, 0, 0x10, 0, 0], rect(8, 8))
+            .unwrap();
+        assert!(
+            decoder
+                .decode_message(&[1, 0, 0, 0x20], rect(16, 8))
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn chroma_packing_matches_the_reference_at_the_last_ac() {
+        let mut decoder = AdaptiveDctDecoder::new(8, 8, PixelFormat::bgra8888());
+        decoder
+            .decode_message(&[0, 15, 25, 0, 0, 7, 0x50, 0, 0x10, 0, 0], rect(8, 8))
+            .unwrap();
+        decoder
+            .decode_message(&[1, 15, 0, 0x40, 0x7f, 0xf5, 0xc0, 0, 0], rect(8, 8))
+            .unwrap();
+        assert_eq!(decoder.framebuffer(), [128, 128, 128, 255].repeat(64));
     }
 
     #[test]

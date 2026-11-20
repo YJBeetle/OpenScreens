@@ -74,8 +74,13 @@ import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.BottomAppBar
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
@@ -87,6 +92,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -1473,9 +1479,8 @@ fun SessionScreen(
                     .align(Alignment.TopCenter)
                     .windowInsetsPadding(WindowInsets.safeDrawing)
                     .padding(top = 72.dp),
-                shape = RoundedCornerShape(14.dp),
-                color = Color.Black.copy(alpha = 0.65f),
-                contentColor = Color.White,
+                shape = MaterialTheme.shapes.medium,
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
             ) {
                 Text(
                     text = label,
@@ -1533,8 +1538,7 @@ fun SessionScreen(
                 onDisconnect = exitSession,
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .windowInsetsPadding(WindowInsets.safeDrawing)
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                    .windowInsetsPadding(WindowInsets.safeDrawing),
             )
         } else {
             ChromeRestoreButton(
@@ -1547,14 +1551,11 @@ fun SessionScreen(
         }
 
         if (zoom > 1.01f) {
-            Surface(
+            FilledTonalButton(
                 onClick = {
                     zoom = 1f
                     pan = Offset.Zero
                 },
-                shape = RoundedCornerShape(50),
-                color = Color.Black.copy(alpha = 0.55f),
-                contentColor = Color.White,
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .windowInsetsPadding(WindowInsets.safeDrawing)
@@ -1563,7 +1564,6 @@ fun SessionScreen(
                 Text(
                     text = stringResource(R.string.session_zoom_level, zoom),
                     style = MaterialTheme.typography.labelMedium,
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
                 )
             }
         }
@@ -1573,7 +1573,7 @@ fun SessionScreen(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .windowInsetsPadding(WindowInsets.safeDrawing)
-                .padding(start = 16.dp, end = 16.dp, bottom = 76.dp),
+                .padding(start = 16.dp, end = 16.dp, bottom = if (chromeVisible && !keyboardActive) 88.dp else 76.dp),
         )
     }
 
@@ -1749,9 +1749,8 @@ private fun RemoteCanvasPlaceholder(
 private fun InputBadge(text: String, modifier: Modifier = Modifier) {
     Surface(
         modifier = modifier.widthIn(max = 320.dp),
-        color = Color.Black.copy(alpha = 0.55f),
-        contentColor = Color.White.copy(alpha = 0.85f),
-        shape = RoundedCornerShape(50),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        shape = MaterialTheme.shapes.small,
     ) {
         Text(
             text = text,
@@ -1773,11 +1772,9 @@ private fun SessionTopBar(
     Surface(
         modifier = modifier
             .fillMaxWidth()
-            .touchBarrier()
-            .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(20.dp)),
-        shape = RoundedCornerShape(20.dp),
-        color = Color.Black.copy(alpha = 0.55f),
-        contentColor = Color.White,
+            .touchBarrier(),
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.surfaceContainer,
     ) {
         Row(
             modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 2.dp, bottom = 2.dp),
@@ -1803,7 +1800,7 @@ private fun SessionTopBar(
                 Text(
                     text = statusText,
                     style = MaterialTheme.typography.labelSmall,
-                    color = Color.White.copy(alpha = 0.65f),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
@@ -1835,17 +1832,9 @@ private fun SessionToolbar(
     onDisconnect: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Surface(
-        modifier = modifier
-            .touchBarrier()
-            .border(
-                width = 1.dp,
-                color = Color.White.copy(alpha = 0.1f),
-                shape = RoundedCornerShape(28.dp),
-            ),
-        shape = RoundedCornerShape(28.dp),
-        color = Color.Black.copy(alpha = 0.6f),
-        contentColor = Color.White,
+    BottomAppBar(
+        modifier = modifier.touchBarrier(),
+        windowInsets = WindowInsets(0, 0, 0, 0),
     ) {
         Row(
             modifier = Modifier
@@ -1996,10 +1985,7 @@ private fun ToolbarButton(
     label: String,
     onClick: () -> Unit,
 ) {
-    IconButton(
-        onClick = onClick,
-        colors = IconButtonDefaults.iconButtonColors(contentColor = Color.White),
-    ) {
+    IconButton(onClick = onClick) {
         Icon(imageVector = icon, contentDescription = label)
     }
 }
@@ -2086,11 +2072,9 @@ private fun SessionKeyboardBar(
         modifier = modifier
             .widthIn(max = 640.dp)
             .fillMaxWidth()
-            .touchBarrier()
-            .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(22.dp)),
-        shape = RoundedCornerShape(22.dp),
-        color = Color.Black.copy(alpha = 0.74f),
-        contentColor = Color.White,
+            .touchBarrier(),
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.surfaceContainer,
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
@@ -2105,49 +2089,49 @@ private fun SessionKeyboardBar(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 MODIFIER_KEYS.forEach { key ->
-                    KeyChip(
-                        label = stringResource(key.labelRes),
-                        active = modifiers and key.flag != 0,
+                    FilterChip(
+                        selected = modifiers and key.flag != 0,
+                        label = { Text(stringResource(key.labelRes)) },
                         onClick = { onToggleModifier(key.flag) },
                     )
                 }
                 KeyboardBarDivider()
-                KeyChip(label = esc, onClick = { onKey(KEY_ESCAPE, esc) })
-                KeyChip(label = tab, onClick = { onKey(KEY_TAB, tab) })
-                KeyIconButton(
+                AssistChip(onClick = { onKey(KEY_ESCAPE, esc) }, label = { Text(esc) })
+                AssistChip(onClick = { onKey(KEY_TAB, tab) }, label = { Text(tab) })
+                ToolbarButton(
                     icon = Icons.AutoMirrored.Outlined.KeyboardReturn,
                     label = enter,
                     onClick = { onKey(KEY_RETURN, enter) },
                 )
-                KeyIconButton(
+                ToolbarButton(
                     icon = Icons.AutoMirrored.Outlined.Backspace,
                     label = backspace,
                     onClick = { onKey(KEY_BACKSPACE, backspace) },
                 )
                 KeyboardBarDivider()
-                KeyIconButton(
+                ToolbarButton(
                     icon = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
                     label = arrowLeft,
                     onClick = { onKey(KEY_LEFT, arrowLeft) },
                 )
-                KeyIconButton(
+                ToolbarButton(
                     icon = Icons.Filled.KeyboardArrowUp,
                     label = arrowUp,
                     onClick = { onKey(KEY_UP, arrowUp) },
                 )
-                KeyIconButton(
+                ToolbarButton(
                     icon = Icons.Filled.KeyboardArrowDown,
                     label = arrowDown,
                     onClick = { onKey(KEY_DOWN, arrowDown) },
                 )
-                KeyIconButton(
+                ToolbarButton(
                     icon = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                     label = arrowRight,
                     onClick = { onKey(KEY_RIGHT, arrowRight) },
                 )
             }
             KeyboardBarDivider()
-            KeyIconButton(
+            ToolbarButton(
                 icon = Icons.Outlined.KeyboardHide,
                 label = stringResource(R.string.session_keyboard_hide),
                 onClick = onHideKeyboard,
@@ -2158,53 +2142,7 @@ private fun SessionKeyboardBar(
 
 @Composable
 private fun KeyboardBarDivider() {
-    Box(
-        modifier = Modifier
-            .width(1.dp)
-            .height(26.dp)
-            .background(Color.White.copy(alpha = 0.14f)),
-    )
-}
-
-@Composable
-private fun KeyChip(
-    label: String,
-    active: Boolean = false,
-    onClick: () -> Unit,
-) {
-    Surface(
-        onClick = onClick,
-        shape = RoundedCornerShape(10.dp),
-        color = if (active) Color.White.copy(alpha = 0.92f) else Color.White.copy(alpha = 0.09f),
-        contentColor = if (active) Color.Black else Color.White,
-    ) {
-        Box(
-            modifier = Modifier
-                .widthIn(min = 42.dp)
-                .padding(horizontal = 10.dp, vertical = 8.dp),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelLarge,
-                maxLines = 1,
-            )
-        }
-    }
-}
-
-@Composable
-private fun KeyIconButton(
-    icon: ImageVector,
-    label: String,
-    onClick: () -> Unit,
-) {
-    IconButton(
-        onClick = onClick,
-        colors = IconButtonDefaults.iconButtonColors(contentColor = Color.White),
-    ) {
-        Icon(imageVector = icon, contentDescription = label)
-    }
+    VerticalDivider(Modifier.height(26.dp))
 }
 
 @Composable
@@ -2212,23 +2150,11 @@ private fun ChromeRestoreButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Surface(
-        onClick = onClick,
-        shape = CircleShape,
-        color = Color.Black.copy(alpha = 0.5f),
-        contentColor = Color.White.copy(alpha = 0.9f),
-        modifier = modifier,
-    ) {
-        Box(
-            modifier = Modifier.padding(10.dp),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                imageVector = Icons.Outlined.Visibility,
-                contentDescription = stringResource(R.string.session_show_controls),
-                modifier = Modifier.size(20.dp),
-            )
-        }
+    FilledTonalIconButton(onClick = onClick, modifier = modifier) {
+        Icon(
+            imageVector = Icons.Outlined.Visibility,
+            contentDescription = stringResource(R.string.session_show_controls),
+        )
     }
 }
 

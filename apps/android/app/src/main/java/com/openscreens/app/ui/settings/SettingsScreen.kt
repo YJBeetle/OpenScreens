@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -50,6 +51,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.openscreens.app.BuildConfig
@@ -163,14 +166,16 @@ fun SettingsScreen(
             Spacer(Modifier.height(4.dp))
             SectionHeader(stringResource(R.string.settings_appearance))
             SettingsCard {
-                ThemeMode.entries.forEachIndexed { index, mode ->
-                    SelectionRow(
-                        title = themeLabel(mode),
-                        selected = settings.themeMode == mode,
-                        onClick = { onThemeModeChange(mode) },
-                    )
-                    if (index != ThemeMode.entries.lastIndex) {
-                        HorizontalDivider(Modifier.padding(start = 16.dp))
+                Column(Modifier.selectableGroup()) {
+                    ThemeMode.entries.forEachIndexed { index, mode ->
+                        SelectionRow(
+                            title = themeLabel(mode),
+                            selected = settings.themeMode == mode,
+                            onClick = { onThemeModeChange(mode) },
+                        )
+                        if (index != ThemeMode.entries.lastIndex) {
+                            HorizontalDivider(Modifier.padding(start = 16.dp))
+                        }
                     }
                 }
             }
@@ -250,25 +255,27 @@ fun SettingsScreen(
                     modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    UpdateChannel.entries.forEachIndexed { index, channel ->
-                        SelectionRow(
-                            title = stringResource(
-                                when (channel) {
-                                    UpdateChannel.Release -> R.string.settings_channel_release
-                                    UpdateChannel.PreRelease -> R.string.settings_channel_prerelease
-                                    UpdateChannel.Snapshot -> R.string.settings_channel_snapshot
+                    Column(Modifier.selectableGroup()) {
+                        UpdateChannel.entries.forEachIndexed { index, channel ->
+                            SelectionRow(
+                                title = stringResource(
+                                    when (channel) {
+                                        UpdateChannel.Release -> R.string.settings_channel_release
+                                        UpdateChannel.PreRelease -> R.string.settings_channel_prerelease
+                                        UpdateChannel.Snapshot -> R.string.settings_channel_snapshot
+                                    },
+                                ),
+                                selected = updateChannel == channel,
+                                onClick = {
+                                    if (updateChannel != channel) {
+                                        updateState = UpdateUiState.Idle
+                                        onUpdateChannelChange(channel)
+                                    }
                                 },
-                            ),
-                            selected = updateChannel == channel,
-                            onClick = {
-                                if (updateChannel != channel) {
-                                    updateState = UpdateUiState.Idle
-                                    onUpdateChannelChange(channel)
-                                }
-                            },
-                        )
-                        if (index != UpdateChannel.entries.lastIndex) {
-                            HorizontalDivider(Modifier.padding(start = 16.dp))
+                            )
+                            if (index != UpdateChannel.entries.lastIndex) {
+                                HorizontalDivider(Modifier.padding(start = 16.dp))
+                            }
                         }
                     }
 
@@ -472,7 +479,7 @@ private fun SectionHeader(title: String) {
         text = title,
         style = MaterialTheme.typography.titleSmall,
         color = MaterialTheme.colorScheme.primary,
-        modifier = Modifier.padding(start = 4.dp),
+        modifier = Modifier.padding(start = 4.dp).semantics { heading() },
     )
 }
 

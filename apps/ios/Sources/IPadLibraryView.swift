@@ -69,7 +69,7 @@ struct IPadLibraryView: View {
                 QuickConnectView { url in
                     pendingQuickConnect = url
                 }
-                .presentationDetents([.height(300)])
+                .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
             }
         }

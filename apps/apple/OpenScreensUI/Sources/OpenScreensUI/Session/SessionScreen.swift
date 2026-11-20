@@ -89,7 +89,6 @@ public struct SessionScreen: View {
 
             if model.state.isConnected {
                 chrome
-                    .environment(\.colorScheme, .dark)
                 toast
                 transferStatus
             }
@@ -421,20 +420,31 @@ public struct SessionScreen: View {
             VStack {
                 HStack {
                     Spacer()
-                    FloatingBar {
-                        FloatingIconButton(
-                            systemImage: "chevron.up",
-                            title: "Show Toolbar"
-                        ) {
-                            model.toggleChrome()
-                        }
-                    }
+                    showToolbarButton
                 }
                 Spacer()
             }
             .padding(12)
             .transition(.opacity)
         }
+    }
+
+    @ViewBuilder
+    private var showToolbarButton: some View {
+        let button = Button("Show Toolbar", systemImage: "chevron.up") { model.toggleChrome() }
+            .labelStyle(.iconOnly)
+            .buttonBorderShape(.circle)
+            .controlSize(.large)
+
+        #if compiler(>=6.2)
+        if #available(iOS 26, macOS 26, *) {
+            button.buttonStyle(.glass)
+        } else {
+            button.buttonStyle(.borderedProminent)
+        }
+        #else
+        button.buttonStyle(.borderedProminent)
+        #endif
     }
 
     private var usesVerticalToolbar: Bool {
@@ -571,12 +581,12 @@ public struct SessionScreen: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text(model.profile.name)
                     .font(Theme.Typography.overlayTitle)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(.primary)
                     .lineLimit(1)
 
                 Text(connectionDetail)
                     .font(.caption)
-                    .foregroundStyle(.white.opacity(0.7))
+                    .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
 
@@ -688,13 +698,12 @@ public struct SessionScreen: View {
                 Spacer()
                 Text(message)
                     .font(.footnote.weight(.medium))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(.primary)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 8)
                     .glassSurface(in: Capsule())
                     .padding(.bottom, 82)
             }
-            .environment(\.colorScheme, .dark)
             .allowsHitTesting(false)
             .transition(.opacity)
             .animation(.snappy, value: model.clipboardMessage)
@@ -723,7 +732,6 @@ public struct SessionScreen: View {
 
                 Spacer()
             }
-            .environment(\.colorScheme, .dark)
             .allowsHitTesting(false)
             .transition(.opacity)
             .animation(.snappy, value: text)

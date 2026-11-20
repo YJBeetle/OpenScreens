@@ -1,55 +1,32 @@
 import SwiftUI
 
-/// Translucent session chrome: blur, dark tint, top sheen and a bright rim.
-/// Mirrors the layered glass Screens uses instead of relying on system bars.
-struct GlassSurface<S: InsettableShape>: ViewModifier {
+/// The shared backdrop for controls floating over a remote desktop.
+private struct GlassSurface<S: InsettableShape>: ViewModifier {
     let shape: S
-    var tint: Color?
+    let tint: Color?
 
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
-    @Environment(\.colorScheme) private var colorScheme
-
-    private var resolvedTint: Color {
-        tint ?? (colorScheme == .dark ? Color.black.opacity(0.32) : Color.black.opacity(0.05))
-    }
 
     func body(content: Content) -> some View {
+        if reduceTransparency {
+            content.background(.background, in: shape)
+        } else {
+            #if compiler(>=6.2)
+            if #available(iOS 26, macOS 26, *) {
+                content.glassEffect(.regular.tint(tint), in: shape)
+            } else {
+                materialBackground(content)
+            }
+            #else
+            materialBackground(content)
+            #endif
+        }
+    }
+
+    private func materialBackground(_ content: Content) -> some View {
         content
-            .background {
-                if reduceTransparency {
-                    shape.fill(colorScheme == .dark ? Color(white: 0.13) : Color(white: 0.95))
-                } else {
-                    ZStack {
-                        shape.fill(.ultraThinMaterial)
-                        shape.fill(resolvedTint)
-                        shape.fill(
-                            LinearGradient(
-                                stops: [
-                                    .init(color: .white.opacity(0.12), location: 0),
-                                    .init(color: .white.opacity(0.03), location: 0.45),
-                                    .init(color: .clear, location: 1),
-                                ],
-                                startPoint: .top,
-                                endPoint: .bottom
-                            )
-                        )
-                    }
-                }
-            }
-            .overlay {
-                shape.strokeBorder(
-                    LinearGradient(
-                        stops: [
-                            .init(color: .white.opacity(0.30), location: 0),
-                            .init(color: .white.opacity(0.08), location: 0.55),
-                            .init(color: .white.opacity(0.14), location: 1),
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    ),
-                    lineWidth: 0.8
-                )
-            }
+            .background(tint ?? .clear, in: shape)
+            .background(.regularMaterial, in: shape)
     }
 }
 

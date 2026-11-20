@@ -1043,7 +1043,8 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
                     ).sorted { $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending }
                     guard !items.isEmpty else {
                         try? FileManager.default.removeItem(at: directory)
-                        throw RemoteTransferError.missingDownloadedFile("")
+                        yieldDownloadFailure(NSLocalizedString("No items were saved.", comment: "Download error"))
+                        return
                     }
                     continuation.yield(.downloadComplete(items: items, error: nil))
                 } catch {

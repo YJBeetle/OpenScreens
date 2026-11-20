@@ -267,6 +267,8 @@
 "%@, %@ cursor mode" = "%@，%@ 指针模式";
 
 /* MARK: - File transfer */
+"File Actions" = "文件操作";
+"No items were saved." = "没有保存任何项目。";
 "File Transfers" = "文件传输";
 "Sent Files" = "已发送的文件";
 "Received Files" = "已接收的文件";

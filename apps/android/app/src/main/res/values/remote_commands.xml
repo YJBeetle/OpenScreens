@@ -1,0 +1,17 @@
+<resources>
+    <string name="remote_commands">Remote commands</string>
+    <string name="remote_platform">Remote operating system: %1$s</string>
+    <string name="remote_platform_other">Other</string>
+    <string name="command_mission_control">Mission Control</string>
+    <string name="command_app_windows">Application Windows</string>
+    <string name="command_left_space">Move Left a Space</string>
+    <string name="command_right_space">Move Right a Space</string>
+    <string name="command_desktop">Show Desktop</string>
+    <string name="command_switch_apps">Switch Applications</string>
+    <string name="command_spotlight">Spotlight</string>
+    <string name="command_force_quit">Force Quit…</string>
+    <string name="command_lock">Lock Screen</string>
+    <string name="command_ctrl_alt_delete">Ctrl-Alt-Delete</string>
+    <string name="command_task_manager">Task Manager</string>
+    <string name="command_insert">Insert</string>
+</resources>

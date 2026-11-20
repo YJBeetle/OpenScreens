@@ -145,6 +145,7 @@ class ConnectionStore(
                 .put("quality", connection.quality.name)
                 .put("zoomEnabled", connection.zoomEnabled)
                 .put("startInObserveMode", connection.startInObserveMode)
+                .put("platform", connection.platform.name)
             connection.accent?.let { item.put("accent", it.name) }
             connection.wireGuardConfig?.let { item.put("wireGuardConfig", it) }
             connection.openVpnConfig?.let { item.put("openVpnConfig", it) }
@@ -217,6 +218,8 @@ class ConnectionStore(
                                 item.optString("quality", QualityPreset.Balanced.name),
                             )
                         }.getOrDefault(QualityPreset.Balanced),
+                        platform = RemotePlatform.entries.firstOrNull { it.name == item.optString("platform") }
+                            ?: RemotePlatform.Other,
                         zoomEnabled = item.optBoolean("zoomEnabled", true),
                         startInObserveMode = item.optBoolean("startInObserveMode", false),
                         ssh = ssh,

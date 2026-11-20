@@ -146,6 +146,7 @@ import com.openscreens.app.data.Connection
 import com.openscreens.app.data.QualityPreset
 import com.openscreens.app.data.SshKey
 import com.openscreens.app.session.RemoteSession
+import com.openscreens.app.session.sendChord
 import com.openscreens.app.session.DisplayScreen
 import com.openscreens.app.session.SessionEvent
 import com.openscreens.app.session.uploadPickedFiles
@@ -561,10 +562,7 @@ fun SessionScreen(
     // they cannot get stuck on the remote if the connection drops mid-chord.
     val sendKeysym: (Int) -> Unit = { keysym ->
         val active = MODIFIER_KEYS.filter { modifiers and it.flag != 0 }
-        active.forEach { session.sendKey(it.keysym, true) }
-        session.sendKey(keysym, true)
-        session.sendKey(keysym, false)
-        active.asReversed().forEach { session.sendKey(it.keysym, false) }
+        sendChord(keysym, active.map { it.keysym }, session::sendKey)
     }
 
     val sendLabelledKey: (Int, String) -> Unit = { keysym, label ->
@@ -1291,10 +1289,7 @@ fun SessionScreen(
                                         SwipeDirection.Left -> KEY_LEFT
                                         SwipeDirection.Right -> KEY_RIGHT
                                     }
-                                    session.sendKey(KEY_CONTROL, true)
-                                    session.sendKey(keysym, true)
-                                    session.sendKey(keysym, false)
-                                    session.sendKey(KEY_CONTROL, false)
+                                    sendChord(keysym, listOf(KEY_CONTROL), session::sendKey)
                                 } else if (multiTouchTapCandidate && !multiTouchMoved &&
                                     SystemClock.uptimeMillis() - downTime <= TAP_TIMEOUT_MS
                                 ) {
@@ -1475,6 +1470,14 @@ fun SessionScreen(
             )
         } else if (chromeVisible) {
             SessionToolbar(
+                commands = {
+                    RemoteCommandMenu(connection.platform, enabled = status == SessionStatus.Connected) { command ->
+                        if (!observing && status == SessionStatus.Connected) {
+                            sendChord(command.keysym, command.modifiers, session::sendKey)
+                            lastAction = context.getString(R.string.session_key_sent, context.getString(command.title))
+                        }
+                    }
+                },
                 observing = observing,
                 onObserveModeChange = toggleObserveMode,
                 quality = quality,
@@ -1789,6 +1792,7 @@ private fun SessionTopBar(
 
 @Composable
 private fun SessionToolbar(
+    commands: @Composable () -> Unit,
     observing: Boolean,
     onObserveModeChange: (Boolean) -> Unit,
     trackpadMode: Boolean,
@@ -1895,6 +1899,7 @@ private fun SessionToolbar(
                     label = stringResource(R.string.session_keyboard),
                     onClick = onKeyboard,
                 )
+                commands()
                 ToolbarButton(
                     icon = Icons.Outlined.ContentPaste,
                     label = stringResource(R.string.session_clipboard),
@@ -2296,18 +2301,18 @@ private const val WHEEL_LEFT = 1 shl 5
 private const val WHEEL_RIGHT = 1 shl 6
 
 // X11 keysyms for the keys the accessory bar can send.
-private const val KEY_SHIFT = 0xFFE1
-private const val KEY_CONTROL = 0xFFE3
-private const val KEY_ALT = 0xFFE9
-private const val KEY_SUPER = 0xFFEB
-private const val KEY_ESCAPE = 0xFF1B
-private const val KEY_TAB = 0xFF09
+internal const val KEY_SHIFT = 0xFFE1
+internal const val KEY_CONTROL = 0xFFE3
+internal const val KEY_ALT = 0xFFE9
+internal const val KEY_SUPER = 0xFFEB
+internal const val KEY_ESCAPE = 0xFF1B
+internal const val KEY_TAB = 0xFF09
 private const val KEY_RETURN = 0xFF0D
 private const val KEY_BACKSPACE = 0xFF08
-private const val KEY_LEFT = 0xFF51
-private const val KEY_UP = 0xFF52
-private const val KEY_RIGHT = 0xFF53
-private const val KEY_DOWN = 0xFF54
+internal const val KEY_LEFT = 0xFF51
+internal const val KEY_UP = 0xFF52
+internal const val KEY_RIGHT = 0xFF53
+internal const val KEY_DOWN = 0xFF54
 
 private const val MODIFIER_CONTROL = 1
 private const val MODIFIER_ALT = 1 shl 1

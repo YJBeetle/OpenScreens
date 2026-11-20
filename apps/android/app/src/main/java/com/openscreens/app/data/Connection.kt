@@ -35,6 +35,7 @@ data class Connection(
     /** User-created library folder, when the connection belongs to one. */
     val groupId: String? = null,
     val startInObserveMode: Boolean = false,
+    val platform: RemotePlatform = RemotePlatform.Other,
 ) {
     val address: String
         get() = "$host:$port"
@@ -43,6 +44,8 @@ data class Connection(
         const val DEFAULT_VNC_PORT = 5900
     }
 }
+
+enum class RemotePlatform { MacOS, Windows, Linux, Unix, Other }
 
 data class ConnectionGroup(
     val id: String = UUID.randomUUID().toString(),

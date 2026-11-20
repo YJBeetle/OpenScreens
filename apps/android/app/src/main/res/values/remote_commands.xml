@@ -14,4 +14,12 @@
     <string name="command_ctrl_alt_delete">Ctrl-Alt-Delete</string>
     <string name="command_task_manager">Task Manager</string>
     <string name="command_insert">Insert</string>
+    <string name="disconnect_action_none">None</string>
+    <string name="disconnect_action_log_out">Log Out Remote User</string>
+    <string name="disconnect_action_top_left">Top Left Hot Corner</string>
+    <string name="disconnect_action_top_right">Top Right Hot Corner</string>
+    <string name="disconnect_action_bottom_left">Bottom Left Hot Corner</string>
+    <string name="disconnect_action_bottom_right">Bottom Right Hot Corner</string>
+    <string name="disconnect_action_setting">Before disconnecting: %1$s</string>
+    <string name="disconnect_action_confirmation">Remote action before disconnecting: %1$s</string>
 </resources>

@@ -7,7 +7,8 @@ import XCTest
 final class SessionCredentialTests: XCTestCase {
     func testCredentialRetryAndMacSessionChoiceSurviveReconnectWithoutSaving() async throws {
         let service = LoginService()
-        let profile = ConnectionProfile(name: "Test", host: "localhost")
+        var profile = ConnectionProfile(name: "Test", host: "localhost")
+        profile.disconnectAction = .lockScreen
         let model = SessionViewModel(profile: profile, service: service)
         defer { model.stop() }
 
@@ -39,6 +40,8 @@ final class SessionCredentialTests: XCTestCase {
             XCTAssertEqual(bytes, Data([0, 0, 0, 255, 0, 0, 0, 0, 0, 0, 0, 255, 1, 0, 0, 0]))
         }
         XCTAssertFalse(model.rememberLogin)
+        XCTAssertTrue(model.requestDisconnectConfirmation())
+        let staleRequest = try XCTUnwrap(model.disconnectRequest)
         let transport = await service.log.latest
         await service.log.failNextHandshakes([.connectionRefused, .network])
         transport?.yield(.state(.disconnected(reason: "network")))
@@ -46,6 +49,7 @@ final class SessionCredentialTests: XCTestCase {
         try await wait(timeout: .seconds(9)) { model.state.isConnected }
         let count = await service.log.accepted
         XCTAssertEqual(count, 2)
+        XCTAssertFalse(model.confirmDisconnect(staleRequest))
 
         model.stop()
         model.start()
@@ -220,7 +224,9 @@ private struct LoginTransport: RemoteSessionProtocol {
 
     func disconnect() async { stream.finish() }
     func sendPointer(_ event: PointerEvent) async {}
-    func sendKey(_ event: RemoteKeyEvent) async {}
+    func sendKey(_ event: RemoteKeyEvent) async {
+        XCTFail("A credential, retry or teardown path sent a remote key")
+    }
     func setClipboardSharing(_ enabled: Bool) async {}
     func sendClipboard(_ text: String, automatic: Bool) async {}
     func requestClipboard() async -> Bool { false }

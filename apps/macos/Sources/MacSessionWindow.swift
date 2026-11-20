@@ -50,9 +50,7 @@ struct MacSessionWindow: View {
             model: model,
             reconnect: { model.reconnect() },
             disconnect: {
-                if model.hasActiveTransfers {
-                    model.confirmsTransferInterruption = true
-                } else {
+                if !model.requestDisconnectConfirmation() {
                     model.disconnect()
                     dismissWindow()
                 }

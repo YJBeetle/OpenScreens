@@ -333,6 +333,8 @@ class UniFfiRemoteSession(
         }
     }
 
+    override fun releaseHeldInput() = enqueueInput { current -> releaseHeldInput(current) }
+
     private suspend fun releaseHeldInput(current: NativeSession) {
         heldPointer?.let { (x, y) ->
             sendInput { current.sendPointer(mask = 0u, x = x.toUShort(), y = y.toUShort()) }

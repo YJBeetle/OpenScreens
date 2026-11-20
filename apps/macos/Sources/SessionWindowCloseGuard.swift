@@ -65,8 +65,7 @@ struct SessionWindowCloseGuard: NSViewRepresentable {
         weak var model: SessionViewModel?
 
         func windowShouldClose(_ sender: NSWindow) -> Bool {
-            if let model, model.hasActiveTransfers {
-                model.confirmsTransferInterruption = true
+            if model?.requestDisconnectConfirmation() == true {
                 return false
             }
             return original?.windowShouldClose?(sender) ?? true

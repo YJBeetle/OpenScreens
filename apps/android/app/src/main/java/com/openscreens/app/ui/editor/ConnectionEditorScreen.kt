@@ -78,6 +78,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.openscreens.app.R
 import com.openscreens.app.data.Connection
+import com.openscreens.app.data.DisconnectAction
 import com.openscreens.app.data.RemotePlatform
 import com.openscreens.app.data.ConnectionAccent
 import com.openscreens.app.data.ConnectionGroup
@@ -128,6 +129,7 @@ fun ConnectionEditorScreen(
     var rememberSelectedDisplay by rememberSaveable(editorKey) {
         mutableStateOf(seed?.rememberSelectedDisplay ?: true)
     }
+    var disconnectAction by rememberSaveable(editorKey) { mutableStateOf(seed?.disconnectAction ?: DisconnectAction.None) }
     var platform by rememberSaveable(editorKey) { mutableStateOf(seed?.platform ?: RemotePlatform.Other) }
     var sharedClipboard by rememberSaveable(editorKey) { mutableStateOf(seed?.sharedClipboard ?: true) }
     var zoomEnabled by rememberSaveable(editorKey) {
@@ -318,6 +320,7 @@ fun ConnectionEditorScreen(
                 zoomEnabled = zoomEnabled,
                 startInObserveMode = startInObserveMode,
                 platform = platform,
+                disconnectAction = disconnectAction.takeIf { it in DisconnectAction.options(platform) } ?: DisconnectAction.None,
                 sharedClipboard = sharedClipboard,
                 groupId = groupId,
                 ssh = ssh,
@@ -496,7 +499,13 @@ fun ConnectionEditorScreen(
                     }
                 }
 
-                RemotePlatformPicker(platform) { platform = it }
+                RemotePlatformPicker(platform) {
+                    platform = it
+                    if (disconnectAction !in DisconnectAction.options(it)) disconnectAction = DisconnectAction.None
+                }
+                if (DisconnectAction.options(platform).size > 1) {
+                    DisconnectActionPicker(platform, disconnectAction) { disconnectAction = it }
+                }
 
                 PasswordField(
                     value = vncPassword,

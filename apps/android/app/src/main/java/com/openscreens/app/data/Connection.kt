@@ -38,6 +38,7 @@ data class Connection(
     val rememberSelectedDisplay: Boolean = true,
     val preferredDisplayId: Int? = null,
     val platform: RemotePlatform = RemotePlatform.Other,
+    val disconnectAction: DisconnectAction = DisconnectAction.None,
     val requestMacSharing: Boolean = false,
     val sharedClipboard: Boolean = true,
 ) {

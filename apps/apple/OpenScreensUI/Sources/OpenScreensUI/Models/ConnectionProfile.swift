@@ -160,6 +160,7 @@ public struct ConnectionProfile: Identifiable, Codable, Hashable, Sendable {
     public var name: String
     public var host: String
     public var port: Int
+    public var disconnectAction: DisconnectAction?
     public var platform: RemoteOS
     public var section: LibrarySection
     public var palette: TilePalette

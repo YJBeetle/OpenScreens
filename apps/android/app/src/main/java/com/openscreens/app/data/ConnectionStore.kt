@@ -191,6 +191,7 @@ class ConnectionStore(
                 .put("sharedClipboard", connection.sharedClipboard)
                 .put("startInObserveMode", connection.startInObserveMode)
                 .put("platform", connection.platform.name)
+                .put("disconnectAction", connection.disconnectAction.name)
                 .put("rememberSelectedDisplay", connection.rememberSelectedDisplay)
             connection.preferredDisplayId?.let { item.put("preferredDisplayId", it) }
             connection.accent?.let { item.put("accent", it.name) }
@@ -266,6 +267,7 @@ class ConnectionStore(
                                 item.optString("quality", QualityPreset.Balanced.name),
                             )
                         }.getOrDefault(QualityPreset.Balanced),
+                        disconnectAction = DisconnectAction.fromStored(item.optString("disconnectAction")),
                         platform = RemotePlatform.entries.firstOrNull { it.name == item.optString("platform") }
                             ?: RemotePlatform.Other,
                         zoomEnabled = item.optBoolean("zoomEnabled", true),

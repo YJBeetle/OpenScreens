@@ -14,12 +14,14 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -28,6 +30,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import uniffi.rfb_ffi.Rect
 import uniffi.rfb_ffi.SessionConfig
 import uniffi.rfb_ffi.SessionFailure
@@ -84,7 +87,6 @@ class UniFfiRemoteSession(
     private var session: NativeSession? = null
 
     @Volatile private var clipboardSharing = connection.sharedClipboard
-    private val closed = AtomicBoolean(false)
     private val disposed = AtomicBoolean(false)
     private val openMutex = Mutex()
     // Serializes viewport reallocation against frame rendering: the UI may
@@ -146,7 +148,6 @@ class UniFfiRemoteSession(
         if (disposed.get()) return@withLock
         detach()
         if (disposed.get()) return
-        closed.set(false)
         _events.emit(SessionEvent.Connecting)
 
         val ssh = connection.ssh
@@ -210,83 +211,108 @@ class UniFfiRemoteSession(
             return
         }
 
-        if (disposed.get() || closed.get()) {
-            connected.close()
-            return
-        }
-        val size = connected.size()
-        if (size == null) {
-            connected.close()
-            _events.emit(
-                SessionEvent.Failed(context.getString(R.string.session_error_no_framebuffer)),
-            )
-            return
-        }
-
-        val width = size.width.toInt()
-        val height = size.height.toInt()
-        val scale = initialDisplayScale(width, height)
-        if (!installViewport(width, height, 0, 0, width, height, scale)) {
-            connected.close()
-            _events.emit(
-                SessionEvent.Failed(
-                    context.getString(R.string.session_error_out_of_memory, width, height),
-                ),
-            )
-            return
-        }
-        viewportEmitted = true
-
         try {
-            connected.setClipboardSharing(clipboardSharing && !inputMode.observing)
-        } catch (error: Exception) {
-            connected.close()
-            if (error is CancellationException) throw error
-            _events.emit(failureEvent(error))
-            return
+            if (disposed.get()) return
+            val size = connected.size()
+            if (size == null) {
+                _events.emit(
+                    SessionEvent.Failed(context.getString(R.string.session_error_no_framebuffer)),
+                )
+                return
+            }
+
+            val width = size.width.toInt()
+            val height = size.height.toInt()
+            val scale = initialDisplayScale(width, height)
+            if (!installViewport(width, height, 0, 0, width, height, scale)) {
+                _events.emit(
+                    SessionEvent.Failed(
+                        context.getString(R.string.session_error_out_of_memory, width, height),
+                    ),
+                )
+                return
+            }
+            viewportEmitted = true
+
+            try {
+                connected.setClipboardSharing(clipboardSharing && !inputMode.observing)
+            } catch (error: Exception) {
+                if (error is CancellationException) throw error
+                _events.emit(failureEvent(error))
+                return
+            }
+            session = connected
+            _events.emit(SessionEvent.Connected(width, height, connected.supportsCurtainMode()))
+            Log.i(
+                TAG,
+                "connected to ${connection.address} (${connected.serverName()}) at " +
+                    "$width x $height, sampling 1/$scale",
+            )
+            pollJob = scope.launch { poll(connected) }
+        } finally {
+            // Ownership transfers to the poller only after setup has completed.
+            if (pollJob == null) {
+                if (session === connected) detach()
+                else withContext(NonCancellable) { closeTransport(connected) }
+            }
         }
-        session = connected
-        _events.emit(SessionEvent.Connected(width, height, connected.supportsCurtainMode()))
-        Log.i(
-            TAG,
-            "connected to ${connection.address} (${connected.serverName()}) at " +
-                "$width x $height, sampling 1/$scale",
-        )
-        pollJob = scope.launch { poll(connected) }
+    }
+
+    private val shutdown = scope.launch(start = CoroutineStart.LAZY) {
+        try {
+            openMutex.withLock { detach() }
+        } finally {
+            inputQueue.close()
+            scope.cancel()
+        }
     }
 
     override suspend fun disconnect() {
-        if (disposed.get()) return
-        closed.set(true)
-        detach()
-        _events.emit(SessionEvent.Disconnected())
+        val hadSession = session != null
         close()
+        // A pending handshake releases its own transport when it returns.
+        if (hadSession) shutdown.join()
+        _events.emit(SessionEvent.Disconnected())
     }
 
     override fun close() {
-        if (!disposed.compareAndSet(false, true)) return
-        closed.set(true)
-
-        val job = pollJob
-        pollJob = null
-        job?.cancel()
-
-        val current = session
-        session = null
-        current?.let { runCatching { it.close() }.onFailure { error -> Log.w(TAG, "close failed", error) } }
-
-        inputQueue.cancel()
-        scope.cancel()
+        disposed.set(true)
+        shutdown.start()
     }
 
+    // openMutex serializes detach with publication of a newly connected session.
     private suspend fun detach() {
-        val job = pollJob
-        pollJob = null
-        job?.cancelAndJoin()
+        val current = session ?: return
+        withContext(NonCancellable) {
+            val job = pollJob
+            pollJob = null
+            job?.cancel()
+            val drained = CompletableDeferred<Unit>()
+            inputQueue.send {
+                try {
+                    session = null
+                    if (inputTarget === current) releaseHeldInput(current)
+                } finally {
+                    drained.complete(Unit)
+                }
+            }
+            // Closing the Rust writer also wakes any send blocked on a stalled peer.
+            if (withTimeoutOrNull(1_000L) { drained.await() } == null) {
+                session = null
+                current.disconnect()
+                drained.await()
+            }
+            closeTransport(current)
+            job?.join()
+        }
+    }
 
-        val current = session
-        session = null
-        current?.let { runCatching { it.close() }.onFailure { error -> Log.w(TAG, "close failed", error) } }
+    private suspend fun closeTransport(current: NativeSession) {
+        try {
+            current.disconnect()
+        } finally {
+            current.close()
+        }
     }
 
     @Synchronized
@@ -302,16 +328,21 @@ class UniFfiRemoteSession(
         // Drop old queued input, then release any buttons and keys already sent.
         inputQueue.trySend {
             if (session === current && inputTarget === current) {
-                heldPointer?.let { (x, y) ->
-                    sendInput { current.sendPointer(mask = 0u, x = x.toUShort(), y = y.toUShort()) }
-                }
-                for (keysym in heldKeys.reversed()) {
-                    sendInput { current.sendKey(down = false, keysym = keysym.toUInt()) }
-                }
-                heldPointer = null
-                heldKeys.clear()
+                releaseHeldInput(current)
             }
         }
+    }
+
+    private suspend fun releaseHeldInput(current: NativeSession) {
+        heldPointer?.let { (x, y) ->
+            sendInput { current.sendPointer(mask = 0u, x = x.toUShort(), y = y.toUShort()) }
+        }
+        for (keysym in heldKeys.reversed()) {
+            sendInput { current.sendKey(down = false, keysym = keysym.toUInt()) }
+        }
+        heldPointer = null
+        heldKeys.clear()
+        inputTarget = null
     }
 
     override fun sendPointer(x: Int, y: Int, buttonMask: Int) {
@@ -343,7 +374,7 @@ class UniFfiRemoteSession(
 
     private fun enqueueInput(send: suspend (NativeSession) -> Unit) {
         val mode = inputMode
-        if (mode.observing) return
+        if (mode.observing || disposed.get()) return
         val current = session ?: return
 
         inputQueue.trySend {
@@ -466,7 +497,7 @@ class UniFfiRemoteSession(
     override suspend fun selectDisplay(displayId: Int?) {
         val current = checkNotNull(session)
         current.selectDisplay(displayId?.toUInt())
-        check(session === current && !closed.get())
+        check(session === current && !disposed.get())
     }
 
     override suspend fun copyRegion(x: Int, y: Int, width: Int, height: Int): ByteArray {
@@ -641,10 +672,10 @@ class UniFfiRemoteSession(
             throw cancelled
         } catch (error: Exception) {
             Log.w(TAG, "session poll failed", error)
-            if (!closed.get()) _events.emit(failureEvent(error))
+            if (!disposed.get()) _events.emit(failureEvent(error))
             return
         }
-        if (!closed.get()) _events.emit(terminal)
+        if (!disposed.get()) _events.emit(terminal)
     }
 
     private suspend fun handleFileTransfer(event: NativeEvent.FileTransfer) {

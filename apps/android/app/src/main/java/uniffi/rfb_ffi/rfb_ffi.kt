@@ -708,6 +708,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Int
     external fun uniffi_rfb_ffi_checksum_method_remotesession_copy_region_scaled(
     ): Int
+    external fun uniffi_rfb_ffi_checksum_method_remotesession_disconnect(
+    ): Int
     external fun uniffi_rfb_ffi_checksum_method_remotesession_next_event(
     ): Int
     external fun uniffi_rfb_ffi_checksum_method_remotesession_next_transfer_handle(
@@ -800,6 +802,8 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_rfb_ffi_fn_method_remotesession_copy_region_scaled(`ptr`: Long,`rect`: RustBuffer.ByValue,`scale`: Short,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
+    external fun uniffi_rfb_ffi_fn_method_remotesession_disconnect(`ptr`: Long,
+    ): Long
     external fun uniffi_rfb_ffi_fn_method_remotesession_next_event(`ptr`: Long,
     ): Long
     external fun uniffi_rfb_ffi_fn_method_remotesession_next_transfer_handle(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
@@ -1018,6 +1022,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_rfb_ffi_checksum_method_remotesession_copy_region_scaled() and 0xFFFF) != 46113) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_rfb_ffi_checksum_method_remotesession_disconnect() and 0xFFFF) != 3357) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_rfb_ffi_checksum_method_remotesession_next_event() and 0xFFFF) != 40415) {
@@ -1662,6 +1669,8 @@ public interface RemoteSessionInterface {
      */
     fun `copyRegionScaled`(`rect`: Rect, `scale`: kotlin.UShort): kotlin.ByteArray?
     
+    suspend fun `disconnect`()
+    
     suspend fun `nextEvent`(): SessionEvent?
     
     fun `nextTransferHandle`(): kotlin.UInt
@@ -1938,6 +1947,27 @@ open class RemoteSession: Disposable, AutoCloseable, RemoteSessionInterface
     )
     }
     
+
+    
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `disconnect`() {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_rfb_ffi_fn_method_remotesession_disconnect(
+                uniffiHandle,
+                
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_rfb_ffi_rust_future_poll_void(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_rfb_ffi_rust_future_complete_void(future, continuation) },
+        { future -> UniffiLib.ffi_rfb_ffi_rust_future_free_void(future) },
+        // lift function
+        { },
+        
+        // Error FFI converter
+        UniffiNullRustCallStatusErrorHandler,
+    )
+    }
 
     
     @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")

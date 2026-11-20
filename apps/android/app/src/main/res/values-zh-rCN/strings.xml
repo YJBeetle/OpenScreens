@@ -83,6 +83,8 @@
     <string name="editor_hide_password">隐藏密码</string>
     <string name="editor_start_in_observe_mode">以观察模式启动</string>
     <string name="editor_remember_selected_display">记住所选显示器</string>
+    <string name="editor_keep_screen_awake">保持屏幕常亮</string>
+    <string name="editor_keep_screen_awake_hint">连接期间保持此设备的屏幕常亮。</string>
     <string name="editor_zoom_toggle">允许捏合缩放</string>
     <string name="editor_observe_description">查看远程桌面，禁用远程输入。</string>
     <string name="editor_zoom_description">捏合可放大远程屏幕；关闭后双指手势只用于滚动。</string>
@@ -144,6 +146,7 @@
     <string name="session_key_arrow_up">上箭头</string>
     <string name="session_key_arrow_down">下箭头</string>
     <string name="session_key_arrow_right">右箭头</string>
+    <string name="session_more_actions">更多会话操作</string>
     <string name="session_hide_controls">隐藏控制栏</string>
     <string name="session_show_controls">显示控制栏</string>
     <string name="session_scroll_up">向上滚动</string>

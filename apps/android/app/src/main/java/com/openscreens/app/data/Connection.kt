@@ -40,6 +40,7 @@ data class Connection(
     val platform: RemotePlatform = RemotePlatform.Other,
     val requestMacSharing: Boolean = false,
     val sharedClipboard: Boolean = true,
+    val keepScreenAwake: Boolean = false,
 ) {
     val address: String
         get() = "$host:$port"

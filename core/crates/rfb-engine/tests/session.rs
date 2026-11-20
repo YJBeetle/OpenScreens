@@ -1026,7 +1026,7 @@ async fn curtain_requests_require_the_advertised_capability() {
 }
 
 #[tokio::test]
-async fn adaptive_dct_type1_falls_back_to_standard_encodings() {
+async fn unsupported_adaptive_dct_reference_falls_back_to_standard_encodings() {
     let (client, mut server) = duplex(64 * 1024);
 
     let task = tokio::spawn(async move {
@@ -1042,7 +1042,7 @@ async fn adaptive_dct_type1_falls_back_to_standard_encodings() {
         update.extend_from_slice(&HEIGHT.to_be_bytes());
         update.extend_from_slice(&1011i32.to_be_bytes());
         update.extend_from_slice(&4u32.to_be_bytes());
-        update.extend_from_slice(&[1, 16, 16, 0]);
+        update.extend_from_slice(&[1, 0, 0, 0x80]);
         server.write_all(&update).await.unwrap();
 
         let mut header = [0u8; 4];

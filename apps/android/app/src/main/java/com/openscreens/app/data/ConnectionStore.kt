@@ -144,6 +144,7 @@ class ConnectionStore(
                 .put("vncPassword", connection.vncPassword)
                 .put("quality", connection.quality.name)
                 .put("zoomEnabled", connection.zoomEnabled)
+                .put("startInObserveMode", connection.startInObserveMode)
             connection.accent?.let { item.put("accent", it.name) }
             connection.wireGuardConfig?.let { item.put("wireGuardConfig", it) }
             connection.openVpnConfig?.let { item.put("openVpnConfig", it) }
@@ -217,6 +218,7 @@ class ConnectionStore(
                             )
                         }.getOrDefault(QualityPreset.Balanced),
                         zoomEnabled = item.optBoolean("zoomEnabled", true),
+                        startInObserveMode = item.optBoolean("startInObserveMode", false),
                         ssh = ssh,
                         lastConnectedAt = if (item.has("lastConnectedAt") && !item.isNull("lastConnectedAt")) {
                             item.getLong("lastConnectedAt")

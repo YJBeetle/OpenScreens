@@ -21,6 +21,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -54,13 +55,23 @@ class UniFfiRemoteSession(
     private val connection: Connection,
     private var quality: QualityPreset,
     private val sshKey: SshKey?,
+    startInObserveMode: Boolean,
 ) : RemoteSession {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    // Input events must reach the server in the order they were produced: a pointer
-    // press before its release, and a modifier before the key it modifies.
-    private val inputDispatcher = Dispatchers.IO.limitedParallelism(1)
+    // A single consumer keeps FFI sends ordered even when a call suspends.
+    private val inputQueue = Channel<suspend () -> Unit>(Channel.UNLIMITED)
+
+    @Volatile
+    private var inputMode = InputMode(startInObserveMode)
+
+    // Accessed only by the input consumer.
+    private var inputTarget: NativeSession? = null
+    private val heldKeys = mutableSetOf<Int>()
+    private var heldPointer: Pair<Int, Int>? = null
+
+    private class InputMode(val observing: Boolean)
 
     private val _events = MutableSharedFlow<SessionEvent>(
         replay = 1,
@@ -109,6 +120,14 @@ class UniFfiRemoteSession(
     private var coverageCols = 0
     private var coverageRows = 0
     private var coverageRemaining = 0
+
+    init {
+        scope.launch {
+            for (command in inputQueue) {
+                command()
+            }
+        }
+    }
 
     override suspend fun connect() = open()
 
@@ -226,6 +245,7 @@ class UniFfiRemoteSession(
         session = null
         current?.let { runCatching { it.close() }.onFailure { error -> Log.w(TAG, "close failed", error) } }
 
+        inputQueue.cancel()
         scope.cancel()
     }
 
@@ -239,35 +259,79 @@ class UniFfiRemoteSession(
         current?.let { runCatching { it.close() }.onFailure { error -> Log.w(TAG, "close failed", error) } }
     }
 
-    override fun sendPointer(x: Int, y: Int, buttonMask: Int) {
+    @Synchronized
+    override fun setObserveMode(enabled: Boolean) {
+        if (inputMode.observing == enabled) return
+        inputMode = InputMode(enabled)
         val current = session ?: return
+        if (!enabled) return
+
+        // Drop old queued input, then release any buttons and keys already sent.
+        inputQueue.trySend {
+            if (session === current && inputTarget === current) {
+                heldPointer?.let { (x, y) ->
+                    sendInput { current.sendPointer(mask = 0u, x = x.toUShort(), y = y.toUShort()) }
+                }
+                for (keysym in heldKeys.reversed()) {
+                    sendInput { current.sendKey(down = false, keysym = keysym.toUInt()) }
+                }
+                heldPointer = null
+                heldKeys.clear()
+            }
+        }
+    }
+
+    override fun sendPointer(x: Int, y: Int, buttonMask: Int) {
         // The UI maps touches against the full server framebuffer.
         val serverX = x.coerceIn(0, (serverWidth - 1).coerceAtLeast(0))
         val serverY = y.coerceIn(0, (serverHeight - 1).coerceAtLeast(0))
-        scope.launch(inputDispatcher) {
-            runCatching {
-                current.sendPointer(
-                    mask = buttonMask.toUByte(),
-                    x = serverX.toUShort(),
-                    y = serverY.toUShort(),
-                )
-            }.onFailure { error -> Log.w(TAG, "sendPointer failed", error) }
+        enqueueInput { current ->
+            current.sendPointer(
+                mask = buttonMask.toUByte(),
+                x = serverX.toUShort(),
+                y = serverY.toUShort(),
+            )
+            heldPointer = if (buttonMask == 0) null else serverX to serverY
         }
     }
 
     override fun sendKey(keysym: Int, pressed: Boolean) {
-        val current = session ?: return
-        scope.launch(inputDispatcher) {
-            runCatching { current.sendKey(down = pressed, keysym = keysym.toUInt()) }
-                .onFailure { error -> Log.w(TAG, "sendKey failed", error) }
+        enqueueInput { current ->
+            current.sendKey(down = pressed, keysym = keysym.toUInt())
+            if (pressed) heldKeys.add(keysym) else heldKeys.remove(keysym)
         }
     }
 
     override fun sendClipboard(text: String) {
+        enqueueInput { current -> current.sendClipboard(text) }
+    }
+
+    private fun enqueueInput(send: suspend (NativeSession) -> Unit) {
+        val mode = inputMode
+        if (mode.observing) return
         val current = session ?: return
-        scope.launch(inputDispatcher) {
-            runCatching { current.sendClipboard(text) }
-                .onFailure { error -> Log.w(TAG, "sendClipboard failed", error) }
+
+        inputQueue.trySend {
+            // Compare the mode instance so input queued before a quick toggle
+            // cannot be replayed when control is restored.
+            if (inputMode === mode && session === current) {
+                if (inputTarget !== current) {
+                    inputTarget = current
+                    heldKeys.clear()
+                    heldPointer = null
+                }
+                sendInput { send(current) }
+            }
+        }
+    }
+
+    private suspend fun sendInput(send: suspend () -> Unit) {
+        try {
+            send()
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            Log.w(TAG, "remote input failed", error)
         }
     }
 
@@ -275,11 +339,11 @@ class UniFfiRemoteSession(
         session?.nextTransferHandle()?.toInt() ?: 0
 
     override suspend fun announceUpload(handle: Int, fileUrls: List<String>) {
-        session?.announceUpload(handle.toUInt(), fileUrls)
+        uploadSession()?.announceUpload(handle.toUInt(), fileUrls)
     }
 
     override suspend fun uploadDestination(handle: Int, folder: String) {
-        session?.uploadDestination(handle.toUInt(), folder)
+        uploadSession()?.uploadDestination(handle.toUInt(), folder)
     }
 
     override suspend fun uploadSummary(
@@ -288,7 +352,7 @@ class UniFfiRemoteSession(
         files: Int,
         directories: Int,
     ) {
-        session?.uploadSummary(
+        uploadSession()?.uploadSummary(
             handle.toUInt(),
             totalBytes.toULong(),
             files.toUInt(),
@@ -297,7 +361,7 @@ class UniFfiRemoteSession(
     }
 
     override suspend fun uploadEntry(handle: Int, entry: TransferEntry) {
-        val current = session ?: return
+        val current = uploadSession() ?: return
         val kind = when (entry.kind) {
             TransferEntryKind.File -> NativeKind.FILE
             TransferEntryKind.Directory -> NativeKind.DIRECTORY
@@ -323,11 +387,16 @@ class UniFfiRemoteSession(
     }
 
     override suspend fun uploadData(handle: Int, chunk: ByteArray) {
-        session?.uploadData(handle.toUInt(), chunk)
+        uploadSession()?.uploadData(handle.toUInt(), chunk)
     }
 
     override suspend fun uploadComplete(handle: Int) {
-        session?.uploadComplete(handle.toUInt())
+        uploadSession()?.uploadComplete(handle.toUInt())
+    }
+
+    private fun uploadSession(): NativeSession? {
+        check(!inputMode.observing) { context.getString(R.string.session_observe_mode) }
+        return session
     }
 
     override suspend fun cancelTransfer(handle: Int) {

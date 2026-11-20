@@ -46,6 +46,7 @@ import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Sensors
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
@@ -142,6 +143,7 @@ fun LibraryScreen(
     onDeleteGroup: (id: String) -> Unit,
     onMoveConnection: (id: String, offset: Int, orderedIds: List<String>) -> Unit,
     onOpenConnection: (Connection) -> Unit,
+    onObserveConnection: (Connection) -> Unit,
     onOpenInNewWindow: (Connection) -> Unit,
     onAddConnection: () -> Unit,
     onEditConnection: (Connection) -> Unit,
@@ -434,6 +436,7 @@ fun LibraryScreen(
                                 ConnectionCard(
                                     connection = connection,
                                     onClick = { onOpenConnection(connection) },
+                                    onObserve = { onObserveConnection(connection) },
                                     onEdit = { onEditConnection(connection) },
                                     onOpenInNewWindow = { onOpenInNewWindow(connection) },
                                     onMoveUp = if (manual && index > 0) {
@@ -465,6 +468,7 @@ fun LibraryScreen(
                                 ConnectionRow(
                                     connection = connection,
                                     onClick = { onOpenConnection(connection) },
+                                    onObserve = { onObserveConnection(connection) },
                                     onEdit = { onEditConnection(connection) },
                                     onOpenInNewWindow = { onOpenInNewWindow(connection) },
                                     onMoveUp = if (manual && index > 0) {
@@ -839,6 +843,7 @@ private fun ConnectionCard(
     connection: Connection,
     onClick: () -> Unit,
     onEdit: () -> Unit,
+    onObserve: () -> Unit,
     onOpenInNewWindow: () -> Unit,
     onMoveUp: (() -> Unit)? = null,
     onMoveDown: (() -> Unit)? = null,
@@ -925,6 +930,14 @@ private fun ConnectionCard(
     }
     DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
         DropdownMenuItem(
+            text = { Text(stringResource(R.string.library_connect_in_observe_mode)) },
+            leadingIcon = { Icon(Icons.Outlined.Visibility, contentDescription = null) },
+            onClick = {
+                menuExpanded = false
+                onObserve()
+            },
+        )
+        DropdownMenuItem(
             text = { Text(stringResource(R.string.session_open_in_new_window)) },
             leadingIcon = { Icon(Icons.AutoMirrored.Outlined.OpenInNew, contentDescription = null) },
             onClick = {
@@ -954,6 +967,7 @@ private fun ConnectionRow(
     connection: Connection,
     onClick: () -> Unit,
     onEdit: () -> Unit,
+    onObserve: () -> Unit,
     onOpenInNewWindow: () -> Unit,
     onMoveUp: (() -> Unit)? = null,
     onMoveDown: (() -> Unit)? = null,
@@ -1032,6 +1046,14 @@ private fun ConnectionRow(
         }
     }
     DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
+        DropdownMenuItem(
+            text = { Text(stringResource(R.string.library_connect_in_observe_mode)) },
+            leadingIcon = { Icon(Icons.Outlined.Visibility, contentDescription = null) },
+            onClick = {
+                menuExpanded = false
+                onObserve()
+            },
+        )
         DropdownMenuItem(
             text = { Text(stringResource(R.string.session_open_in_new_window)) },
             leadingIcon = { Icon(Icons.AutoMirrored.Outlined.OpenInNew, contentDescription = null) },

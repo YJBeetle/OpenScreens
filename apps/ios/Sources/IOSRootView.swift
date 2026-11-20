@@ -63,19 +63,29 @@ enum IOSSessionScene {
 struct IOSSessionWindow: View {
     @Environment(\.dismissWindow) private var dismissWindow
 
-    @State private var model: SessionViewModel
-
-    init(profile: ConnectionProfile, store: ConnectionStore) {
-        _model = State(initialValue: SessionViewModel(
-            profile: profile,
-            service: UniFfiSessionService(),
-            connectionStore: store
-        ))
-    }
+    @Environment(ConnectionStore.self) private var store
+    let profile: ConnectionProfile?
+    @State private var model: SessionViewModel?
 
     var body: some View {
-        SessionScreen(model: model) {
-            dismissWindow()
+        Group {
+            if let model {
+                SessionScreen(model: model) { dismissWindow() }
+            } else if profile == nil {
+                ContentUnavailableView {
+                    Label("Connection Not Found", systemImage: "questionmark.folder")
+                } description: {
+                    Text("This connection was removed from the library.")
+                }
+            } else {
+                ProgressView()
+            }
+        }
+        .onChange(of: profile?.id, initial: true) {
+            // A Bonjour advertisement can disappear without ending the session.
+            if let profile, model?.profile.id != profile.id {
+                model = SessionViewModel(profile: profile, service: UniFfiSessionService(), connectionStore: store)
+            }
         }
     }
 }

@@ -282,13 +282,15 @@ fun SessionScreen(
     var uploadJob by remember { mutableStateOf<Job?>(null) }
     var uploadLabel by remember { mutableStateOf<String?>(null) }
 
-    fun resetTransferProgress() {
+    fun resetTransferProgress(): PendingDownload? {
+        val unfinished = pendingDownload
         uploadJob?.cancel()
         uploadJob = null
         pendingUpload = null
         pendingDownload = null
         uploadLabel = null
         downloadLabel = null
+        return unfinished
     }
 
     val sendFilePicker = rememberLauncherForActivityResult(
@@ -395,10 +397,14 @@ fun SessionScreen(
     val exitSession: () -> Unit = {
         if (!isExiting) {
             isExiting = true
-            resetTransferProgress()
+            val unfinished = resetTransferProgress()
             scope.launch(start = kotlinx.coroutines.CoroutineStart.UNDISPATCHED) {
-                session.disconnect()
-                onExit()
+                try {
+                    session.disconnect()
+                } finally {
+                    discardDownload(unfinished)
+                    onExit()
+                }
             }
         }
     }
@@ -486,7 +492,8 @@ fun SessionScreen(
                     clipboardFetch?.cancel()
                     showClipboardDialog = false
                     status = SessionStatus.Connecting
-                    resetTransferProgress()
+                    val unfinished = resetTransferProgress()
+                    scope.launch { discardDownload(unfinished) }
                     cursor = null
                     cursorPosition = null
                     desktopScreens = emptyList()
@@ -628,7 +635,7 @@ fun SessionScreen(
                                 } else {
                                     emptyList()
                                 }
-                                if (saved.isEmpty()) download.root.delete()
+                                if (saved.isEmpty()) download.root.deleteRecursively()
                                 saved
                             }
                             if (items.isNotEmpty()) {
@@ -658,7 +665,8 @@ fun SessionScreen(
                     clipboardFetch?.cancel()
                     showClipboardDialog = false
                     status = SessionStatus.Disconnected
-                    resetTransferProgress()
+                    val unfinished = resetTransferProgress()
+                    scope.launch { discardDownload(unfinished) }
                     recovery.failed(event.message ?: context.getString(R.string.session_status_disconnected), retryable = true)
                 }
                 is SessionEvent.Failed -> {
@@ -667,7 +675,8 @@ fun SessionScreen(
                     clipboardFetch?.cancel()
                     showClipboardDialog = false
                     status = SessionStatus.Failed
-                    resetTransferProgress()
+                    val unfinished = resetTransferProgress()
+                    scope.launch { discardDownload(unfinished) }
                     login.failed(event.challenge)
                     if (event.challenge == null) recovery.failed(event.reason, event.retryable)
                 }
@@ -1871,7 +1880,7 @@ fun SessionScreen(
                                 }
                             }
                             if (pendingDownload?.handle != handle) {
-                                withContext(Dispatchers.IO) { root.delete() }
+                                discardDownload(PendingDownload(handle, root))
                                 return@launch
                             }
                             session.startDownload(handle, path, root.absolutePath)
@@ -1881,7 +1890,7 @@ fun SessionScreen(
                             if (pendingDownload?.handle == handle) {
                                 pendingDownload = null
                                 downloadLabel = null
-                                withContext(Dispatchers.IO) { root.delete() }
+                                discardDownload(PendingDownload(handle, root))
                                 snackbarHostState.showSnackbar(
                                     context.getString(
                                         R.string.session_download_failed,
@@ -2707,6 +2716,12 @@ private const val KEYBOARD_SENTINEL_CHAR = '\u200B'
 private const val KEYBOARD_SENTINEL = "\u200B"
 
 private data class PendingDownload(val handle: Int, val root: File)
+
+private suspend fun discardDownload(download: PendingDownload?) {
+    if (download != null) {
+        withContext(Dispatchers.IO + kotlinx.coroutines.NonCancellable) { download.root.deleteRecursively() }
+    }
+}
 
 private data class PendingUpload(val handle: Int, val uris: List<Uri>)
 

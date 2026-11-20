@@ -423,9 +423,9 @@ struct PhoneLibraryView: View {
         )
     }
 
-    private func openSession(_ profile: ConnectionProfile) {
+    private func openSession(_ profile: ConnectionProfile, observeOnly: Bool = false) {
         store.markConnected(id: profile.id)
-        activeProfile = profile
+        activeProfile = profile.forSession(observeOnly: observeOnly)
     }
 
     private func connectPendingLink() {

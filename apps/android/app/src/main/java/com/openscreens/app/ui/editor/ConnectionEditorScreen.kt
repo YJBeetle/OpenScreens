@@ -121,6 +121,9 @@ fun ConnectionEditorScreen(
     var quality by rememberSaveable(editorKey) {
         mutableStateOf(seed?.quality ?: QualityPreset.Balanced)
     }
+    var startInObserveMode by rememberSaveable(editorKey) {
+        mutableStateOf(seed?.startInObserveMode ?: false)
+    }
     var zoomEnabled by rememberSaveable(editorKey) {
         mutableStateOf(seed?.zoomEnabled ?: true)
     }
@@ -304,6 +307,7 @@ fun ConnectionEditorScreen(
                 vncPassword = vncPassword,
                 quality = quality,
                 zoomEnabled = zoomEnabled,
+                startInObserveMode = startInObserveMode,
                 groupId = groupId,
                 ssh = ssh,
                 wireGuardConfig = wireGuardConfig?.takeIf { it.isNotBlank() },
@@ -586,6 +590,35 @@ fun ConnectionEditorScreen(
                     }
                     Spacer(Modifier.width(12.dp))
                     Switch(checked = zoomEnabled, onCheckedChange = null)
+                }
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .toggleable(
+                            value = startInObserveMode,
+                            role = Role.Switch,
+                            onValueChange = { startInObserveMode = it },
+                        )
+                        .padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                        Text(
+                            text = stringResource(R.string.editor_start_in_observe_mode),
+                            style = MaterialTheme.typography.bodyLarge,
+                        )
+                        Text(
+                            text = stringResource(R.string.editor_observe_description),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Switch(checked = startInObserveMode, onCheckedChange = null)
                 }
 
                 HorizontalDivider(Modifier.padding(vertical = 4.dp))

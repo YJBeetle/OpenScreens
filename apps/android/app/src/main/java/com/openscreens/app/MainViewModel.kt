@@ -147,5 +147,5 @@ sealed interface Route {
     data object Settings : Route
     data object SshKeys : Route
     data class Editor(val connectionId: String?, val draft: Connection? = null) : Route
-    data class Session(val connectionId: String) : Route
+    data class Session(val connectionId: String, val observeOnly: Boolean = false) : Route
 }

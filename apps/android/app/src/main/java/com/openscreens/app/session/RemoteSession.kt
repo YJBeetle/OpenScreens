@@ -30,6 +30,8 @@ interface RemoteSession {
     /** Releases the transport for good; the instance is not reusable afterwards. */
     fun close()
 
+    fun setObserveMode(enabled: Boolean)
+
     fun sendPointer(x: Int, y: Int, buttonMask: Int)
 
     fun sendKey(keysym: Int, pressed: Boolean)
@@ -184,5 +186,8 @@ object SessionProvider {
         connection: Connection,
         quality: QualityPreset,
         sshKey: SshKey? = null,
-    ): RemoteSession = UniFfiRemoteSession(context.applicationContext, connection, quality, sshKey)
+        startInObserveMode: Boolean = connection.startInObserveMode,
+    ): RemoteSession = UniFfiRemoteSession(
+        context.applicationContext, connection, quality, sshKey, startInObserveMode,
+    )
 }

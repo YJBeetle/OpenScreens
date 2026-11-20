@@ -101,6 +101,7 @@ enum MacAppInfo {
 
 struct SessionRoute: Codable, Hashable {
     var profileID: UUID
+    var observeRequestID: UUID? = nil
 }
 
 struct MacSettingsView: View {

@@ -30,9 +30,6 @@ public struct LibrarySidebar: View {
                 row(.nearby)
                 row(.links)
             }
-            Section("Services") {
-                row(.connect)
-            }
             Section("Custom") {
                 row(.custom)
                 ForEach(store.groups) { group in
@@ -125,14 +122,7 @@ public struct LibrarySidebar: View {
                 .foregroundStyle(.secondary)
                 .frame(width: 20)
 
-            VStack(alignment: .leading, spacing: 1) {
-                Text(section.title)
-                if let status = section.serviceStatus {
-                    Text(status)
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
-                }
-            }
+            Text(section.title)
 
             Spacer(minLength: 4)
 

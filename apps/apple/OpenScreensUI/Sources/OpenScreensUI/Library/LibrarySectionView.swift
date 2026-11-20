@@ -4,7 +4,7 @@ import SwiftUI
 /// Grid of connection tiles used by a library section or by search results.
 struct ConnectionGrid: View {
     let profiles: [ConnectionProfile]
-    let onConnect: (ConnectionProfile) -> Void
+    let onConnect: (ConnectionProfile, Bool) -> Void
     let onEdit: (ConnectionProfile) -> Void
     let onDuplicate: (ConnectionProfile) -> Void
     let onDelete: (ConnectionProfile) -> Void
@@ -32,7 +32,7 @@ struct ConnectionGrid: View {
             ) {
                 ForEach(profiles) { profile in
                     Button {
-                        onConnect(profile)
+                        onConnect(profile, false)
                     } label: {
                         ConnectionTile(profile: profile)
                     }
@@ -41,7 +41,8 @@ struct ConnectionGrid: View {
                         ConnectionActionsMenu(
                             profile: profile,
                             canMove: settings.settings.librarySort == .manual,
-                            onConnect: { onConnect(profile) },
+                            onConnect: { onConnect(profile, false) },
+                            onObserve: { onConnect(profile, true) },
                             onEdit: { onEdit(profile) },
                             onDuplicate: { onDuplicate(profile) },
                             onOpenInNewWindow: onOpenInNewWindow.map { action in
@@ -54,6 +55,7 @@ struct ConnectionGrid: View {
                             onRequestDelete: { pendingDeletion = profile }
                         )
                     }
+                    .accessibilityAction(named: "Connect in Observe Mode") { onConnect(profile, true) }
                     .accessibilityAction(named: "Edit") { onEdit(profile) }
                     .accessibilityAction(named: "Duplicate") { onDuplicate(profile) }
                 }
@@ -103,6 +105,7 @@ private struct ConnectionActionsMenu: View {
     let profile: ConnectionProfile
     let canMove: Bool
     let onConnect: () -> Void
+    let onObserve: () -> Void
     let onEdit: () -> Void
     let onDuplicate: () -> Void
     let onOpenInNewWindow: (() -> Void)?
@@ -113,6 +116,10 @@ private struct ConnectionActionsMenu: View {
     var body: some View {
         Button(action: onConnect) {
             Label("Connect", systemImage: "play.fill")
+        }
+
+        Button(action: onObserve) {
+            Label("Connect in Observe Mode", systemImage: "eye")
         }
 
         if let onOpenInNewWindow {
@@ -160,7 +167,7 @@ private struct ConnectionActionsMenu: View {
 /// Compact rows shown when the library uses the list layout.
 struct ConnectionList: View {
     let profiles: [ConnectionProfile]
-    let onConnect: (ConnectionProfile) -> Void
+    let onConnect: (ConnectionProfile, Bool) -> Void
     let onEdit: (ConnectionProfile) -> Void
     let onDuplicate: (ConnectionProfile) -> Void
     let onDelete: (ConnectionProfile) -> Void
@@ -181,7 +188,7 @@ struct ConnectionList: View {
                         ConnectionRow(profile: profile)
                     } else {
                         Button {
-                            onConnect(profile)
+                            onConnect(profile, false)
                         } label: {
                             ConnectionRow(profile: profile)
                         }
@@ -192,7 +199,8 @@ struct ConnectionList: View {
                     ConnectionActionsMenu(
                         profile: profile,
                         canMove: settings.settings.librarySort == .manual,
-                        onConnect: { onConnect(profile) },
+                        onConnect: { onConnect(profile, false) },
+                        onObserve: { onConnect(profile, true) },
                         onEdit: { onEdit(profile) },
                         onDuplicate: { onDuplicate(profile) },
                         onOpenInNewWindow: onOpenInNewWindow.map { action in
@@ -205,6 +213,7 @@ struct ConnectionList: View {
                         onRequestDelete: { pendingDeletion = profile }
                     )
                 }
+                .accessibilityAction(named: "Connect in Observe Mode") { onConnect(profile, true) }
                 .accessibilityAction(named: "Edit") { onEdit(profile) }
                 .accessibilityAction(named: "Duplicate") { onDuplicate(profile) }
             }
@@ -325,7 +334,7 @@ public struct LibrarySectionView: View {
     private let searchText: String
     private let layout: LibraryLayout
     private let reordering: Bool
-    private let onConnect: (ConnectionProfile) -> Void
+    private let onConnect: (ConnectionProfile, Bool) -> Void
     private let onEdit: (ConnectionProfile) -> Void
     private let onDuplicate: (ConnectionProfile) -> Void
     private let onDelete: (ConnectionProfile) -> Void
@@ -342,7 +351,7 @@ public struct LibrarySectionView: View {
         searchText: String = "",
         layout: LibraryLayout = .grid,
         reordering: Bool = false,
-        onConnect: @escaping (ConnectionProfile) -> Void,
+        onConnect: @escaping (ConnectionProfile, Bool) -> Void,
         onEdit: @escaping (ConnectionProfile) -> Void,
         onDuplicate: @escaping (ConnectionProfile) -> Void,
         onDelete: @escaping (ConnectionProfile) -> Void,
@@ -363,71 +372,42 @@ public struct LibrarySectionView: View {
     }
 
     public var body: some View {
-        if section.isService {
-            serviceUnavailable
+        let profiles = store.profiles(
+            in: section,
+            groupID: groupID,
+            matching: searchText,
+            sort: settings.settings.librarySort
+        )
+        if profiles.isEmpty {
+            emptyState
+        } else if layout == .list {
+            ConnectionList(
+                profiles: profiles,
+                onConnect: onConnect,
+                onEdit: onEdit,
+                onDuplicate: onDuplicate,
+                onDelete: onDelete,
+                onOpenInNewWindow: onOpenInNewWindow,
+                onMove: { profile, offset in
+                    store.move(id: profile.id, by: offset, within: profiles.map(\.id))
+                },
+                isReordering: reordering,
+                onReorder: { id, destination in
+                    store.move(id: id, toIndex: destination, within: profiles.map(\.id))
+                }
+            )
         } else {
-            let profiles = store.profiles(
-                in: section,
-                groupID: groupID,
-                matching: searchText,
-                sort: settings.settings.librarySort
+            ConnectionGrid(
+                profiles: profiles,
+                onConnect: onConnect,
+                onEdit: onEdit,
+                onDuplicate: onDuplicate,
+                onDelete: onDelete,
+                onOpenInNewWindow: onOpenInNewWindow,
+                onMove: { profile, offset in
+                    store.move(id: profile.id, by: offset, within: profiles.map(\.id))
+                }
             )
-            if profiles.isEmpty {
-                emptyState
-            } else if layout == .list {
-                ConnectionList(
-                    profiles: profiles,
-                    onConnect: onConnect,
-                    onEdit: onEdit,
-                    onDuplicate: onDuplicate,
-                    onDelete: onDelete,
-                    onOpenInNewWindow: onOpenInNewWindow,
-                    onMove: { profile, offset in
-                        store.move(id: profile.id, by: offset, within: profiles.map(\.id))
-                    },
-                    isReordering: reordering,
-                    onReorder: { id, destination in
-                        store.move(id: id, toIndex: destination, within: profiles.map(\.id))
-                    }
-                )
-            } else {
-                ConnectionGrid(
-                    profiles: profiles,
-                    onConnect: onConnect,
-                    onEdit: onEdit,
-                    onDuplicate: onDuplicate,
-                    onDelete: onDelete,
-                    onOpenInNewWindow: onOpenInNewWindow,
-                    onMove: { profile, offset in
-                        store.move(id: profile.id, by: offset, within: profiles.map(\.id))
-                    }
-                )
-            }
-        }
-    }
-
-    private var serviceUnavailable: some View {
-        ContentUnavailableView {
-            Label(section.title, systemImage: section.systemImage)
-        } description: {
-            Text(serviceExplanation)
-        } actions: {
-            Button("New Connection") {
-                onNewConnection()
-            }
-            .buttonStyle(.borderedProminent)
-        }
-    }
-
-    private var serviceExplanation: String {
-        switch section {
-        case .connect:
-            NSLocalizedString(
-                "OpenScreens connects directly to your computers. There is no relay account: use a LAN address, an SSH tunnel or your own VPN.",
-                comment: "Connect service explanation"
-            )
-        default:
-            ""
         }
     }
 
@@ -500,7 +480,7 @@ public struct LibrarySectionView: View {
 public struct LibrarySearchResultsView: View {
     private let query: String
     private let layout: LibraryLayout
-    private let onConnect: (ConnectionProfile) -> Void
+    private let onConnect: (ConnectionProfile, Bool) -> Void
     private let onEdit: (ConnectionProfile) -> Void
     private let onDuplicate: (ConnectionProfile) -> Void
     private let onDelete: (ConnectionProfile) -> Void
@@ -511,7 +491,7 @@ public struct LibrarySearchResultsView: View {
     public init(
         query: String,
         layout: LibraryLayout = .grid,
-        onConnect: @escaping (ConnectionProfile) -> Void,
+        onConnect: @escaping (ConnectionProfile, Bool) -> Void,
         onEdit: @escaping (ConnectionProfile) -> Void,
         onDuplicate: @escaping (ConnectionProfile) -> Void,
         onDelete: @escaping (ConnectionProfile) -> Void,

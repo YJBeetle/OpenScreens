@@ -478,3 +478,7 @@
 "Another user is signed in on this Mac. Open a personal session with your Mac account, or ask to share the active session." = "此 Mac 上已有其他用户登录。可使用你的 Mac 账户打开个人会话，或请求共享当前会话。";
 "Open Personal Session" = "打开个人会话";
 "Request Shared Session" = "请求共享会话";
+"Before Disconnecting" = "断开连接前";
+"Log Out Remote User" = "注销远端用户";
+"Remote action before disconnecting: %@" = "断开连接前将在远端执行：%@";
+"Hot Corner — %@" = "触发角 — %@";

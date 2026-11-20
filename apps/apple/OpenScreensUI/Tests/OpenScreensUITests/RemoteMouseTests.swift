@@ -39,9 +39,9 @@ private actor InputRecorder: RemoteSessionProtocol, RemoteSessionService {
 final class RemoteMouseTests: XCTestCase {
     let size = CGSize(width: 100, height: 100)
 
-    private func connected() async throws -> (SessionViewModel, InputRecorder) {
+    private func connected(profile: ConnectionProfile = ConnectionProfile()) async throws -> (SessionViewModel, InputRecorder) {
         let recorder = InputRecorder()
-        let model = SessionViewModel(profile: ConnectionProfile(), service: recorder)
+        let model = SessionViewModel(profile: profile, service: recorder)
         model.start()
         let deadline = ContinuousClock.now + .seconds(3)
         while !model.state.isConnected && ContinuousClock.now < deadline { await Task.yield() }
@@ -56,6 +56,59 @@ final class RemoteMouseTests: XCTestCase {
         for await _ in recorder.disconnected {}
         let recorded = await recorder.recorded
         XCTAssertEqual(recorded, expected)
+    }
+
+    func testConfirmedDisconnectSendsOnlyTheChosenActionAfterRelease() async throws {
+        var profile = ConnectionProfile(platform: .macos)
+        profile.disconnectAction = .logOut
+        let (model, recorder) = try await connected(profile: profile)
+        model.mouseInput.down(0, control: false, at: CGPoint(x: 50, y: 50), size: size)
+        XCTAssertTrue(model.requestDisconnectConfirmation())
+        let request = try XCTUnwrap(model.disconnectRequest)
+        XCTAssertTrue(model.confirmDisconnect(request))
+        XCTAssertFalse(model.confirmDisconnect(request))
+        let point = CGPoint(x: 0.5, y: 0.5)
+        await verify([.pointer(.down, .left, point), .pointer(.up, .left, point),
+                      .key(.text("q"), [.command, .option, .shift])], model: model, recorder: recorder)
+    }
+
+    func testDisconnectHotCornerAndWindowsAttention() async throws {
+        var profile = ConnectionProfile(platform: .macos)
+        profile.disconnectAction = .bottomRight
+        let (mac, first) = try await connected(profile: profile)
+        XCTAssertTrue(mac.requestDisconnectConfirmation())
+        XCTAssertTrue(mac.confirmDisconnect(try XCTUnwrap(mac.disconnectRequest)))
+        await verify([.pointer(.move, .left, CGPoint(x: 1, y: 1))], model: mac, recorder: first)
+
+        profile.platform = .windows
+        profile.disconnectAction = .ctrlAltDelete
+        let (windows, second) = try await connected(profile: profile)
+        XCTAssertTrue(windows.requestDisconnectConfirmation())
+        XCTAssertTrue(windows.confirmDisconnect(try XCTUnwrap(windows.disconnectRequest)))
+        await verify([.key(.deleteForward, [.control, .option])], model: windows, recorder: second)
+    }
+
+    func testCancelObserveAndRemoteCloseInvalidateConfirmedActions() async throws {
+        var profile = ConnectionProfile(platform: .macos)
+        profile.controls.autoReconnect = false
+        profile.disconnectAction = .lockScreen
+        let (model, recorder) = try await connected(profile: profile)
+        XCTAssertTrue(model.requestDisconnectConfirmation())
+        let cancelled = try XCTUnwrap(model.disconnectRequest)
+        model.cancelDisconnectConfirmation()
+        XCTAssertFalse(model.confirmDisconnect(cancelled))
+        XCTAssertTrue(model.requestDisconnectConfirmation())
+        let stale = try XCTUnwrap(model.disconnectRequest)
+        model.toggleObserveMode()
+        XCTAssertFalse(model.requestDisconnectConfirmation())
+        XCTAssertFalse(model.confirmDisconnect(stale))
+        model.toggleObserveMode()
+        XCTAssertTrue(model.requestDisconnectConfirmation())
+        let interrupted = try XCTUnwrap(model.disconnectRequest)
+        recorder.continuation.yield(.state(.disconnected(reason: nil)))
+        for await _ in recorder.disconnected {}
+        XCTAssertFalse(model.confirmDisconnect(interrupted))
+        await verify([.observe(true), .observe(false)], model: model, recorder: recorder)
     }
 
     func testAppKitWindowCoordinatesAndFocusLossRelease() async throws {

@@ -119,7 +119,8 @@ public final class SessionViewModel {
     var sentFiles: [SessionTransferItem] = []
     var receivedFiles: [SessionTransferItem] = []
     public var showsFileTransfers = false
-    public var confirmsTransferInterruption = false
+    private(set) var disconnectRequest: SessionDisconnectRequest?
+    var showingDisconnectRequest = false
     public var hasActiveTransfers: Bool {
         activeUploads > 0 || activeDownloads > 0 || !promiseDownloads.isEmpty
     }
@@ -207,6 +208,39 @@ public final class SessionViewModel {
         reconnectTask = nil
         endTransport()
         PlatformScreen.setIdleTimerDisabled(false, for: idleTimerOwner)
+    }
+
+    /// Return true when a native confirmation owns this close request.
+    public func requestDisconnectConfirmation(alwaysConfirm: Bool = false) -> Bool {
+        guard !isStopping else { return false }
+        let action: DisconnectAction = state.isConnected && !isObserving ? profile.supportedDisconnectAction : .none
+        guard hasActiveTransfers || action != .none || (alwaysConfirm && state.isConnected) else { return false }
+        disconnectRequest = SessionDisconnectRequest(action: action, interruptsTransfers: hasActiveTransfers)
+        showingDisconnectRequest = true
+        return true
+    }
+
+    func cancelDisconnectConfirmation() {
+        disconnectRequest = nil
+        showingDisconnectRequest = false
+    }
+
+    func confirmDisconnect(_ request: SessionDisconnectRequest) -> Bool {
+        guard request.id == disconnectRequest?.id else { return false }
+        cancelDisconnectConfirmation()
+        if state.isConnected, !isObserving, request.action == profile.supportedDisconnectAction {
+            releasePointerInput()
+            clearStickyModifiers()
+            switch request.action {
+            case .lockScreen: sendCommand(profile.platform == .windows ? .lockWindows : .lockMac)
+            case .logOut: sendCommand(.logOutMac)
+            case .ctrlAltDelete: sendCommand(.ctrlAltDelete)
+            default:
+                if let corner = request.action.corner { jumpPointer(to: corner.normalizedPoint) }
+            }
+        }
+        disconnect()
+        return true
     }
 
     public func disconnect() {
@@ -336,6 +370,7 @@ public final class SessionViewModel {
     private(set) var supportsCurtainMode = false
 
     private func endTransport() {
+        cancelDisconnectConfirmation()
         supportsCurtainMode = false
         releasePointerInput()
         inputQueue?.events.finish()
@@ -1187,6 +1222,7 @@ public final class SessionViewModel {
     // MARK: - Session controls
 
     public func toggleObserveMode() {
+        cancelDisconnectConfirmation()
         if !isObserving {
             releasePointerInput()
             clearStickyModifiers()

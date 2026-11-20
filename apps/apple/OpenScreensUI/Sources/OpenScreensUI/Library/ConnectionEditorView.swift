@@ -273,6 +273,9 @@ public struct ConnectionEditorView: View {
                     Text(platform.title).tag(platform)
                 }
             }
+            .onChange(of: draft.platform) { _, _ in
+                if draft.supportedDisconnectAction == .none { draft.disconnectAction = nil }
+            }
 
             if !draft.isValid {
                 Label(
@@ -719,6 +722,16 @@ public struct ConnectionEditorView: View {
         }
 
         Section {
+            if DisconnectAction.options(for: draft.platform).count > 1 {
+                Picker("Before Disconnecting", selection: Binding(
+                    get: { draft.supportedDisconnectAction },
+                    set: { draft.disconnectAction = $0 == .none ? nil : $0 }
+                )) {
+                    ForEach(DisconnectAction.options(for: draft.platform), id: \.self) { action in
+                        Text(action.title).tag(action)
+                    }
+                }
+            }
             Toggle("Start in Observe Mode", isOn: $draft.controls.startInObserveMode)
             Toggle("Use Shared Clipboard", isOn: $draft.controls.sharedClipboard)
             Toggle("Remember Selected Display", isOn: Binding(

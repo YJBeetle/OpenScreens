@@ -19,7 +19,6 @@ public struct SessionScreen: View {
     private let onClose: () -> Void
 
     @State private var presentedChallenge: RemoteFailureKind?
-    @State private var confirmingDisconnect = false
     @State private var isDropTargeted = false
     @State private var showingUploadPicker = false
     @State private var showingDownloadDialog = false
@@ -146,23 +145,17 @@ public struct SessionScreen: View {
                 .interactiveDismissDisabled()
             }
         }
-        .confirmationDialog(
+        .alert(
             "Disconnect from “\(model.profile.name)”?",
-            isPresented: $confirmingDisconnect,
-            titleVisibility: .visible
-        ) {
+            isPresented: $model.showingDisconnectRequest,
+            presenting: model.disconnectRequest
+        ) { request in
             Button("Disconnect", role: .destructive) {
-                closeSession()
+                if model.confirmDisconnect(request) { onClose() }
             }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("The remote session ends. You can reconnect from the library at any time.")
-        }
-        .alert("File Transfer in Progress", isPresented: $model.confirmsTransferInterruption) {
-            Button("Disconnect", role: .destructive) { closeSession() }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Disconnecting will cancel the current file transfers.")
+            Button("Cancel", role: .cancel) { model.cancelDisconnectConfirmation() }
+        } message: { request in
+            Text(request.message)
         }
         .sheet(isPresented: $model.showsFileTransfers) {
             SessionFileTransfers(model: model)
@@ -888,11 +881,7 @@ public struct SessionScreen: View {
     // MARK: - Actions
 
     private func requestClose() {
-        if model.hasActiveTransfers {
-            model.confirmsTransferInterruption = true
-        } else if settings.settings.confirmDisconnect, model.state.isConnected {
-            confirmingDisconnect = true
-        } else {
+        if !model.requestDisconnectConfirmation(alwaysConfirm: settings.settings.confirmDisconnect) {
             closeSession()
         }
     }

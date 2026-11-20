@@ -12,6 +12,11 @@ struct RemoteDesktopCommand: Identifiable {
         self.event = RemoteKeyEvent(key: key, modifiers: modifiers)
     }
 
+    static let lockMac = Self("Lock Screen", .text("q"), [.command, .control])
+    static let lockWindows = Self("Lock Screen", .text("l"), .command)
+    static let ctrlAltDelete = Self("Ctrl-Alt-Delete", .deleteForward, [.control, .option])
+    static let logOutMac = Self("Log Out Remote User", .text("q"), [.option, .shift, .command])
+
     static func commands(for platform: RemoteOS) -> [Self] {
         switch platform {
         case .macos:
@@ -24,15 +29,15 @@ struct RemoteDesktopCommand: Identifiable {
                 Self("Switch Applications", .tab, .command),
                 Self("Spotlight", .text(" "), .command),
                 Self("Force Quit…", .escape, [.command, .option]),
-                Self("Lock Screen", .text("q"), [.command, .control]),
+                .lockMac,
             ]
         case .windows:
             [
-                Self("Ctrl-Alt-Delete", .deleteForward, [.control, .option]),
+                .ctrlAltDelete,
                 Self("Task Manager", .escape, [.control, .shift]),
                 Self("Show Desktop", .text("d"), .command),
                 Self("Switch Applications", .tab, .option),
-                Self("Lock Screen", .text("l"), .command),
+                .lockWindows,
             ]
         case .linux, .unix:
             [Self("Switch Applications", .tab, .option), Self("Insert", .insert)]

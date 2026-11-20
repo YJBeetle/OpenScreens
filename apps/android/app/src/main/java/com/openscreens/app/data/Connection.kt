@@ -38,6 +38,7 @@ data class Connection(
     val rememberSelectedDisplay: Boolean = true,
     val preferredDisplayId: Int? = null,
     val platform: RemotePlatform = RemotePlatform.Other,
+    val requestMacSharing: Boolean = false,
 ) {
     val address: String
         get() = "$host:$port"

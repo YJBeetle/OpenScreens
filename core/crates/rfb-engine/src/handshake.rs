@@ -23,6 +23,8 @@ pub struct ClientConfig {
     /// Negotiate Apple's RFB 3.889 handshake (extended ServerInit and
     /// ClientInit 0xC1) when the server advertises it.
     pub apple_session: bool,
+    /// Explicitly request the console session after authenticating a Mac account.
+    pub request_mac_sharing: bool,
 }
 
 impl Default for ClientConfig {
@@ -32,6 +34,7 @@ impl Default for ClientConfig {
             password: None,
             shared: true,
             apple_session: false,
+            request_mac_sharing: false,
         }
     }
 }
@@ -115,6 +118,11 @@ where
     // Apple advertises 3.889; the standard 3.8 flow remains valid until Apple
     // extensions are explicitly negotiated.
     let apple = config.apple_session && server_version == ProtocolVersion::new(3, 889);
+    if config.request_mac_sharing && !apple {
+        return Err(HandshakeError::Protocol(
+            "Mac session sharing requires RFB 3.889",
+        ));
+    }
     let version = if apple {
         server_version
     } else {
@@ -165,11 +173,58 @@ where
     let client_init = if apple { 0xc1 } else { u8::from(config.shared) };
     stream.write_all(&[client_init]).await?;
     let server_init = read_server_init(stream, apple).await?;
+    let has_offer = server_init
+        .apple_features
+        .is_some_and(|features| features.flags & 4 != 0);
+    if config.request_mac_sharing && !has_offer {
+        return Err(HandshakeError::Protocol(
+            "Mac did not offer another user's session",
+        ));
+    }
+    if has_offer {
+        if !config.request_mac_sharing {
+            return Err(HandshakeError::Protocol("Mac requires session selection"));
+        }
+        request_existing_session(stream).await?;
+    }
     Ok(Handshake {
         version,
         server_init,
         input_key,
     })
+}
+
+// Screens 5.9 VNCKit, _initMessagesWithErrorHandler:completion:. The
+// selection exchange runs before capability messages and framebuffer requests.
+async fn request_existing_session<T: AsyncRead + AsyncWrite + Unpin>(
+    stream: &mut T,
+) -> Result<(), HandshakeError> {
+    let mut offer = [0; 76];
+    stream.read_exact(&mut offer).await?;
+    let mut request = [0; 74];
+    request[..4].copy_from_slice(&[0, 72, 0, 1]);
+    // Mirror the share action chosen by requestToShareExistingUserSession:YES.
+    request[8] = (offer[7] >> 1) & 1;
+    request[10..21].copy_from_slice(b"OpenScreens");
+    stream.write_all(&request).await?;
+    let mut reply = [0; 82];
+    tokio::time::timeout(
+        std::time::Duration::from_secs(1000),
+        stream.read_exact(&mut reply),
+    )
+    .await
+    .map_err(|_| HandshakeError::ConnectionRefused("Mac sharing request timed out".into()))??;
+    if reply[..4] != [0, 80, 0, 1] {
+        return Err(HandshakeError::Protocol(
+            "invalid Mac session selection reply",
+        ));
+    }
+    if reply[4..18] != [0; 14] {
+        return Err(HandshakeError::ConnectionRefused(
+            "Mac sharing request was not approved".into(),
+        ));
+    }
+    Ok(())
 }
 
 fn negotiate_version(server: ProtocolVersion) -> ProtocolVersion {
@@ -258,6 +313,19 @@ where
         None
     };
 
+    if config.request_mac_sharing {
+        if config.username.as_deref().is_none_or(str::is_empty) {
+            return Err(HandshakeError::MissingUsername);
+        }
+        if config.password.as_deref().is_none_or(str::is_empty) {
+            return Err(HandshakeError::MissingPassword);
+        }
+        if apple.is_none() {
+            return Err(HandshakeError::Protocol(
+                "Mac account authentication unavailable",
+            ));
+        }
+    }
     let selected = if let (Some(apple_type), true) = (
         apple,
         config.username.is_some() && config.password.is_some(),
@@ -421,6 +489,7 @@ mod tests {
             password: Some(password.to_owned()),
             shared: true,
             apple_session: false,
+            request_mac_sharing: false,
         };
         let handshake = perform(&mut client, &config).await.unwrap();
         task.await.unwrap();
@@ -444,10 +513,87 @@ mod tests {
             password: None,
             shared: true,
             apple_session: true,
+            request_mac_sharing: false,
         };
         let handshake = perform(&mut client, &config).await.unwrap();
         assert_eq!(handshake.version, ProtocolVersion::new(3, 889));
         task.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn waits_for_mac_session_selection_reply_after_account_authentication() {
+        for (offer_flags, reply_header, accepted) in [
+            (0, [0, 80, 0, 1, 0], true),
+            (2, [0, 80, 0, 1, 1], false),
+            (2, [0, 79, 0, 1, 0], false),
+        ] {
+            let (mut client, mut server) = duplex(1024);
+            let peer = tokio::spawn(async move {
+                server.write_all(b"RFB 003.889\n").await.unwrap();
+                assert_eq!(read_version_from(&mut server).await, *b"RFB 003.889\n");
+                server.write_all(&[2, 1, 30]).await.unwrap();
+                assert_eq!(read_u8_from(&mut server).await, 30);
+                let mut modulus = [0xff; 66]; // 2^521 - 1
+                modulus[0] = 1;
+                let mut public = [0; 66];
+                public[65] = 4;
+                server.write_all(&[0, 2, 0, 66]).await.unwrap();
+                server.write_all(&modulus).await.unwrap();
+                server.write_all(&public).await.unwrap();
+                server.read_exact(&mut [0; 128 + 66]).await.unwrap();
+                server.write_all(&[0; 4]).await.unwrap();
+                assert_eq!(read_u8_from(&mut server).await, 0xc1);
+                let mut init = server_init_message();
+                init.truncate(20);
+                init.extend_from_slice(&22u32.to_be_bytes());
+                let mut extension = [0; 22];
+                extension[5] = 4;
+                init.extend_from_slice(&extension);
+                server.write_all(&init).await.unwrap();
+                let mut offer = [0; 76];
+                offer[7] = offer_flags;
+                server.write_all(&offer).await.unwrap();
+                let mut request = [0; 74];
+                server.read_exact(&mut request).await.unwrap();
+                let mut expected = [0; 74];
+                expected[..4].copy_from_slice(&[0, 72, 0, 1]);
+                expected[8] = offer_flags >> 1;
+                expected[10..21].copy_from_slice(b"OpenScreens");
+                assert_eq!(request, expected);
+                let mut reply = [0; 82];
+                reply[..5].copy_from_slice(&reply_header);
+                server.write_all(&reply).await.unwrap();
+            });
+            let config = ClientConfig {
+                username: Some("operator".into()),
+                password: Some("test".into()),
+                apple_session: true,
+                request_mac_sharing: true,
+                ..Default::default()
+            };
+            assert_eq!(perform(&mut client, &config).await.is_ok(), accepted);
+            peer.await.unwrap();
+        }
+    }
+
+    #[tokio::test]
+    async fn mac_account_sharing_does_not_downgrade_authentication() {
+        let (mut client, mut server) = duplex(1024);
+        server
+            .write_all(b"RFB 003.889\n\x02\x01\x02")
+            .await
+            .unwrap();
+        let config = ClientConfig {
+            username: Some("operator".into()),
+            password: Some("test".into()),
+            apple_session: true,
+            request_mac_sharing: true,
+            ..Default::default()
+        };
+        assert!(perform(&mut client, &config).await.is_err());
+        drop(client);
+        assert_eq!(read_version_from(&mut server).await, *b"RFB 003.889\n");
+        assert_eq!(server.read(&mut [0]).await.unwrap(), 0);
     }
 
     #[tokio::test]
@@ -469,6 +615,7 @@ mod tests {
             password: Some("wrong".to_owned()),
             shared: true,
             apple_session: false,
+            request_mac_sharing: false,
         };
         let error = perform(&mut client, &config).await.unwrap_err();
         assert!(matches!(

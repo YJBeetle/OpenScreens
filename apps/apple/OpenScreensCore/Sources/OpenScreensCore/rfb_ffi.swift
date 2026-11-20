@@ -801,6 +801,21 @@ public static func connect(config: SessionConfig)async throws  -> RemoteSession 
         )
 }
     
+public static func connectRequestingMacSharing(config: SessionConfig)async throws  -> RemoteSession  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_rfb_ffi_fn_constructor_remotesession_connect_requesting_mac_sharing(FfiConverterTypeSessionConfig_lower(config)
+                )
+            },
+            pollFunc: ffi_rfb_ffi_rust_future_poll_u64,
+            completeFunc: ffi_rfb_ffi_rust_future_complete_u64,
+            freeFunc: ffi_rfb_ffi_rust_future_free_u64,
+            liftFunc: FfiConverterTypeRemoteSession_lift,
+            errorHandler: FfiConverterTypeSessionFailure_lift
+        )
+}
+
 
     
     /**
@@ -3175,6 +3190,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_rfb_ffi_checksum_constructor_remotesession_connect() != 42150) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_rfb_ffi_checksum_constructor_remotesession_connect_requesting_mac_sharing() != 55922) {
         return InitializationResult.apiChecksumMismatch
     }
 

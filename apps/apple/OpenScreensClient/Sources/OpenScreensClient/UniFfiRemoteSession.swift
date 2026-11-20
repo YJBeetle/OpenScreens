@@ -231,7 +231,12 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
         )
 
         do {
-            let session = try await OpenScreensCore.RemoteSession.connect(config: config)
+            let session: OpenScreensCore.RemoteSession
+            if profile.authentication == .macOSAccountSharing {
+                session = try await OpenScreensCore.RemoteSession.connectRequestingMacSharing(config: config)
+            } else {
+                session = try await OpenScreensCore.RemoteSession.connect(config: config)
+            }
             guard !finished, !Task.isCancelled else { throw CancellationError() }
             self.session = session
             continuation.yield(.curtainModeSupport(session.supportsCurtainMode()))

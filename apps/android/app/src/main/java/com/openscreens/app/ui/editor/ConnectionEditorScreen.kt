@@ -132,6 +132,7 @@ fun ConnectionEditorScreen(
     var zoomEnabled by rememberSaveable(editorKey) {
         mutableStateOf(seed?.zoomEnabled ?: true)
     }
+    var requestMacSharing by rememberSaveable(editorKey) { mutableStateOf(seed?.requestMacSharing ?: false) }
     var username by rememberSaveable(editorKey) {
         mutableStateOf(seed?.username.orEmpty())
     }
@@ -309,6 +310,7 @@ fun ConnectionEditorScreen(
                 host = host.trim(),
                 port = portNumber ?: Connection.DEFAULT_VNC_PORT,
                 username = username.trim(),
+                requestMacSharing = requestMacSharing && username.isNotBlank(),
                 vncPassword = vncPassword,
                 quality = quality,
                 rememberSelectedDisplay = rememberSelectedDisplay,
@@ -439,6 +441,19 @@ fun ConnectionEditorScreen(
                         imeAction = ImeAction.Next,
                     ),
                 )
+
+                if (username.isNotBlank()) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().toggleable(
+                            value = requestMacSharing, role = Role.Switch,
+                            onValueChange = { requestMacSharing = it },
+                        ),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(stringResource(R.string.editor_request_mac_sharing), modifier = Modifier.weight(1f))
+                        Switch(checked = requestMacSharing, onCheckedChange = null)
+                    }
+                }
 
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(

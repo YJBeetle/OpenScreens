@@ -226,6 +226,7 @@ fun SessionScreen(
     var viewport by remember { mutableStateOf<SessionEvent.Viewport?>(null) }
     var trackpadMode by rememberSaveable { mutableStateOf(false) }
     var desktopScreens by remember { mutableStateOf<List<DisplayScreen>>(emptyList()) }
+    var supportsCurtainMode by remember(session) { mutableStateOf(false) }
     var displayMenuExpanded by remember { mutableStateOf(false) }
     var showDownloadDialog by remember { mutableStateOf(false) }
     var downloadRoot by remember { mutableStateOf<String?>(null) }
@@ -363,6 +364,7 @@ fun SessionScreen(
         session.events.collect { event ->
             when (event) {
                 SessionEvent.Connecting -> {
+                    supportsCurtainMode = false
                     status = SessionStatus.Connecting
                     cursor = null
                     cursorPosition = null
@@ -372,6 +374,7 @@ fun SessionScreen(
                     viewport = null
                 }
                 is SessionEvent.Connected -> {
+                    supportsCurtainMode = event.supportsCurtainMode
                     status = SessionStatus.Connected
                     remoteWidth = event.width
                     remoteHeight = event.height
@@ -1513,6 +1516,15 @@ fun SessionScreen(
                 trackpadMode = trackpadMode,
                 onTogglePointerMode = togglePointerMode,
                 displays = desktopScreens,
+                supportsCurtainMode = status == SessionStatus.Connected && supportsCurtainMode,
+                onCurtainRequest = { enabled ->
+                    displayMenuExpanded = false
+                    scope.launch {
+                        runCatching { session.requestCurtainMode(enabled) }.onFailure { error ->
+                            snackbarHostState.showSnackbar(error.message ?: context.getString(R.string.session_curtain_error))
+                        }
+                    }
+                },
                 displayMenuExpanded = displayMenuExpanded,
                 onDisplayMenuChange = { displayMenuExpanded = it },
                 onSelectDisplay = { id ->
@@ -1814,6 +1826,8 @@ private fun SessionToolbar(
     trackpadMode: Boolean,
     onTogglePointerMode: () -> Unit,
     displays: List<DisplayScreen>,
+    supportsCurtainMode: Boolean,
+    onCurtainRequest: (Boolean) -> Unit,
     displayMenuExpanded: Boolean,
     onDisplayMenuChange: (Boolean) -> Unit,
     onSelectDisplay: (Int?) -> Unit,
@@ -1869,7 +1883,7 @@ private fun SessionToolbar(
                     onClick = onTogglePointerMode,
                 )
             }
-            if (displays.isNotEmpty()) {
+            if (displays.isNotEmpty() || (supportsCurtainMode && !observing)) {
                 Box {
                     ToolbarButton(
                         icon = Icons.Outlined.Monitor,
@@ -1880,10 +1894,22 @@ private fun SessionToolbar(
                         expanded = displayMenuExpanded,
                         onDismissRequest = { onDisplayMenuChange(false) },
                     ) {
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.session_all_displays)) },
-                            onClick = { onSelectDisplay(null) },
-                        )
+                        if (supportsCurtainMode && !observing) {
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.session_enable_curtain)) },
+                                onClick = { onCurtainRequest(true) },
+                            )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.session_disable_curtain)) },
+                                onClick = { onCurtainRequest(false) },
+                            )
+                        }
+                        if (displays.isNotEmpty()) {
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.session_all_displays)) },
+                                onClick = { onSelectDisplay(null) },
+                            )
+                        }
                         displays.forEach { screen ->
                             DropdownMenuItem(
                                 text = {

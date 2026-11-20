@@ -142,6 +142,7 @@ import com.openscreens.app.R
 import com.openscreens.app.data.Connection
 import com.openscreens.app.data.QualityPreset
 import com.openscreens.app.data.SshKey
+import com.openscreens.app.session.MacSessionChoice
 import com.openscreens.app.session.RemoteSession
 import com.openscreens.app.session.DisplayScreen
 import com.openscreens.app.session.SessionEvent
@@ -211,6 +212,7 @@ fun SessionScreen(
     var viewport by remember { mutableStateOf<SessionEvent.Viewport?>(null) }
     var trackpadMode by rememberSaveable { mutableStateOf(false) }
     var desktopScreens by remember { mutableStateOf<List<DisplayScreen>>(emptyList()) }
+    var needsMacSessionChoice by remember(session) { mutableStateOf(false) }
     var supportsCurtainMode by remember(session) { mutableStateOf(false) }
     var displayMenuExpanded by remember { mutableStateOf(false) }
     var showDownloadDialog by remember { mutableStateOf(false) }
@@ -330,7 +332,12 @@ fun SessionScreen(
     LaunchedEffect(session) {
         session.events.collect { event ->
             when (event) {
+                SessionEvent.MacSessionChoiceRequired -> {
+                    needsMacSessionChoice = true
+                    status = SessionStatus.Failed
+                }
                 SessionEvent.Connecting -> {
+                    needsMacSessionChoice = false
                     supportsCurtainMode = false
                     status = SessionStatus.Connecting
                     cursor = null
@@ -494,7 +501,7 @@ fun SessionScreen(
                 Lifecycle.Event.ON_START -> {
                     val leftAt = backgroundedAt
                     backgroundedAt = 0L
-                    if (leftAt == 0L || isExiting) return@LifecycleEventObserver
+                    if (leftAt == 0L || isExiting || needsMacSessionChoice) return@LifecycleEventObserver
                     val away = SystemClock.elapsedRealtime() - leftAt
                     val lostWhileAway = status == SessionStatus.Disconnected ||
                         status == SessionStatus.Failed
@@ -1544,6 +1551,31 @@ fun SessionScreen(
                         )
                     }
                 }
+            },
+        )
+    }
+
+    if (needsMacSessionChoice) {
+        fun select(choice: MacSessionChoice) {
+            needsMacSessionChoice = false
+            scope.launch { session.connect(choice) }
+        }
+        AlertDialog(
+            onDismissRequest = exitSession,
+            title = { Text(stringResource(R.string.session_mac_choice_title)) },
+            text = { Text(stringResource(R.string.session_mac_choice_hint)) },
+            confirmButton = {
+                Column {
+                    TextButton(onClick = { select(MacSessionChoice.Personal) }) {
+                        Text(stringResource(R.string.session_mac_personal))
+                    }
+                    TextButton(onClick = { select(MacSessionChoice.Share) }) {
+                        Text(stringResource(R.string.session_mac_share))
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = exitSession) { Text(stringResource(android.R.string.cancel)) }
             },
         )
     }

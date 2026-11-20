@@ -14,6 +14,12 @@ const MAX_NAME_LEN: usize = 1024 * 1024;
 const MAX_REASON_LEN: usize = 64 * 1024;
 const VNC_CHALLENGE_LEN: usize = 16;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MacSessionChoice {
+    Personal,
+    Share,
+}
+
 /// Settings that affect the handshake.
 #[derive(Debug, Clone)]
 pub struct ClientConfig {
@@ -23,8 +29,8 @@ pub struct ClientConfig {
     /// Negotiate Apple's RFB 3.889 handshake (extended ServerInit and
     /// ClientInit 0xC1) when the server advertises it.
     pub apple_session: bool,
-    /// Explicitly request the console session after authenticating a Mac account.
-    pub request_mac_sharing: bool,
+    /// Personal or shared session selected by the user after Mac account authentication.
+    pub mac_session_choice: Option<MacSessionChoice>,
 }
 
 impl Default for ClientConfig {
@@ -34,7 +40,7 @@ impl Default for ClientConfig {
             password: None,
             shared: true,
             apple_session: false,
-            request_mac_sharing: false,
+            mac_session_choice: None,
         }
     }
 }
@@ -59,6 +65,7 @@ pub enum HandshakeError {
     MissingUsername,
     MissingPassword,
     AuthenticationFailed(SecurityResult),
+    MacSessionChoiceRequired,
     ServerNameTooLong(usize),
 }
 
@@ -75,6 +82,9 @@ impl fmt::Display for HandshakeError {
             ),
             Self::UnsupportedSecurityType(security) => {
                 write!(f, "unsupported security type {security:?}")
+            }
+            Self::MacSessionChoiceRequired => {
+                f.write_str("Choose a personal Mac session or request to share the active session")
             }
             Self::MissingUsername => {
                 f.write_str("server requires Apple authentication but no username is configured")
@@ -118,7 +128,7 @@ where
     // Apple advertises 3.889; the standard 3.8 flow remains valid until Apple
     // extensions are explicitly negotiated.
     let apple = config.apple_session && server_version == ProtocolVersion::new(3, 889);
-    if config.request_mac_sharing && !apple {
+    if config.mac_session_choice.is_some() && !apple {
         return Err(HandshakeError::Protocol(
             "Mac session sharing requires RFB 3.889",
         ));
@@ -173,19 +183,21 @@ where
     let client_init = if apple { 0xc1 } else { u8::from(config.shared) };
     stream.write_all(&[client_init]).await?;
     let server_init = read_server_init(stream, apple).await?;
+    // Screens 5.9 branches on bit 2 of the flags byte (not a feature bitmap).
+    // Only this branch has the extra 76-byte session selection notification.
     let has_offer = server_init
         .apple_features
         .is_some_and(|features| features.flags & 4 != 0);
-    if config.request_mac_sharing && !has_offer {
+    if config.mac_session_choice == Some(MacSessionChoice::Share) && !has_offer {
         return Err(HandshakeError::Protocol(
             "Mac did not offer another user's session",
         ));
     }
     if has_offer {
-        if !config.request_mac_sharing {
-            return Err(HandshakeError::Protocol("Mac requires session selection"));
-        }
-        request_existing_session(stream).await?;
+        let choice = config
+            .mac_session_choice
+            .ok_or(HandshakeError::MacSessionChoiceRequired)?;
+        select_mac_session(stream, choice).await?;
     }
     Ok(Handshake {
         version,
@@ -196,15 +208,19 @@ where
 
 // Screens 5.9 VNCKit, _initMessagesWithErrorHandler:completion:. The
 // selection exchange runs before capability messages and framebuffer requests.
-async fn request_existing_session<T: AsyncRead + AsyncWrite + Unpin>(
+async fn select_mac_session<T: AsyncRead + AsyncWrite + Unpin>(
     stream: &mut T,
+    choice: MacSessionChoice,
 ) -> Result<(), HandshakeError> {
     let mut offer = [0; 76];
     stream.read_exact(&mut offer).await?;
     let mut request = [0; 74];
     request[..4].copy_from_slice(&[0, 72, 0, 1]);
-    // Mirror the share action chosen by requestToShareExistingUserSession:YES.
-    request[8] = (offer[7] >> 1) & 1;
+    // VNCKit's requestToShareExistingUserSession:NO sends action 2 ("create new").
+    request[8] = match choice {
+        MacSessionChoice::Personal => 2,
+        MacSessionChoice::Share => (offer[7] >> 1) & 1,
+    };
     request[10..21].copy_from_slice(b"OpenScreens");
     stream.write_all(&request).await?;
     let mut reply = [0; 82];
@@ -313,7 +329,7 @@ where
         None
     };
 
-    if config.request_mac_sharing {
+    if config.mac_session_choice.is_some() {
         if config.username.as_deref().is_none_or(str::is_empty) {
             return Err(HandshakeError::MissingUsername);
         }
@@ -489,7 +505,7 @@ mod tests {
             password: Some(password.to_owned()),
             shared: true,
             apple_session: false,
-            request_mac_sharing: false,
+            mac_session_choice: None,
         };
         let handshake = perform(&mut client, &config).await.unwrap();
         task.await.unwrap();
@@ -513,7 +529,7 @@ mod tests {
             password: None,
             shared: true,
             apple_session: true,
-            request_mac_sharing: false,
+            mac_session_choice: None,
         };
         let handshake = perform(&mut client, &config).await.unwrap();
         assert_eq!(handshake.version, ProtocolVersion::new(3, 889));
@@ -522,10 +538,11 @@ mod tests {
 
     #[tokio::test]
     async fn waits_for_mac_session_selection_reply_after_account_authentication() {
-        for (offer_flags, reply_header, accepted) in [
-            (0, [0, 80, 0, 1, 0], true),
-            (2, [0, 80, 0, 1, 1], false),
-            (2, [0, 79, 0, 1, 0], false),
+        for (choice, offer_flags, expected_action, reply_header, accepted) in [
+            (MacSessionChoice::Personal, 2, 2, [0, 80, 0, 1, 0], true),
+            (MacSessionChoice::Share, 0, 0, [0, 80, 0, 1, 0], true),
+            (MacSessionChoice::Share, 2, 1, [0, 80, 0, 1, 1], false),
+            (MacSessionChoice::Share, 2, 1, [0, 79, 0, 1, 0], false),
         ] {
             let (mut client, mut server) = duplex(1024);
             let peer = tokio::spawn(async move {
@@ -557,7 +574,7 @@ mod tests {
                 server.read_exact(&mut request).await.unwrap();
                 let mut expected = [0; 74];
                 expected[..4].copy_from_slice(&[0, 72, 0, 1]);
-                expected[8] = offer_flags >> 1;
+                expected[8] = expected_action;
                 expected[10..21].copy_from_slice(b"OpenScreens");
                 assert_eq!(request, expected);
                 let mut reply = [0; 82];
@@ -568,12 +585,44 @@ mod tests {
                 username: Some("operator".into()),
                 password: Some("test".into()),
                 apple_session: true,
-                request_mac_sharing: true,
+                mac_session_choice: Some(choice),
                 ..Default::default()
             };
             assert_eq!(perform(&mut client, &config).await.is_ok(), accepted);
             peer.await.unwrap();
         }
+    }
+
+    #[tokio::test]
+    async fn normal_login_requires_explicit_choice_before_sending_session_selection() {
+        let (mut client, mut server) = duplex(1024);
+        let server_task = tokio::spawn(async move {
+            server.write_all(b"RFB 003.889\n").await.unwrap();
+            assert_eq!(read_version_from(&mut server).await, *b"RFB 003.889\n");
+            server.write_all(&[1, 1]).await.unwrap();
+            assert_eq!(read_u8_from(&mut server).await, 1);
+            server.write_all(&[0; 4]).await.unwrap();
+            assert_eq!(read_u8_from(&mut server).await, 0xc1);
+            let mut init = server_init_message();
+            init.truncate(20);
+            init.extend_from_slice(&22u32.to_be_bytes());
+            let mut extension = [0; 22];
+            extension[5] = 4;
+            init.extend_from_slice(&extension);
+            init.extend_from_slice(&[0; 76]);
+            server.write_all(&init).await.unwrap();
+            assert_eq!(server.read(&mut [0]).await.unwrap(), 0);
+        });
+        let config = ClientConfig {
+            apple_session: true,
+            ..Default::default()
+        };
+        assert!(matches!(
+            perform(&mut client, &config).await,
+            Err(HandshakeError::MacSessionChoiceRequired)
+        ));
+        drop(client);
+        server_task.await.unwrap();
     }
 
     #[tokio::test]
@@ -587,7 +636,7 @@ mod tests {
             username: Some("operator".into()),
             password: Some("test".into()),
             apple_session: true,
-            request_mac_sharing: true,
+            mac_session_choice: Some(MacSessionChoice::Share),
             ..Default::default()
         };
         assert!(perform(&mut client, &config).await.is_err());
@@ -615,7 +664,7 @@ mod tests {
             password: Some("wrong".to_owned()),
             shared: true,
             apple_session: false,
-            request_mac_sharing: false,
+            mac_session_choice: None,
         };
         let error = perform(&mut client, &config).await.unwrap_err();
         assert!(matches!(

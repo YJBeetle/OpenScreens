@@ -276,4 +276,8 @@
     <string name="session_disable_curtain">Disable Curtain Mode</string>
     <string name="session_curtain_error">Could not send Curtain Mode request</string>
     <string name="editor_request_mac_sharing">Mac account — request shared session</string>
+    <string name="session_mac_choice_title">Choose a Mac Session</string>
+    <string name="session_mac_choice_hint">Another user is signed in on this Mac. Open a personal session with your Mac account, or ask to share the active session.</string>
+    <string name="session_mac_personal">Open Personal Session</string>
+    <string name="session_mac_share">Request Shared Session</string>
 </resources>

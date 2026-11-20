@@ -33,6 +33,7 @@ private extension OpenScreensCore.SessionFailureKind {
         case .sshTunnel: .sshTunnel
         case .closed: .closed
         case .invalidInput: .invalidInput
+        case .macSessionChoiceRequired: .macSessionChoiceRequired
         }
     }
 }
@@ -133,7 +134,7 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
         self.inputContinuation = inputContinuation
     }
 
-    public func connect(profile: ConnectionProfile) async throws {
+    public func connect(profile: ConnectionProfile, macSessionChoice: MacSessionChoice?) async throws {
         guard session == nil, !finished else { return }
         observing = profile.controls.startInObserveMode
         sharedClipboard = profile.controls.sharedClipboard
@@ -233,7 +234,9 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
 
         do {
             let session: OpenScreensCore.RemoteSession
-            if profile.authentication == .macOSAccountSharing {
+            if macSessionChoice == .personal {
+                session = try await OpenScreensCore.RemoteSession.connectPersonalMacSession(config: config)
+            } else if macSessionChoice == .share || profile.authentication == .macOSAccountSharing {
                 session = try await OpenScreensCore.RemoteSession.connectRequestingMacSharing(config: config)
             } else {
                 session = try await OpenScreensCore.RemoteSession.connect(config: config)

@@ -20,6 +20,11 @@ public enum RemoteFailureKind: Equatable, Sendable {
     case sshTunnel
     case closed
     case invalidInput
+    case macSessionChoiceRequired
+}
+
+public enum MacSessionChoice: Sendable {
+    case personal, share
 }
 
 /// A failure raised while opening a session, carrying the core's error code
@@ -313,7 +318,7 @@ public struct RemoteKeyEvent: Sendable {
 /// view or app target changes are required.
 public protocol RemoteSessionProtocol: Sendable {
     var events: AsyncStream<RemoteSessionEvent> { get }
-    func connect(profile: ConnectionProfile) async throws
+    func connect(profile: ConnectionProfile, macSessionChoice: MacSessionChoice?) async throws
     func disconnect() async
     func sendPointer(_ event: PointerEvent) async
     /// Sends wheel clicks at a normalized remote position. Positive Y scrolls
@@ -348,6 +353,10 @@ public protocol RemoteSessionProtocol: Sendable {
 }
 
 public extension RemoteSessionProtocol {
+    func connect(profile: ConnectionProfile) async throws {
+        try await connect(profile: profile, macSessionChoice: nil)
+    }
+
     /// Transports without wheel support ignore the request.
     func sendScroll(at point: CGPoint, stepsX: Int32, stepsY: Int32) async {}
     /// Transports without display selection ignore the request.

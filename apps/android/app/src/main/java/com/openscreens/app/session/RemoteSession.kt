@@ -7,6 +7,8 @@ import com.openscreens.app.data.QualityPreset
 import com.openscreens.app.data.SshKey
 import kotlinx.coroutines.flow.Flow
 
+enum class MacSessionChoice { Personal, Share }
+
 /**
  * Everything the UI needs from a remote session. Implementations may be fakes while
  * the Rust core is under construction; the UI only depends on this contract.
@@ -17,7 +19,7 @@ import kotlinx.coroutines.flow.Flow
 interface RemoteSession {
     val events: Flow<SessionEvent>
 
-    suspend fun connect()
+    suspend fun connect(macSessionChoice: MacSessionChoice? = null)
 
     /**
      * Restarts the transport after it went stale, e.g. when the app returns from
@@ -102,6 +104,7 @@ data class TransferEntry(
 )
 
 sealed interface SessionEvent {
+    data object MacSessionChoiceRequired : SessionEvent
     data object Connecting : SessionEvent
     data class Connected(val width: Int, val height: Int, val supportsCurtainMode: Boolean) : SessionEvent
     data class Resized(val width: Int, val height: Int) : SessionEvent

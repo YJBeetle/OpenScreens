@@ -638,7 +638,7 @@ public struct SessionScreen: View {
                     .font(.system(size: 34, weight: .light))
                     .foregroundStyle(.secondary)
 
-                Text("Connection Closed")
+                Text(model.needsMacSessionChoice ? "Choose a Mac Session" : "Connection Closed")
                     .font(.headline)
 
                 if let failure = model.failureMessage, !failure.isEmpty {
@@ -653,11 +653,17 @@ public struct SessionScreen: View {
                         .multilineTextAlignment(.center)
                 }
 
+                if model.needsMacSessionChoice {
+                    Button("Open Personal Session") { model.chooseMacSession(.personal) }
+                        .buttonStyle(.borderedProminent)
+                    Button("Request Shared Session") { model.chooseMacSession(.share) }
+                        .buttonStyle(.bordered)
+                }
                 HStack(spacing: 10) {
-                    Button("Reconnect") {
-                        model.reconnect()
+                    if !model.needsMacSessionChoice {
+                        Button("Reconnect") { model.reconnect() }
+                            .buttonStyle(.borderedProminent)
                     }
-                    .buttonStyle(.borderedProminent)
 
                     Button("Close") {
                         closeSession()

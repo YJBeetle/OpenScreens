@@ -108,8 +108,8 @@ pub struct SessionConfig {
     pub frame_interval_ms: u16,
     /// Negotiate Apple's RFB 3.889 extension handshake when available.
     pub apple_session: bool,
-    /// Explicitly request the console session after authenticating a Mac account.
-    pub request_mac_sharing: bool,
+    /// User selection when a Mac offers another logged-in session.
+    pub mac_session_choice: Option<handshake::MacSessionChoice>,
     /// Advertise and decode Apple Adaptive DCT (encoding 1011).
     pub adaptive_dct: bool,
     /// Route the target connection through a userspace WireGuard tunnel.
@@ -173,7 +173,7 @@ impl SessionConfig {
             quality: 9,
             frame_interval_ms: 16,
             apple_session: false,
-            request_mac_sharing: false,
+            mac_session_choice: None,
             adaptive_dct: false,
             wireguard: None,
             openvpn: None,
@@ -229,6 +229,7 @@ pub enum FailureKind {
     Tunnel,
     SshTunnel,
     Closed,
+    MacSessionChoiceRequired,
 }
 
 impl FailureKind {
@@ -236,6 +237,7 @@ impl FailureKind {
         match error {
             SessionError::Io(_) => Self::Network,
             SessionError::Handshake(error) => match error {
+                HandshakeError::MacSessionChoiceRequired => Self::MacSessionChoiceRequired,
                 HandshakeError::Io(_) => Self::Network,
                 HandshakeError::Protocol(_) | HandshakeError::ServerNameTooLong(_) => {
                     Self::Protocol
@@ -500,7 +502,7 @@ impl Session {
                 password: config.password.clone(),
                 shared: config.shared,
                 apple_session: config.apple_session,
-                request_mac_sharing: config.request_mac_sharing,
+                mac_session_choice: config.mac_session_choice,
             },
         )
         .await?;

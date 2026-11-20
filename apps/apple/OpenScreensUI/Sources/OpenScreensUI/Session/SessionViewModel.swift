@@ -169,6 +169,18 @@ public final class SessionViewModel {
         PlatformScreen.setIdleTimerDisabled(false)
     }
 
+    var needsMacSessionChoice: Bool {
+        if case .disconnected(_, .macSessionChoiceRequired) = state { return true }
+        return false
+    }
+
+    func chooseMacSession(_ choice: MacSessionChoice) {
+        guard needsMacSessionChoice, !isStopping else { return }
+        endTransport()
+        failureMessage = nil
+        beginSession(isReconnect: false, macSessionChoice: choice)
+    }
+
     public func reconnect() {
         guard state.isTerminal else { return }
         restartTransport()
@@ -194,7 +206,7 @@ public final class SessionViewModel {
             case .idle, .connecting:
                 needsRestart = false
             }
-            if needsRestart {
+            if needsRestart && !needsMacSessionChoice {
                 restartTransport()
             }
         default:
@@ -213,7 +225,7 @@ public final class SessionViewModel {
         beginSession(isReconnect: false)
     }
 
-    private func beginSession(isReconnect: Bool) {
+    private func beginSession(isReconnect: Bool, macSessionChoice: MacSessionChoice? = nil) {
         guard !isStopping else { return }
         let session = service.makeSession()
         self.session = session
@@ -234,7 +246,7 @@ public final class SessionViewModel {
         let profile = profile
         connectTask = Task { [weak self, session, profile] in
             do {
-                try await session.connect(profile: profile)
+                try await session.connect(profile: profile, macSessionChoice: macSessionChoice)
             } catch is CancellationError {
                 // The user stopped the session while it was connecting.
             } catch {

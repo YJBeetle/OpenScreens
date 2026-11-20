@@ -151,6 +151,27 @@ final class SessionClipboardTests: XCTestCase {
         XCTAssertEqual(reads, 1)
     }
 
+    func testManualSendReportsUnreadableLocalClipboardText() async throws {
+        for text: String? in [nil, ""] {
+            let session = ClipboardTransport(pull: false)
+            let model = SessionViewModel(
+                profile: ConnectionProfile(), service: session,
+                readClipboardChangeCount: { 0 }, readClipboard: { text }, writeClipboard: { _ in }
+            )
+            model.start()
+            defer { model.stop() }
+            try await waitFor { model.state.isConnected }
+
+            model.sendLocalClipboard()
+            XCTAssertEqual(
+                model.clipboardMessage,
+                "The local clipboard has no readable text, or clipboard access is unavailable."
+            )
+            let sent = await session.sent
+            XCTAssertTrue(sent.isEmpty)
+        }
+    }
+
     func testObservingAllowsManualFetchWithoutReadingLocalText() async throws {
         let session = ClipboardTransport(pull: true)
         var local = "local"

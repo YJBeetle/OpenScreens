@@ -1124,7 +1124,7 @@ public final class SessionViewModel {
     public func sendLocalClipboard() {
         guard state.isConnected, !isObserving, let session else { return }
         guard let text = readClipboard(), !text.isEmpty else {
-            showMessage(NSLocalizedString("Local clipboard is empty.", comment: "Clipboard toast"))
+            showMessage(NSLocalizedString("The local clipboard has no readable text, or clipboard access is unavailable.", comment: "Clipboard toast"))
             return
         }
         Task {

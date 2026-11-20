@@ -50,6 +50,7 @@ public struct ConnectionEditorView: View {
     @State private var selectedSection: EditorSection = .connection
     @State private var appliedSettingsDefaults = false
     @State private var saveError: String?
+    @State private var storedNewVNCPassword = false
 
     private static let wireGuardByteLimit = 64 * 1024
     private static let openVpnByteLimit = 256 * 1024
@@ -86,7 +87,11 @@ public struct ConnectionEditorView: View {
         }
         .onAppear {
             applySettingsDefaults()
-            password = OpenScreensCredentials.password(for: draft.id) ?? ""
+            if !isCreating {
+                password = OpenScreensCredentials.password(for: draft.id) ?? ""
+                sshPassword = OpenScreensCredentials.secret(kind: "ssh-password", for: draft.id) ?? ""
+                sshKeyPassphrase = OpenScreensCredentials.secret(kind: "ssh-passphrase", for: draft.id) ?? ""
+            }
             if let ssh = draft.ssh {
                 sshEnabled = ssh.enabled
                 sshHost = ssh.host
@@ -97,8 +102,6 @@ public struct ConnectionEditorView: View {
                 sshImportedKeyID = ssh.importedKeyID
                 sshFingerprint = ssh.hostKeyFingerprint
             }
-            sshPassword = OpenScreensCredentials.secret(kind: "ssh-password", for: draft.id) ?? ""
-            sshKeyPassphrase = OpenScreensCredentials.secret(kind: "ssh-passphrase", for: draft.id) ?? ""
             if let config = draft.openVpnConfig {
                 openVpnSummary = Self.openVpnSummary(for: config)
             }
@@ -859,20 +862,27 @@ public struct ConnectionEditorView: View {
         // write keeps the editor open instead of leaving a connection that
         // silently lacks its password.
         if profile.authentication == .none {
-            OpenScreensCredentials.deletePassword(for: profile.id)
+            if !isCreating || storedNewVNCPassword {
+                OpenScreensCredentials.deletePassword(for: profile.id)
+                storedNewVNCPassword = false
+            }
         } else if !OpenScreensCredentials.setPassword(password, for: profile.id) {
             saveError = NSLocalizedString(
                 "The password could not be saved to the Keychain.",
                 comment: "Keychain write failure"
             )
             return
+        } else if isCreating {
+            storedNewVNCPassword = true
         }
 
         if let ssh = profile.ssh, ssh.enabled {
             switch ssh.authMethod {
             case .password:
                 if sshPassword.isEmpty {
-                    OpenScreensCredentials.deleteSecret(kind: "ssh-password", for: profile.id)
+                    if !isCreating {
+                        OpenScreensCredentials.deleteSecret(kind: "ssh-password", for: profile.id)
+                    }
                 } else if !OpenScreensCredentials.setSecret(
                     sshPassword,
                     kind: "ssh-password",
@@ -884,11 +894,17 @@ public struct ConnectionEditorView: View {
                     )
                     return
                 }
-                OpenScreensCredentials.deleteSecret(kind: "ssh-passphrase", for: profile.id)
-            case .privateKey:
-                OpenScreensCredentials.deleteSecret(kind: "ssh-password", for: profile.id)
-                if sshKeyPassphrase.isEmpty {
+                if !isCreating {
                     OpenScreensCredentials.deleteSecret(kind: "ssh-passphrase", for: profile.id)
+                }
+            case .privateKey:
+                if !isCreating {
+                    OpenScreensCredentials.deleteSecret(kind: "ssh-password", for: profile.id)
+                }
+                if sshKeyPassphrase.isEmpty {
+                    if !isCreating {
+                        OpenScreensCredentials.deleteSecret(kind: "ssh-passphrase", for: profile.id)
+                    }
                 } else if !OpenScreensCredentials.setSecret(
                     sshKeyPassphrase,
                     kind: "ssh-passphrase",
@@ -901,7 +917,7 @@ public struct ConnectionEditorView: View {
                     return
                 }
             }
-        } else {
+        } else if !isCreating {
             OpenScreensCredentials.deleteSecret(kind: "ssh-password", for: profile.id)
             OpenScreensCredentials.deleteSecret(kind: "ssh-passphrase", for: profile.id)
         }

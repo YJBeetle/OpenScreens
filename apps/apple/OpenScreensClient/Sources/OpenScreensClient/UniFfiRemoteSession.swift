@@ -150,7 +150,12 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
         announceViewport = false
         continuation.yield(.state(.connecting))
 
-        let password = password ?? OpenScreensCredentials.password(for: profile.id) ?? debugPassword()
+        let sessionPassword: String?
+        if profile.authentication == .none {
+            sessionPassword = nil
+        } else {
+            sessionPassword = password ?? OpenScreensCredentials.password(for: profile.id) ?? debugPassword()
+        }
         let username = profile.username.trimmingCharacters(in: .whitespacesAndNewlines)
 
         var sshHost: String?
@@ -222,7 +227,7 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
             host: profile.trimmedHost,
             port: UInt16(clamping: profile.port),
             username: username.isEmpty ? nil : username,
-            password: (password?.isEmpty == false) ? password : nil,
+            password: (sessionPassword?.isEmpty == false) ? sessionPassword : nil,
             shared: true,
             localCursor: localCursor,
             quality: profile.initialQuality.jpegLevel,

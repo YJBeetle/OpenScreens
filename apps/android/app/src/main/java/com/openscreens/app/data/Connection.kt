@@ -35,6 +35,8 @@ data class Connection(
     /** User-created library folder, when the connection belongs to one. */
     val groupId: String? = null,
     val startInObserveMode: Boolean = false,
+    val rememberSelectedDisplay: Boolean = true,
+    val preferredDisplayId: Int? = null,
 ) {
     val address: String
         get() = "$host:$port"

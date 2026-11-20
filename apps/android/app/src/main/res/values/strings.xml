@@ -82,6 +82,7 @@
     <string name="editor_show_password">Show password</string>
     <string name="editor_hide_password">Hide password</string>
     <string name="editor_start_in_observe_mode">Start in Observe Mode</string>
+    <string name="editor_remember_selected_display">Remember Selected Display</string>
     <string name="editor_zoom_toggle">Allow pinching to zoom</string>
     <string name="editor_observe_description">View the desktop with remote input disabled.</string>
     <string name="editor_zoom_description">Pinching magnifies the remote screen. Turn it off to reserve two-finger gestures for scrolling.</string>
@@ -155,7 +156,7 @@
     <string name="session_pointer_direct">Direct touch</string>
     <string name="session_displays">Displays</string>
     <string name="session_all_displays">All displays</string>
-    <string name="session_display_entry">%1$d × %2$d</string>
+    <string name="session_display_entry">Display %1$d · %2$d × %3$d</string>
     <string name="session_download">Download file</string>
     <string name="session_download_hint">Remote file path</string>
     <string name="session_download_start">Download</string>

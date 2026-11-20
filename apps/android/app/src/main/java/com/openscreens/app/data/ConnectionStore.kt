@@ -3,8 +3,10 @@ package com.openscreens.app.data
 import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
+import android.util.AtomicFile
 import android.util.Log
 import java.io.File
+import java.io.FileNotFoundException
 import java.security.KeyStore
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
@@ -13,6 +15,7 @@ import javax.crypto.spec.GCMParameterSpec
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.getAndUpdate
 import kotlinx.coroutines.flow.update
 import org.json.JSONArray
 import org.json.JSONObject
@@ -26,7 +29,7 @@ class ConnectionStore(
     context: Context,
     initial: List<Connection>? = null,
 ) {
-    private val file = File(context.applicationContext.filesDir, "connections.enc")
+    private val file = AtomicFile(File(context.applicationContext.filesDir, "connections.enc"))
     private val loaded = if (initial == null) load() else null
     private val _connections = MutableStateFlow(initial ?: loaded?.connections ?: sampleConnections())
     val connections: StateFlow<List<Connection>> = _connections.asStateFlow()
@@ -35,7 +38,7 @@ class ConnectionStore(
     val groups: StateFlow<List<ConnectionGroup>> = _groups.asStateFlow()
 
     init {
-        if (initial == null && !file.exists()) {
+        if (initial == null && !file.baseFile.exists()) {
             persist()
         }
     }
@@ -44,18 +47,22 @@ class ConnectionStore(
 
     fun findGroup(id: String): ConnectionGroup? = _groups.value.firstOrNull { it.id == id }
 
+    @Synchronized
     fun save(connection: Connection) {
         _connections.update { current ->
             val index = current.indexOfFirst { it.id == connection.id }
             if (index == -1) {
                 current + connection
             } else {
-                current.toMutableList().also { it[index] = connection }
+                current.toMutableList().also {
+                    it[index] = connection.copy(preferredDisplayId = current[index].preferredDisplayId)
+                }
             }
         }
         persist()
     }
 
+    @Synchronized
     fun rememberLogin(source: Connection): Boolean {
         val current = find(source.id) ?: _connections.value.matchingEndpoint(source) ?: source
         if (!current.sameEndpoint(source)) return false
@@ -69,14 +76,32 @@ class ConnectionStore(
     }
 
     fun markConnected(id: String, at: Long = System.currentTimeMillis()) {
-        _connections.update { current ->
-            current.map { connection ->
-                if (connection.id == id) connection.copy(lastConnectedAt = at) else connection
-            }
-        }
-        persist()
+        updateConnection(id) { it.copy(lastConnectedAt = at) }
     }
 
+    fun setQuality(id: String, quality: QualityPreset) {
+        updateConnection(id) { it.copy(quality = quality) }
+    }
+
+    fun setPreferredDisplay(id: String, displayId: Int?) {
+        updateConnection(id) { connection ->
+            if (connection.rememberSelectedDisplay) {
+                connection.copy(preferredDisplayId = displayId)
+            } else {
+                connection
+            }
+        }
+    }
+
+    @Synchronized
+    private fun updateConnection(id: String, transform: (Connection) -> Connection) {
+        val previous = _connections.getAndUpdate { current ->
+            current.map { if (it.id == id) transform(it) else it }
+        }
+        if (previous != _connections.value) persist()
+    }
+
+    @Synchronized
     fun addGroup(name: String): ConnectionGroup {
         val group = ConnectionGroup(name = name.trim().ifEmpty { DEFAULT_GROUP_NAME })
         _groups.update { it + group }
@@ -84,6 +109,7 @@ class ConnectionStore(
         return group
     }
 
+    @Synchronized
     fun renameGroup(id: String, name: String) {
         val trimmed = name.trim()
         if (trimmed.isEmpty()) return
@@ -94,6 +120,7 @@ class ConnectionStore(
     }
 
     /** Removes a folder; its connections stay in the library without a group. */
+    @Synchronized
     fun deleteGroup(id: String) {
         _groups.update { groups -> groups.filterNot { it.id == id } }
         _connections.update { connections ->
@@ -105,6 +132,7 @@ class ConnectionStore(
     }
 
     /** Moves a connection past its neighbour in the supplied manual order. */
+    @Synchronized
     fun moveConnection(id: String, offset: Int, orderedIds: List<String>) {
         val index = orderedIds.indexOf(id)
         val neighbourIndex = index + offset
@@ -123,24 +151,23 @@ class ConnectionStore(
         persist()
     }
 
-    private fun load(): StoredLibrary? {
-        if (!file.exists()) return null
-        return runCatching {
-            decode(String(decrypt(android.util.AtomicFile(file).readFully()), Charsets.UTF_8))
-        }.onFailure { error ->
-            Log.e(TAG, "Unable to read saved connections", error)
-        }.getOrNull()
+    private fun load(): StoredLibrary? = try {
+        decode(String(decrypt(file.readFully()), Charsets.UTF_8))
+    } catch (_: FileNotFoundException) {
+        null
+    } catch (error: Exception) {
+        Log.e(TAG, "Unable to read saved connections", error)
+        null
     }
 
     private fun persist(connections: List<Connection> = _connections.value): Boolean = runCatching {
         val payload = encrypt(encode(connections, _groups.value).toByteArray(Charsets.UTF_8))
-        val atomic = android.util.AtomicFile(file)
-        val stream = atomic.startWrite()
+        val stream = file.startWrite()
         try {
             stream.write(payload)
-            atomic.finishWrite(stream)
+            file.finishWrite(stream)
         } catch (error: Exception) {
-            atomic.failWrite(stream)
+            file.failWrite(stream)
             throw error
         }
     }.onFailure { error -> Log.e(TAG, "Unable to save connections", error) }.isSuccess
@@ -161,6 +188,8 @@ class ConnectionStore(
                 .put("quality", connection.quality.name)
                 .put("zoomEnabled", connection.zoomEnabled)
                 .put("startInObserveMode", connection.startInObserveMode)
+                .put("rememberSelectedDisplay", connection.rememberSelectedDisplay)
+            connection.preferredDisplayId?.let { item.put("preferredDisplayId", it) }
             connection.accent?.let { item.put("accent", it.name) }
             connection.wireGuardConfig?.let { item.put("wireGuardConfig", it) }
             connection.openVpnConfig?.let { item.put("openVpnConfig", it) }
@@ -235,6 +264,8 @@ class ConnectionStore(
                         }.getOrDefault(QualityPreset.Balanced),
                         zoomEnabled = item.optBoolean("zoomEnabled", true),
                         startInObserveMode = item.optBoolean("startInObserveMode", false),
+                        rememberSelectedDisplay = item.optBoolean("rememberSelectedDisplay", true),
+                        preferredDisplayId = item.opt("preferredDisplayId") as? Int,
                         ssh = ssh,
                         lastConnectedAt = if (item.has("lastConnectedAt") && !item.isNull("lastConnectedAt")) {
                             item.getLong("lastConnectedAt")

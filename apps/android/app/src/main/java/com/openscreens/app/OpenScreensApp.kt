@@ -120,7 +120,7 @@ fun OpenScreensApp(viewModel: MainViewModel = viewModel()) {
                 )
 
                 is Route.Session -> {
-                    val connection = viewModel.connection(current.connectionId) ?: current.nearby
+                    val connection = connections.firstOrNull { it.id == current.connectionId } ?: current.nearby
                     if (connection == null) {
                         LaunchedEffect(Unit) { viewModel.back() }
                     } else {
@@ -135,6 +135,7 @@ fun OpenScreensApp(viewModel: MainViewModel = viewModel()) {
                                 viewModel.setConnectionQuality(connection.id, it)
                             },
                             onRemember = viewModel::rememberLogin,
+                            onPreferredDisplayChange = { viewModel.setPreferredDisplay(connection.id, it) },
                             onConnected = { viewModel.markConnected(connection.id) },
                             onExit = viewModel::back,
                         )

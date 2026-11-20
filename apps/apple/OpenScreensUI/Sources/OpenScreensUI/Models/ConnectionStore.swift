@@ -138,6 +138,7 @@ public final class ConnectionStore {
             stored.section = .custom
         }
         if let index = connections.firstIndex(where: { $0.id == profile.id }) {
+            stored.preferredDisplayID = connections[index].preferredDisplayID
             connections[index] = stored
         } else if profile.isDiscovered {
             // The service can disappear while its editor is open.
@@ -266,6 +267,15 @@ public final class ConnectionStore {
     public func toggleFavorite(id: UUID) {
         guard let index = connections.firstIndex(where: { $0.id == id }) else { return }
         connections[index].isFavorite.toggle()
+        persist()
+    }
+
+    public func setPreferredDisplay(_ displayID: Int?, for id: UUID) {
+        guard let index = connections.firstIndex(where: { $0.id == id }),
+              connections[index].remembersSelectedDisplay,
+              connections[index].preferredDisplayID != displayID
+        else { return }
+        connections[index].preferredDisplayID = displayID
         persist()
     }
 

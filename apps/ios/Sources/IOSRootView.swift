@@ -18,7 +18,7 @@ struct IOSRootView: View {
             }
         }
         .fullScreenCover(item: $linkProfile) { profile in
-            IOSSessionPresenter(profile: profile)
+            IOSSessionPresenter(profile: profile, store: store)
         }
         .onOpenURL(perform: openLink)
     }
@@ -40,9 +40,13 @@ struct IOSSessionPresenter: View {
     private let profile: ConnectionProfile
     @State private var model: SessionViewModel
 
-    init(profile: ConnectionProfile) {
+    init(profile: ConnectionProfile, store: ConnectionStore) {
         self.profile = profile
-        _model = State(initialValue: SessionViewModel(profile: profile, service: UniFfiSessionService()))
+        _model = State(initialValue: SessionViewModel(
+            profile: profile,
+            service: UniFfiSessionService(),
+            connectionStore: store
+        ))
     }
 
     var body: some View {
@@ -62,8 +66,12 @@ struct IOSSessionWindow: View {
 
     @State private var model: SessionViewModel
 
-    init(profile: ConnectionProfile) {
-        _model = State(initialValue: SessionViewModel(profile: profile, service: UniFfiSessionService()))
+    init(profile: ConnectionProfile, store: ConnectionStore) {
+        _model = State(initialValue: SessionViewModel(
+            profile: profile,
+            service: UniFfiSessionService(),
+            connectionStore: store
+        ))
     }
 
     var body: some View {

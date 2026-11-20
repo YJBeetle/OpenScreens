@@ -197,6 +197,7 @@ public struct RemoteViewport: Sendable, Equatable {
 
 public enum RemoteSessionEvent: Sendable {
     case state(RemoteSessionState)
+    case framebufferSize(width: Int, height: Int)
     case displays([RemoteDisplay])
     case frame(RemoteFrame)
     /// The client now receives only this framebuffer crop, sampled by `scale`.
@@ -324,7 +325,7 @@ public protocol RemoteSessionProtocol: Sendable {
     func setObserveMode(_ observing: Bool) async
     /// Switches the host to one display, or shows every display when `id` is
     /// `nil`.
-    func selectDisplay(_ id: Int?) async
+    func selectDisplay(_ id: Int?) async throws
     /// Restricts framebuffer updates to a normalized rect (0...1 in framebuffer
     /// coordinates) and picks a sampling density that keeps the visible crop at
     /// screen resolution. `nil` restores full-frame updates. The client sends a
@@ -348,8 +349,6 @@ public protocol RemoteSessionProtocol: Sendable {
 public extension RemoteSessionProtocol {
     /// Transports without wheel support ignore the request.
     func sendScroll(at point: CGPoint, stepsX: Int32, stepsY: Int32) async {}
-    /// Transports without display selection ignore the request.
-    func selectDisplay(_ id: Int?) async {}
     /// Transports without viewport cropping ignore the request.
     func setViewport(_ normalizedRect: CGRect?, screenPixelWidth: Int) async {}
     /// Transports without file transfer support ignore the request.

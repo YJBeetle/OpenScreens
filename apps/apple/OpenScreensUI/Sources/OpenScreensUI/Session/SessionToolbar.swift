@@ -54,7 +54,7 @@ struct SessionToolbar: View {
         case .pointer:
             cursorMenu
         case .displays:
-            if model.displays.count > 1 {
+            if model.displays.count > 1 || model.selectedDisplayID != nil {
                 displayPickerMenu
             }
         case .keyboard:
@@ -122,12 +122,9 @@ struct SessionToolbar: View {
     /// more than one screen.
     private var displayPickerMenu: some View {
         Menu {
-            Picker("Display", selection: displayBinding) {
-                Text("All Displays").tag(Int?.none)
-                ForEach(model.displays) { display in
-                    Text("\(display.name) — \(display.resolutionLabel)")
-                        .tag(Optional(display.id))
-                }
+            displayMenuItem(NSLocalizedString("All Displays", comment: "Display picker"), id: nil)
+            ForEach(model.displays) { display in
+                displayMenuItem("\(display.name) — \(display.resolutionLabel)", id: display.id)
             }
         } label: {
             menuIcon("rectangle.on.rectangle", title: "Select display")
@@ -136,6 +133,20 @@ struct SessionToolbar: View {
         .buttonStyle(.plain)
         .accessibilityLabel("Select display")
         .accessibilityValue(selectedDisplayLabel)
+        .disabled(model.isSwitchingDisplay)
+    }
+
+    private func displayMenuItem(_ title: String, id: Int?) -> some View {
+        Button {
+            model.selectDisplay(id)
+        } label: {
+            if model.selectedDisplayID == id {
+                Label(title, systemImage: "checkmark")
+            } else {
+                Text(title)
+            }
+        }
+        .accessibilityAddTraits(model.selectedDisplayID == id ? .isSelected : [])
     }
 
     private var selectedDisplayLabel: String {
@@ -227,13 +238,6 @@ struct SessionToolbar: View {
         Binding(
             get: { model.cursorMode },
             set: { model.setCursorMode($0) }
-        )
-    }
-
-    private var displayBinding: Binding<Int?> {
-        Binding(
-            get: { model.selectedDisplayID },
-            set: { model.selectDisplay($0) }
         )
     }
 

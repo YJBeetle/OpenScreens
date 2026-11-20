@@ -219,7 +219,7 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
             password: (password?.isEmpty == false) ? password : nil,
             shared: true,
             localCursor: localCursor,
-            quality: 9,
+            quality: profile.initialQuality.jpegLevel,
             frameIntervalMs: 16,
             wireguardConfig: profile.wireGuardConfig,
             wireguardDnsFallback: true,
@@ -235,14 +235,7 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
             let session = try await OpenScreensCore.RemoteSession.connect(config: config)
             self.session = session
             updateSize(session.size())
-            continuation.yield(.displays([
-                RemoteDisplay(
-                    id: 0,
-                    name: session.serverName(),
-                    width: Int(width),
-                    height: Int(height)
-                ),
-            ]))
+            continuation.yield(.framebufferSize(width: Int(width), height: Int(height)))
             continuation.yield(.state(.connected))
             startEventPump(session)
             startInputPump(session)
@@ -350,18 +343,13 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
         self.observing = observing
     }
 
-    public func selectDisplay(_ id: Int?) async {
-        guard let session, !finished else { return }
+    public func selectDisplay(_ id: Int?) async throws {
+        guard let session, !finished else { throw CancellationError() }
         let displayID = id.flatMap { UInt32(exactly: $0) }
-        do {
-            try await session.selectDisplay(displayId: displayID)
-        } catch {
-            logger.error("select display failed: \(error.localizedDescription, privacy: .public)")
-            continuation.yield(.failure(String(
-                format: NSLocalizedString("Could not switch display: %@", comment: "Display switch error"),
-                error.localizedDescription
-            )))
+        guard id == nil || displayID != nil else {
+            throw SessionSetupError(NSLocalizedString("Invalid display ID.", comment: "Display switch error"))
         }
+        try await session.selectDisplay(displayId: displayID)
     }
 
     /// Subscribes only to the visible framebuffer region and samples it at
@@ -842,13 +830,11 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
         session: OpenScreensCore.RemoteSession
     ) {
         switch event {
-        case .connected(let width, let height, let name):
+        case .connected(let width, let height, _):
             self.width = width
             self.height = height
             updateDisplayScale()
-            continuation.yield(.displays([
-                RemoteDisplay(id: 0, name: name, width: Int(width), height: Int(height)),
-            ]))
+            continuation.yield(.framebufferSize(width: Int(width), height: Int(height)))
             continuation.yield(.state(.connected))
 
         case .frame(_, let rects):
@@ -941,19 +927,13 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
             viewport = nil
             announceViewport = false
             updateDisplayScale()
-            continuation.yield(.displays([
-                RemoteDisplay(
-                    id: 0,
-                    name: NSLocalizedString("Display", comment: "Fallback display name"),
-                    width: Int(width),
-                    height: Int(height)
-                ),
-            ]))
+            continuation.yield(.framebufferSize(width: Int(width), height: Int(height)))
 
         case .desktopLayout(let width, let height, let screens):
             self.width = width
             self.height = height
             updateDisplayScale()
+            continuation.yield(.framebufferSize(width: Int(width), height: Int(height)))
             continuation.yield(.displays(screens.map { screen in
                 RemoteDisplay(
                     id: Int(screen.id),

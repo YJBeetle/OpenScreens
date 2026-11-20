@@ -37,7 +37,11 @@ struct MacSessionWindow: View {
 
     private func createModelIfNeeded() {
         guard model == nil, let profile = store.connection(id: route.profileID) else { return }
-        model = SessionViewModel(profile: profile, service: UniFfiSessionService())
+        model = SessionViewModel(
+            profile: profile,
+            service: UniFfiSessionService(),
+            connectionStore: store
+        )
     }
 
     private func commands(for model: SessionViewModel) -> SessionCommands {

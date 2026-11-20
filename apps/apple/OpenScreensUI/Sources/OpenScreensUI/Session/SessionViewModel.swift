@@ -61,7 +61,8 @@ public final class SessionViewModel {
 
     public private(set) var state: RemoteSessionState = .idle
     public private(set) var displays: [RemoteDisplay] = []
-    public var selectedDisplayID: Int?
+    public private(set) var selectedDisplayID: Int?
+    public var isSwitchingDisplay: Bool { displaySelectionTask != nil }
     /// Size of the server framebuffer; frames may be sampled down from this.
     public private(set) var serverSize: CGSize?
     public private(set) var frameSize: CGSize?
@@ -106,6 +107,9 @@ public final class SessionViewModel {
     /// On-screen translation of the zoomed image, in points.
     public private(set) var pan: CGSize = .zero
 
+    private var displaySelectionTask: Task<Void, Never>?
+    @ObservationIgnored private var pendingDisplayRestore: Int?
+    @ObservationIgnored private let connectionStore: ConnectionStore?
     @ObservationIgnored private let service: any RemoteSessionService
     @ObservationIgnored private var session: (any RemoteSessionProtocol)?
     @ObservationIgnored private var eventTask: Task<Void, Never>?
@@ -129,10 +133,12 @@ public final class SessionViewModel {
 
     public init(
         profile: ConnectionProfile,
-        service: any RemoteSessionService = MockSessionService()
+        service: any RemoteSessionService = MockSessionService(),
+        connectionStore: ConnectionStore? = nil
     ) {
         self.profile = profile
         self.service = service
+        self.connectionStore = connectionStore
         self.cursorMode = profile.controls.cursorMode
         self.isObserving = profile.controls.startInObserveMode
         self.scaling = profile.controls.scaling
@@ -217,6 +223,10 @@ public final class SessionViewModel {
         guard !isStopping else { return }
         let session = service.makeSession()
         self.session = session
+        resetDisplaySelection()
+        serverSize = nil
+        let saved = connectionStore?.connection(id: profile.id) ?? profile
+        pendingDisplayRestore = saved.remembersSelectedDisplay ? saved.preferredDisplayID : nil
         lastViewportRect = nil
         viewport = nil
         state = isReconnect ? .reconnecting(attempt: reconnectAttempts) : .connecting
@@ -226,7 +236,7 @@ public final class SessionViewModel {
 
         eventTask = Task { [weak self, session] in
             for await event in session.events {
-                guard let self else { return }
+                guard let self, !Task.isCancelled else { return }
                 self.handle(event)
             }
         }
@@ -246,6 +256,7 @@ public final class SessionViewModel {
     private func endTransport() {
         let active = session
         session = nil
+        resetDisplaySelection()
         connectTask?.cancel()
         connectTask = nil
         eventTask?.cancel()
@@ -270,24 +281,21 @@ public final class SessionViewModel {
             if newState.isConnected {
                 reconnectAttempts = 0
                 failureMessage = nil
+                reconcileDisplaySelection()
             }
             if case .disconnected(let reason, let kind) = newState {
+                resetDisplaySelection()
                 clearUploadState()
                 clearDownloadState()
                 handleRemoteClose(reason: reason, kind: kind)
             }
 
+        case .framebufferSize(let width, let height):
+            serverSize = CGSize(width: width, height: height)
+
         case .displays(let list):
             displays = list
-            if let display = list.first {
-                serverSize = CGSize(width: display.width, height: display.height)
-            }
-            // `nil` means every display is shown; only drop a selection the
-            // host stopped reporting.
-            if let selectedDisplayID,
-               !list.contains(where: { $0.id == selectedDisplayID }) {
-                self.selectedDisplayID = nil
-            }
+            reconcileDisplaySelection()
 
         case .frame(let frame):
             receivedFrames += 1
@@ -901,9 +909,59 @@ public final class SessionViewModel {
     }
 
     public func selectDisplay(_ id: Int?) {
-        guard state.isConnected, let session else { return }
-        selectedDisplayID = id
-        Task { await session.selectDisplay(id) }
+        guard id == nil || displays.contains(where: { $0.id == id }) else { return }
+        switchDisplay(to: id, userInitiated: true)
+    }
+
+    private func resetDisplaySelection() {
+        displaySelectionTask?.cancel()
+        displaySelectionTask = nil
+        pendingDisplayRestore = nil
+        selectedDisplayID = nil
+        displays = []
+    }
+
+    private func reconcileDisplaySelection() {
+        guard state.isConnected, !isSwitchingDisplay else { return }
+        if let selectedDisplayID, !displays.contains(where: { $0.id == selectedDisplayID }) {
+            self.selectedDisplayID = nil
+            switchDisplay(to: nil, userInitiated: false)
+        } else if let id = pendingDisplayRestore, displays.contains(where: { $0.id == id }) {
+            pendingDisplayRestore = nil
+            switchDisplay(to: id, userInitiated: false)
+        }
+    }
+
+    private func switchDisplay(to id: Int?, userInitiated: Bool) {
+        guard let session, state.isConnected, !isSwitchingDisplay else { return }
+        if userInitiated {
+            pendingDisplayRestore = nil
+            if id == selectedDisplayID {
+                connectionStore?.setPreferredDisplay(id, for: profile.id)
+                return
+            }
+        }
+        displaySelectionTask = Task { [weak self] in
+            do {
+                try await session.selectDisplay(id)
+                guard let self, !Task.isCancelled else { return }
+                selectedDisplayID = id
+                if userInitiated {
+                    connectionStore?.setPreferredDisplay(id, for: profile.id)
+                }
+            } catch {
+                guard let self, !Task.isCancelled else { return }
+                if userInitiated {
+                    showMessage(String(
+                        format: NSLocalizedString("Could not switch display: %@", comment: "Display switch error"),
+                        error.localizedDescription
+                    ))
+                }
+            }
+            guard let self, !Task.isCancelled else { return }
+            displaySelectionTask = nil
+            reconcileDisplaySelection()
+        }
     }
 
     public func toggleChrome() {

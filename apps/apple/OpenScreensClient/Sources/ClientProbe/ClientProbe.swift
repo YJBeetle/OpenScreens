@@ -25,6 +25,8 @@ struct ClientProbe {
                 switch event {
                 case .state(let state):
                     print("state: \(state.label)")
+                case .framebufferSize(let width, let height):
+                    print("desktop: \(width)x\(height)")
                 case .displays(let displays):
                     print("displays: \(displays.map { "\($0.name) \($0.width)x\($0.height)" })")
                 case .frame(let frame):

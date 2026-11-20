@@ -303,7 +303,7 @@
 "%lld files" = "%lld 个文件";
 "file" = "文件";
 "Remote clipboard copied." = "已复制远程剪贴板。";
-"Local clipboard is empty." = "本地剪贴板为空。";
+"The local clipboard has no readable text, or clipboard access is unavailable." = "本地剪贴板没有可读文本，或应用未获读取权限。";
 "Sent local clipboard." = "已发送本地剪贴板。";
 "Could not update clipboard sharing." = "无法更新剪贴板共享设置。";
 "This server’s clipboard supports only Latin-1 text." = "此服务器的剪贴板仅支持 Latin-1 字符。";

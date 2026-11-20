@@ -2,7 +2,17 @@ import CoreGraphics
 import Foundation
 import Metal
 import MetalKit
+import Observation
 import os
+
+#if DEBUG
+@MainActor @Observable
+public final class CanvasPresentation {
+    public enum Stage { case waiting, uploaded, submitted, presented }
+    public fileprivate(set) var stage: Stage = .waiting
+    fileprivate var generation = 0
+}
+#endif
 
 /// Renders a remote framebuffer into any `MTKView` and owns the BGRA8 texture that
 /// stores the latest frame.
@@ -15,6 +25,9 @@ import os
 /// thread must hop to the main actor before uploading.
 @MainActor
 public final class RemoteCanvasRenderer {
+    #if DEBUG
+    public let presentation = CanvasPresentation()
+    #endif
     private static let logger = Logger(subsystem: "app.openscreens.canvas", category: "RemoteCanvas")
     /// Conservative 2D texture limit (the simulator aborts above 8192).
     private static let maxTextureDimension = 8192
@@ -103,7 +116,7 @@ public final class RemoteCanvasRenderer {
             guard let base = buffer.baseAddress else { return }
             texture.replace(region: region, mipmapLevel: 0, withBytes: base, bytesPerRow: bytesPerRow)
         }
-        requestRedraw()
+        didUpload()
     }
 
     /// Uploads a sub-region of the current frame. `width` and `height` are the
@@ -144,11 +157,22 @@ public final class RemoteCanvasRenderer {
             guard let base = buffer.baseAddress else { return }
             texture.replace(region: metalRegion, mipmapLevel: 0, withBytes: base, bytesPerRow: bytesPerRow)
         }
+        didUpload()
+    }
+
+    private func didUpload() {
+        #if DEBUG
+        if presentation.stage == .waiting { presentation.stage = .uploaded }
+        #endif
         requestRedraw()
     }
 
     /// Discards the current frame, e.g. when a session disconnects.
     public func reset() {
+        #if DEBUG
+        presentation.generation += 1
+        presentation.stage = .waiting
+        #endif
         texture = nil
         frameWidth = 0
         frameHeight = 0
@@ -214,6 +238,19 @@ public final class RemoteCanvasRenderer {
         encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
         encoder.endEncoding()
 
+        #if DEBUG
+        if presentation.stage == .uploaded {
+            presentation.stage = .submitted
+            let generation = presentation.generation
+            drawable.addPresentedHandler { [weak presentation] drawable in
+                guard drawable.presentedTime > 0 else { return }
+                Task { @MainActor in
+                    guard let presentation, presentation.generation == generation else { return }
+                    presentation.stage = .presented
+                }
+            }
+        }
+        #endif
         commandBuffer.present(drawable)
         commandBuffer.commit()
     }

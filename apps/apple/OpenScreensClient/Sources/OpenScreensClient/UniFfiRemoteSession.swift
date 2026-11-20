@@ -82,6 +82,7 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
     /// Crop currently subscribed for this session.
     private var viewport: OpenScreensUI.RemoteViewport?
     private var announceViewport = false
+    private var receivedDesktopLayout = false
     private var cursor = CGPoint(x: 0.5, y: 0.5)
     private var buttonMask: UInt8 = 0
     private var observing = false
@@ -851,7 +852,10 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
             ]))
             continuation.yield(.state(.connected))
 
-        case .frame(_, let rects):
+        case .frame(let sequence, let rects):
+            if sequence == 1 {
+                logger.info("Received first RFB pixel update with \(rects.count) damage rectangles")
+            }
             guard width > 0, height > 0 else { return }
             if let viewport {
                 if announceViewport {
@@ -897,7 +901,8 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
                         width: viewport.bufferWidth,
                         height: viewport.bufferHeight,
                         region: region,
-                        data: data
+                        data: data,
+                        sequence: sequence
                     )))
                 }
                 return
@@ -908,8 +913,6 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
             for rect in rects where rect.width > 0 && rect.height > 0 {
                 guard let data = session.copyRegionScaled(rect: rect, scale: displayScale)
                 else { continue }
-                // The renderer only allocates its texture from a full frame, so a
-                // rect that covers the whole framebuffer must clear `region`.
                 let coversFrame = rect.x == 0 && rect.y == 0
                     && Int(rect.width) == Int(width) && Int(rect.height) == Int(height)
                 let region: RemoteRegion?
@@ -931,7 +934,8 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
                     width: scaledWidth,
                     height: scaledHeight,
                     region: region,
-                    data: data
+                    data: data,
+                    sequence: sequence
                 )))
             }
 
@@ -951,6 +955,10 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
             ]))
 
         case .desktopLayout(let width, let height, let screens):
+            if !receivedDesktopLayout {
+                logger.info("Received first desktop layout: \(width)x\(height), \(screens.count) displays")
+                receivedDesktopLayout = true
+            }
             self.width = width
             self.height = height
             updateDisplayScale()

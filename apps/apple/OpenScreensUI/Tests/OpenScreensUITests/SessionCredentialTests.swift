@@ -1,3 +1,5 @@
+import Metal
+import OpenScreensCanvas
 import XCTest
 @testable import OpenScreensUI
 
@@ -20,8 +22,16 @@ final class SessionCredentialTests: XCTestCase {
 
         model.submitCredentials(username: "user", password: " test ", remember: false)
         try await wait { model.state.isConnected }
-        try await wait { model.receivedFrames == 1 }
+        try await wait { model.receivedFrames == 2 }
+        #if DEBUG
+        XCTAssertEqual(model.firstUpdateHasColor, true)
+        #endif
         XCTAssertEqual(model.frameSize, CGSize(width: 2, height: 2))
+        if MTLCreateSystemDefaultDevice() != nil {
+            let image = try XCTUnwrap(model.renderer.snapshot())
+            let bytes = try XCTUnwrap(image.dataProvider?.data) as Data
+            XCTAssertEqual(bytes, Data([0, 0, 0, 255, 0, 0, 0, 0, 0, 0, 0, 255, 1, 0, 0, 0]))
+        }
         XCTAssertFalse(model.rememberLogin)
         let transport = await service.log.latest
         transport?.yield(.state(.disconnected(reason: "network")))
@@ -37,6 +47,14 @@ final class SessionCredentialTests: XCTestCase {
         model.disconnect()
         XCTAssertNil(model.credentialChallenge)
     }
+
+    #if DEBUG
+    func testBlackUpdateIgnoresAlphaAndFindsOneColoredPixel() {
+        let black = Data([0, 0, 0, 255, 0, 0, 0, 0])
+        XCTAssertFalse(SessionViewModel.containsNonblackPixel(black))
+        XCTAssertTrue(SessionViewModel.containsNonblackPixel(black + Data([0, 1, 0, 0])))
+    }
+    #endif
 
     private func wait(until condition: () -> Bool) async throws {
         let deadline = ContinuousClock.now + .seconds(5)
@@ -87,7 +105,12 @@ private struct LoginTransport: RemoteSessionProtocol {
     func setViewport(_ normalizedRect: CGRect?, screenPixelWidth: Int) async {
         guard normalizedRect == CGRect(x: 0, y: 0, width: 1, height: 1),
               screenPixelWidth == 960 else { return }
-        stream.yield(.frame(RemoteFrame(width: 2, height: 2, data: Data(repeating: 255, count: 16))))
+        for row in 0..<2 {
+            let region = RemoteRegion(x: 0, y: row, width: 2, height: 1)
+            // Transparent/opaque black in the first damage rect, colour in the second.
+            let pixels = Data([0, 0, 0, 255, UInt8(row), 0, 0, 0])
+            stream.yield(.frame(RemoteFrame(width: 2, height: 2, region: region, data: pixels, sequence: 1)))
+        }
     }
 
     func disconnect() async { stream.finish() }

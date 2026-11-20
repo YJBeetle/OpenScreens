@@ -1070,6 +1070,7 @@ struct ReaderState {
     dct_failed: bool,
     full_refresh: bool,
     refresh_on_first_layout: bool,
+    refresh_on_first_tables: bool,
     downloads: Arc<Mutex<HashMap<u32, DownloadTransfer>>>,
     commands: mpsc::Sender<WriteCommand>,
     clipboard: Arc<Mutex<ClipboardState>>,
@@ -1120,6 +1121,7 @@ async fn reader_task<R>(
         dct_failed: false,
         full_refresh: false,
         refresh_on_first_layout: apple_session,
+        refresh_on_first_tables: adaptive_dct,
         downloads,
         commands: commands.clone(),
         clipboard,
@@ -1537,6 +1539,7 @@ where
     let mut damaged = Vec::with_capacity(usize::from(rect_count));
     let mut resized = None;
     let mut layout = None;
+    let mut received_dct_tables = false;
 
     for _ in 0..rect_count {
         fill_buffer(read, &mut state.buffer, 12).await?;
@@ -1755,7 +1758,10 @@ where
                 match prepared.and_then(|()| decoder.decode_rect(&data, rect)) {
                     // Type 2 only updates quantisation tables. Copying the DCT
                     // backing store here would publish untouched pixels as damage.
-                    Ok(_) if data[4] == 2 => continue,
+                    Ok(_) if data[4] == 2 => {
+                        received_dct_tables = true;
+                        continue;
+                    }
                     Ok(_) => {
                         let stride = usize::from(frame_width) * 4;
                         let row_bytes = usize::from(width) * 4;
@@ -1844,19 +1850,18 @@ where
             .map_err(|_| SessionError::Closed)?;
     }
 
+    if *sequence == 0 && damaged.is_empty() {
+        // DisplayInfo and quantisation tables can each consume a separate
+        // full request. An idle desktop need never answer an incremental one.
+        // Consume both one-shots when they arrive in the same update.
+        let first_layout = layout.as_ref().is_some_and(|(w, h, _)| *w > 0 && *h > 0)
+            && std::mem::take(&mut state.refresh_on_first_layout);
+        let first_tables =
+            received_dct_tables && std::mem::take(&mut state.refresh_on_first_tables);
+        state.full_refresh |= first_layout || first_tables;
+    }
+
     if let Some((width, height, screens)) = layout {
-        // An Apple server can answer the initial full request with just
-        // DisplayInfo. An incremental request can then wait on an idle desktop
-        // forever. Ask once for pixels using the newly advertised geometry.
-        if state.refresh_on_first_layout
-            && *sequence == 0
-            && damaged.is_empty()
-            && width > 0
-            && height > 0
-        {
-            state.refresh_on_first_layout = false;
-            state.full_refresh = true;
-        }
         events
             .send(Event::DesktopLayout {
                 width,

@@ -1058,6 +1058,40 @@ async fn curtain_requests_require_the_advertised_capability() {
     }
 }
 
+fn dct_table_rectangle() -> Vec<u8> {
+    let mut rect = vec![0, 0, 0, 0, 0, 2, 0, 2];
+    rect.extend_from_slice(&1011i32.to_be_bytes());
+    rect.extend_from_slice(&129u32.to_be_bytes());
+    rect.push(2);
+    rect.extend_from_slice(&[1; 128]);
+    rect
+}
+
+#[tokio::test]
+async fn standalone_dct_tables_request_first_pixels_only_once() {
+    let (client, mut server) = duplex(256);
+    let peer = tokio::spawn(async move {
+        perform_apple_handshake(&mut server).await;
+        read_setup(&mut server).await;
+        let mut tables = vec![0, 0, 0, 1];
+        tables.extend(dct_table_rectangle());
+        let mut request = [0; 10];
+        for incremental in [0, 1] {
+            server.write_all(&tables).await.unwrap();
+            server.read_exact(&mut request).await.unwrap();
+            assert_eq!(request, [3, incremental, 0, 0, 0, 0, 0, 2, 0, 2]);
+        }
+    });
+    let mut config = SessionConfig::new("mock", 5900);
+    config.apple_session = true;
+    config.adaptive_dct = true;
+    let _session = Session::connect_stream(client, config).await.unwrap();
+    timeout(Duration::from_secs(2), peer)
+        .await
+        .unwrap()
+        .unwrap();
+}
+
 #[tokio::test]
 async fn apple_layout_before_pixels_requests_one_full_refresh() {
     // Force the combined rectangle payload to span multiple reads.
@@ -1082,11 +1116,7 @@ async fn apple_layout_before_pixels_requests_one_full_refresh() {
         }
         update.extend_from_slice(&[0; 4]);
         update.extend_from_slice(&rfb_proto::pixel_format::PixelFormat::bgra8888().encode());
-        update.extend_from_slice(&[0, 0, 0, 0, 0, 2, 0, 2]);
-        update.extend_from_slice(&1011i32.to_be_bytes());
-        update.extend_from_slice(&129u32.to_be_bytes());
-        update.push(2);
-        update.extend_from_slice(&[1; 128]);
+        update.extend(dct_table_rectangle());
         let mut request = [0; 10];
         for incremental in [0, 1] {
             server.write_all(&update).await.unwrap();

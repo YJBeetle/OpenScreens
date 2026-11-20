@@ -817,7 +817,7 @@ public static func connectRequestingMacSharing(config: SessionConfig)async throw
             errorHandler: FfiConverterTypeSessionFailure_lift
         )
 }
-
+    
 
     
     /**

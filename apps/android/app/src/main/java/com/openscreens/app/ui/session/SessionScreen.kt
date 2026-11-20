@@ -883,7 +883,7 @@ fun SessionScreen(
             HiddenKeyboardField(
                 enabled = keyboardActive,
                 focusRequester = focusRequester,
-                onChar = { char -> sendKeysym(if (char == '\n') KEY_RETURN else x11Keysym(char)) },
+                onCodePoint = { code -> sendKeysym(if (code == '\n'.code) KEY_RETURN else x11Keysym(code)) },
                 onBackspace = { sendKeysym(KEY_BACKSPACE) },
                 onFocusChange = { focused -> if (!focused) keyboardActive = false },
                 modifier = Modifier.align(Alignment.TopStart),
@@ -2185,41 +2185,39 @@ private fun ToolbarButton(
 private fun HiddenKeyboardField(
     enabled: Boolean,
     focusRequester: FocusRequester,
-    onChar: (Char) -> Unit,
+    onCodePoint: (Int) -> Unit,
     onBackspace: () -> Unit,
     onFocusChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var value by remember {
-        mutableStateOf(TextFieldValue(KEYBOARD_SENTINEL, TextRange(KEYBOARD_SENTINEL.length)))
-    }
-    var committed by remember { mutableStateOf(KEYBOARD_SENTINEL) }
+    val emptyValue = remember { TextFieldValue(KEYBOARD_SENTINEL, TextRange(KEYBOARD_SENTINEL.length)) }
+    var value by remember(enabled) { mutableStateOf(emptyValue) }
+    var committed by remember(enabled) { mutableStateOf(KEYBOARD_SENTINEL) }
 
     BasicTextField(
         // Dialog dismissal must not move IME focus into the remote session.
         enabled = enabled,
         value = value,
         onValueChange = { next ->
-            if (next.composition != null) {
-                // Let the IME finish composing; nothing is sent until it commits.
-                value = next
-            } else {
-                val old = committed
-                val new = next.text
-                when {
-                    new.length > old.length && new.startsWith(old) ->
-                        new.substring(old.length).forEach(onChar)
-
-                    new.length < old.length && old.startsWith(new) ->
-                        repeat(old.length - new.length) { onBackspace() }
-
-                    new != old -> {
-                        repeat((old.length - 1).coerceAtLeast(0)) { onBackspace() }
-                        new.filter { it != KEYBOARD_SENTINEL_CHAR }.forEach(onChar)
-                    }
+            // Keep the IME's editing buffer in sync between consecutive events.
+            // Resetting it after every key can drop or duplicate rapid edits.
+            value = next
+            if (next.composition == null) {
+                val old = committed.removePrefix(KEYBOARD_SENTINEL)
+                val new = next.text.removePrefix(KEYBOARD_SENTINEL)
+                val prefix = old.commonPrefixWith(new).length
+                repeat(old.codePointCount(prefix, old.length)) { onBackspace() }
+                var index = prefix
+                while (index < new.length) {
+                    val code = new.codePointAt(index)
+                    onCodePoint(code)
+                    index += Character.charCount(code)
                 }
-                committed = KEYBOARD_SENTINEL
-                value = TextFieldValue(KEYBOARD_SENTINEL, TextRange(KEYBOARD_SENTINEL.length))
+                if (next.text.isEmpty()) {
+                    if (committed == KEYBOARD_SENTINEL) onBackspace()
+                    value = emptyValue
+                }
+                committed = value.text
             }
         },
         modifier = modifier
@@ -2471,7 +2469,6 @@ private const val MODIFIER_ALT = 1 shl 1
 private const val MODIFIER_SHIFT = 1 shl 2
 private const val MODIFIER_META = 1 shl 3
 
-private const val KEYBOARD_SENTINEL_CHAR = '\u200B'
 private const val KEYBOARD_SENTINEL = "\u200B"
 
 private data class PendingDownload(val handle: Int, val root: File)
@@ -2602,8 +2599,7 @@ private fun remotePoint(
  * Maps a character to an X11 keysym. Printable Latin-1 keeps its code point; everything
  * else uses the Unicode keysym range, matching how RFB servers translate KeyEvents.
  */
-private fun x11Keysym(char: Char): Int {
-    val code = char.code
+private fun x11Keysym(code: Int): Int {
     return if (code in 0x20..0x7E || code in 0xA0..0xFF) {
         code
     } else {

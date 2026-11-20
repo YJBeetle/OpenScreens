@@ -350,6 +350,7 @@ public final class SessionViewModel {
         }
 
         var profile = profile
+        profile.quality = saved.quality
         profile.controls.startInObserveMode = isObserving
         profile.username = loginUsername
         let password = sessionPassword

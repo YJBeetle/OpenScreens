@@ -180,6 +180,7 @@ fun SessionScreen(
     sshKey: SshKey?,
     quality: QualityPreset,
     onQualityChange: (QualityPreset) -> Unit,
+    onRemember: (Connection) -> Boolean,
     onConnected: () -> Unit,
     onExit: () -> Unit,
     observeOnly: Boolean = false,
@@ -193,8 +194,9 @@ fun SessionScreen(
     var observing by rememberSaveable(connection.id, observeOnly) {
         mutableStateOf(observeOnly || connection.startInObserveMode)
     }
-    val session: RemoteSession = remember(connection.id, observeOnly) {
-        SessionProvider.create(context, connection, quality, sshKey, startInObserveMode = observing)
+    val login = remember(connection.id) { SessionLogin(connection) }
+    val session: RemoteSession = remember(connection.id, observeOnly, login.generation) {
+        SessionProvider.create(context, login.attempt, quality, sshKey, startInObserveMode = observing)
     }
 
     var status by remember { mutableStateOf(SessionStatus.Connecting) }
@@ -371,6 +373,12 @@ fun SessionScreen(
                     // emits the new crop with its first complete frame.
                     frame = null
                     viewport = null
+                    if (isExiting) return@collect
+                    login.accepted()?.let { accepted ->
+                        if (!onRemember(accepted)) {
+                            scope.launch { snackbarHostState.showSnackbar(context.getString(R.string.session_remember_failed)) }
+                        }
+                    }
                     onConnected()
                 }
                 is SessionEvent.Resized -> {
@@ -495,7 +503,8 @@ fun SessionScreen(
                 }
                 is SessionEvent.Failed -> {
                     status = SessionStatus.Failed
-                    scope.launch { snackbarHostState.showSnackbar(event.reason) }
+                    login.failed(event.challenge)
+                    if (event.challenge == null) scope.launch { snackbarHostState.showSnackbar(event.reason) }
                 }
             }
         }
@@ -516,7 +525,7 @@ fun SessionScreen(
                 Lifecycle.Event.ON_START -> {
                     val leftAt = backgroundedAt
                     backgroundedAt = 0L
-                    if (leftAt == 0L || isExiting) return@LifecycleEventObserver
+                    if (leftAt == 0L || isExiting || login.challenge != null) return@LifecycleEventObserver
                     val away = SystemClock.elapsedRealtime() - leftAt
                     val lostWhileAway = status == SessionStatus.Disconnected ||
                         status == SessionStatus.Failed
@@ -534,6 +543,20 @@ fun SessionScreen(
 
     DisposableEffect(session) {
         onDispose { session.close() }
+    }
+
+    login.challenge?.let { required ->
+        CredentialDialog(
+            challenge = required,
+            endpoint = connection.address,
+            initialUsername = login.attempt.username,
+            initiallyRemember = login.rememberLogin,
+            onCancel = exitSession,
+            onSubmit = { username, password, remember ->
+                login.retry(username, password, remember)
+                status = SessionStatus.Connecting
+            },
+        )
     }
 
     LaunchedEffect(remoteWidth, remoteHeight) {

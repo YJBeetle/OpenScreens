@@ -99,6 +99,10 @@ public final class SessionViewModel {
     @ObservationIgnored private weak var store: ConnectionStore?
     @ObservationIgnored private var recordedConnection = false
     public private(set) var receivedFrames = 0
+    #if DEBUG
+    @ObservationIgnored private var firstSequence: UInt64?
+    private(set) var firstUpdateHasColor: Bool?
+    #endif
     public private(set) var remoteCursorShape: RemoteCursorShape?
     public private(set) var remoteCursorImage: CGImage?
     /// Name of the file currently being received by the remote desktop.
@@ -277,6 +281,10 @@ public final class SessionViewModel {
         inputQueue = SessionInputQueue(session: session)
         renderer.reset()
         receivedFrames = 0
+        #if DEBUG
+        firstSequence = nil
+        firstUpdateHasColor = nil
+        #endif
         frameSize = nil
         lastViewportRect = nil
         viewport = nil
@@ -375,6 +383,12 @@ public final class SessionViewModel {
             reconcileDisplaySelection()
 
         case .frame(let frame):
+            #if DEBUG
+            if receivedFrames == 0 { firstSequence = frame.sequence }
+            if receivedFrames == 0 || (firstSequence != nil && frame.sequence == firstSequence && firstUpdateHasColor == false) {
+                firstUpdateHasColor = Self.containsNonblackPixel(frame.data)
+            }
+            #endif
             receivedFrames += 1
             frameSize = CGSize(width: frame.width, height: frame.height)
             if let region = frame.region {
@@ -457,6 +471,26 @@ public final class SessionViewModel {
             showMessage(message)
         }
     }
+
+    #if DEBUG
+    /// Inspect only the BGRA payloads already going to Metal in the first RFB
+    /// update. Alpha varies by encoding and carries no colour information.
+    static func containsNonblackPixel(_ pixels: Data) -> Bool {
+        pixels.withUnsafeBytes { bytes in
+            guard bytes.count >= 4, let base = bytes.baseAddress else { return false }
+            if bytes.loadUnaligned(as: UInt32.self) & 0x00ff_ffff != 0 { return true }
+            // A uniform black desktop is common. libc can compare its repeated
+            // pixels in bulk even in an unoptimised diagnostic build.
+            if memcmp(base, base + 4, bytes.count - 4) == 0 { return false }
+            for offset in stride(from: 4, to: bytes.count - 3, by: 4) {
+                if bytes.loadUnaligned(fromByteOffset: offset, as: UInt32.self) & 0x00ff_ffff != 0 {
+                    return true
+                }
+            }
+            return false
+        }
+    }
+    #endif
 
     private func handleRemoteClose(reason: String?, kind: RemoteFailureKind) {
         guard !isStopping else { return }

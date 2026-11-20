@@ -569,6 +569,11 @@ public struct SessionScreen: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
+                #if DEBUG && os(iOS)
+                Text(firstFrameDetail)
+                    .font(.caption2.monospacedDigit())
+                    .foregroundStyle(.white.opacity(0.7))
+                #endif
             }
 
             if model.isObserving {
@@ -790,6 +795,20 @@ public struct SessionScreen: View {
         case .idle: .secondary
         }
     }
+
+    #if DEBUG && os(iOS)
+    private var firstFrameDetail: String {
+        guard let hasColor = model.firstUpdateHasColor else { return "RFB · waiting for pixels" }
+        let input = hasColor ? "first update has color" : "first update RGB black"
+        let output = switch model.renderer.presentation.stage {
+        case .waiting: "waiting for upload"
+        case .uploaded: "uploaded"
+        case .submitted: "submitted"
+        case .presented: "presented"
+        }
+        return "RFB · \(input) · Metal \(output)"
+    }
+    #endif
 
     private var connectionDetail: String {
         if let size = model.serverSize ?? model.framebufferSize {

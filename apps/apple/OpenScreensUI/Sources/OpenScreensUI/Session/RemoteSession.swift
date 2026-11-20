@@ -92,12 +92,15 @@ public struct RemoteFrame: Sendable {
     public var height: Int
     public var region: RemoteRegion?
     public var data: Data
+    /// All rectangles from one engine framebuffer update share this sequence.
+    public var sequence: UInt64?
 
-    public init(width: Int, height: Int, region: RemoteRegion? = nil, data: Data) {
+    public init(width: Int, height: Int, region: RemoteRegion? = nil, data: Data, sequence: UInt64? = nil) {
         self.width = width
         self.height = height
         self.region = region
         self.data = data
+        self.sequence = sequence
     }
 }
 

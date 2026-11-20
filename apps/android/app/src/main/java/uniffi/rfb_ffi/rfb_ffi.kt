@@ -712,6 +712,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Int
     external fun uniffi_rfb_ffi_checksum_method_remotesession_next_transfer_handle(
     ): Int
+    external fun uniffi_rfb_ffi_checksum_method_remotesession_request_clipboard(
+    ): Int
     external fun uniffi_rfb_ffi_checksum_method_remotesession_request_download(
     ): Int
     external fun uniffi_rfb_ffi_checksum_method_remotesession_request_refresh(
@@ -788,6 +790,8 @@ internal object UniffiLib {
     ): Long
     external fun uniffi_rfb_ffi_fn_method_remotesession_next_transfer_handle(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Int
+    external fun uniffi_rfb_ffi_fn_method_remotesession_request_clipboard(`ptr`: Long,
+    ): Long
     external fun uniffi_rfb_ffi_fn_method_remotesession_request_download(`ptr`: Long,`handle`: Int,`path`: RustBuffer.ByValue,
     ): Long
     external fun uniffi_rfb_ffi_fn_method_remotesession_request_refresh(`ptr`: Long,
@@ -1000,6 +1004,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_rfb_ffi_checksum_method_remotesession_next_transfer_handle() and 0xFFFF) != 13031) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_rfb_ffi_checksum_method_remotesession_request_clipboard() and 0xFFFF) != 56734) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_rfb_ffi_checksum_method_remotesession_request_download() and 0xFFFF) != 60308) {
@@ -1624,6 +1631,12 @@ public interface RemoteSessionInterface {
     
     fun `nextTransferHandle`(): kotlin.UInt
     
+    /**
+     * Returns false for push-only servers. A successful Apple request delivers
+     * the reply through the ordinary Clipboard event.
+     */
+    suspend fun `requestClipboard`(): kotlin.Boolean
+    
     suspend fun `requestDownload`(`handle`: kotlin.UInt, `path`: kotlin.String)
     
     suspend fun `requestRefresh`()
@@ -1917,6 +1930,31 @@ open class RemoteSession: Disposable, AutoCloseable, RemoteSessionInterface
     )
     }
     
+
+    
+    /**
+     * Returns false for push-only servers. A successful Apple request delivers
+     * the reply through the ordinary Clipboard event.
+     */
+    @Throws(SessionFailure::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `requestClipboard`() : kotlin.Boolean {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_rfb_ffi_fn_method_remotesession_request_clipboard(
+                uniffiHandle,
+                
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_rfb_ffi_rust_future_poll_i8(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_rfb_ffi_rust_future_complete_i8(future, continuation) },
+        { future -> UniffiLib.ffi_rfb_ffi_rust_future_free_i8(future) },
+        // lift function
+        { FfiConverterBoolean.lift(it) },
+        // Error FFI converter
+        SessionFailure.ErrorHandler,
+    )
+    }
 
     
     @Throws(SessionFailure::class)

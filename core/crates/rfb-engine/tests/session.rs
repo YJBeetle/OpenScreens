@@ -455,6 +455,7 @@ async fn session_round_trip() {
     let session = Session::connect_stream(client, SessionConfig::new("mock", 5900))
         .await
         .unwrap();
+    assert!(!session.request_clipboard().await.unwrap());
     session.send_pointer(1, 10, 20).await.unwrap();
     session.send_key(true, 0x61).await.unwrap();
     session.send_clipboard("hey").await.unwrap();
@@ -743,6 +744,26 @@ async fn apple_clipboard_request_upload_and_replay() {
         .unwrap()
         .unwrap();
     assert!(matches!(connected, Event::Connected { .. }));
+
+    assert!(session.request_clipboard().await.unwrap());
+    let mut request = [0; 8];
+    server.read_exact(&mut request).await.unwrap();
+    assert_eq!(&request[..4], &[0x0b, 0, 0, 0]);
+    let timestamp = u32::from_le_bytes(request[4..].try_into().unwrap());
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs()
+        - 978_307_200;
+    assert!(now.abs_diff(u64::from(timestamp)) < 5);
+    let reply = rfb_engine::apple_input::client_pasteboard_message("fresh text");
+    server.write_all(&reply).await.unwrap();
+    assert_eq!(
+        session.next_event().await.unwrap(),
+        Event::Clipboard {
+            text: "fresh text".into()
+        }
+    );
 
     // Apple event subtype 2: server asks for the client clipboard.
     server

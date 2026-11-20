@@ -564,6 +564,12 @@ impl RemoteSession {
             .map_err(to_failure)
     }
 
+    /// Returns false for push-only servers. A successful Apple request delivers
+    /// the reply through the ordinary Clipboard event.
+    pub async fn request_clipboard(&self) -> Result<bool, SessionFailure> {
+        self.session.request_clipboard().await.map_err(to_failure)
+    }
+
     pub async fn send_clipboard(&self, text: String) -> Result<(), SessionFailure> {
         self.session.send_clipboard(&text).await.map_err(to_failure)
     }

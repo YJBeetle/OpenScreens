@@ -23,6 +23,32 @@ public struct QuickConnectView: View {
     }
 
     public var body: some View {
+        #if os(iOS)
+        NavigationStack {
+            Form {
+                Section {
+                    addressField
+                        .accessibilityLabel("Address")
+                } header: {
+                    Text("Open a session by entering its vnc:// address.")
+                } footer: {
+                    addressHint
+                }
+            }
+            .navigationTitle("Quick Connect")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel", role: .cancel) { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Connect", action: connect)
+                        .disabled(link == nil)
+                }
+            }
+        }
+        .onAppear { addressFocused = true }
+        #else
         VStack(alignment: .leading, spacing: 16) {
             HStack(spacing: 12) {
                 Image(systemName: "bolt.horizontal.circle.fill")
@@ -39,19 +65,8 @@ public struct QuickConnectView: View {
                 }
             }
 
-            TextField("vnc://user@host:5900", text: $address)
-                .textFieldStyle(.roundedBorder)
-                .focused($addressFocused)
-                .onSubmit(connect)
-                #if os(iOS)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .keyboardType(.URL)
-                #endif
-
-            Text(showsError ? "Enter a valid vnc:// address." : "Port defaults to 5900.")
-                .font(.footnote)
-                .foregroundStyle(showsError ? Theme.Colors.danger : Color.secondary)
+            addressField
+            addressHint
 
             HStack {
                 Spacer()
@@ -67,6 +82,27 @@ public struct QuickConnectView: View {
         .onAppear {
             addressFocused = true
         }
+        #endif
+    }
+
+    private var addressField: some View {
+        TextField("vnc://user@host:5900", text: $address)
+            .focused($addressFocused)
+            .onSubmit(connect)
+            #if os(iOS)
+            .textInputAutocapitalization(.never)
+            .autocorrectionDisabled()
+            .keyboardType(.URL)
+            .submitLabel(.go)
+            #else
+            .textFieldStyle(.roundedBorder)
+            #endif
+    }
+
+    private var addressHint: some View {
+        Text(showsError ? "Enter a valid vnc:// address." : "Port defaults to 5900.")
+            .font(.footnote)
+            .foregroundStyle(showsError ? Theme.Colors.danger : Color.secondary)
     }
 
     private func connect() {

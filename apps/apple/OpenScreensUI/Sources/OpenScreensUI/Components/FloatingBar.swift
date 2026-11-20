@@ -33,7 +33,6 @@ public struct FloatingBar<Content: View>: View {
         }
         .padding(6)
         .glassSurface(in: Capsule(style: .continuous))
-        .shadow(color: .black.opacity(0.28), radius: 18, y: 8)
     }
 }
 

@@ -115,7 +115,7 @@ struct PhoneLibraryView: View {
                 QuickConnectView { url in
                     pendingQuickConnect = url
                 }
-                .presentationDetents([.height(300)])
+                .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
             }
         }
@@ -374,38 +374,19 @@ struct PhoneLibraryView: View {
                     groupName = ""
                     groupDialog = .create
                 } label: {
-                    Image(systemName: "folder.badge.plus")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(Theme.Colors.accent)
-                        .padding(.horizontal, 11)
-                        .padding(.vertical, 7)
-                        .background(.quaternary.opacity(0.5), in: Capsule())
+                    Label("New Group", systemImage: "folder.badge.plus")
+                        .labelStyle(.iconOnly)
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel("New Group")
+                .buttonStyle(.bordered)
             }
         }
         .scrollClipDisabled()
     }
 
     private func chip(_ title: String, selected: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Text(title)
-                .font(.footnote.weight(selected ? .semibold : .regular))
-                .foregroundStyle(selected ? Color.white : Color.primary)
-                .lineLimit(1)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 7)
-                .background {
-                    if selected {
-                        Capsule().fill(Theme.Colors.accent)
-                    } else {
-                        Capsule().fill(.quaternary.opacity(0.5))
-                    }
-                }
-        }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(selected ? .isSelected : [])
+        Toggle(title, isOn: Binding(get: { selected }, set: { _ in action() }))
+            .toggleStyle(.button)
+            .lineLimit(1)
     }
 
     private func sectionContent(_ section: LibrarySection, reordering: Bool = false) -> some View {

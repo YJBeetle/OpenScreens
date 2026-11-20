@@ -56,6 +56,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -844,7 +845,6 @@ private fun ConnectionCard(
     onMoveDown: (() -> Unit)? = null,
 ) {
     val gradient = (connection.accent ?: autoAccent(connection.name)).gradient
-    val thumbnailDescription = stringResource(R.string.library_connection_thumbnail)
     val editDescription = stringResource(R.string.library_edit_connection)
     var menuExpanded by remember { mutableStateOf(false) }
 
@@ -863,8 +863,7 @@ private fun ConnectionCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(92.dp)
-                    .background(Brush.linearGradient(listOf(gradient.start, gradient.end)))
-                    .semantics { contentDescription = thumbnailDescription },
+                    .background(Brush.linearGradient(listOf(gradient.start, gradient.end))),
             ) {
                 Box(
                     modifier = Modifier
@@ -882,23 +881,11 @@ private fun ConnectionCard(
                         modifier = Modifier.size(17.dp),
                     )
                 }
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(6.dp)
-                        .size(28.dp)
-                        .clip(CircleShape)
-                        .background(Color.Black.copy(alpha = 0.26f))
-                        .clickable(onClick = onEdit)
-                        .semantics { contentDescription = editDescription },
-                    contentAlignment = Alignment.Center,
+                FilledTonalIconButton(
+                    onClick = onEdit,
+                    modifier = Modifier.align(Alignment.TopEnd),
                 ) {
-                    Icon(
-                        imageVector = Icons.Outlined.Edit,
-                        contentDescription = null,
-                        tint = Color.White,
-                        modifier = Modifier.size(15.dp),
-                    )
+                    Icon(imageVector = Icons.Outlined.Edit, contentDescription = editDescription)
                 }
             }
             Column(

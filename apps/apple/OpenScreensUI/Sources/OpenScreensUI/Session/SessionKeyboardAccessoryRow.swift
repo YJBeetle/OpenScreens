@@ -71,36 +71,28 @@ struct SessionKeyboardAccessoryRow: View {
         label: String,
         modifier: RemoteModifiers
     ) -> some View {
-        let isSelected = model.keyboardModifiers.contains(modifier)
-        return Button {
-            model.toggleStickyModifier(modifier)
-        } label: {
+        Toggle(isOn: Binding(
+            get: { model.keyboardModifiers.contains(modifier) },
+            set: { _ in model.toggleStickyModifier(modifier) }
+        )) {
             Text(symbol)
-                .font(.system(size: 16, weight: .medium))
-                .foregroundStyle(isSelected ? Color.white : Color.primary)
-                .frame(width: 38, height: 34)
-                .background(
-                    isSelected ? AnyShapeStyle(Theme.Colors.accent) : AnyShapeStyle(.quaternary.opacity(0.65)),
-                    in: RoundedRectangle(cornerRadius: 8, style: .continuous)
-                )
-                .contentShape(Rectangle())
+                .frame(minWidth: 24, minHeight: 26)
         }
-        .buttonStyle(.plain)
+        .toggleStyle(.button)
         .accessibilityLabel(NSLocalizedString(label, comment: "Keyboard key"))
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
     private func keycap(title: String, label: String, action: @escaping () -> Void) -> some View {
         keycap(label: label, action: action) {
             Text(title)
-                .font(.system(size: 13, weight: .medium))
+                .font(.callout.weight(.medium))
         }
     }
 
     private func keycap(systemImage: String, label: String, action: @escaping () -> Void) -> some View {
         keycap(label: label, action: action) {
             Image(systemName: systemImage)
-                .font(.system(size: 13, weight: .semibold))
+                .imageScale(.medium)
         }
     }
 
@@ -111,11 +103,9 @@ struct SessionKeyboardAccessoryRow: View {
     ) -> some View {
         Button(action: action) {
             content()
-                .frame(minWidth: 36, minHeight: 34)
-                .background(.quaternary.opacity(0.65), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                .contentShape(Rectangle())
+                .frame(minWidth: 24, minHeight: 26)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.bordered)
         .accessibilityLabel(NSLocalizedString(label, comment: "Keyboard key"))
     }
 }

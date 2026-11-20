@@ -42,7 +42,6 @@ final class TouchGestureView: UIView, UIGestureRecognizerDelegate {
     private var twoPanTranslation = CGPoint.zero
     private var pinchActive = false
     private var pressActive = false
-    private var suppressSingleTap = false
     private var twoPan: UIPanGestureRecognizer!
     private var pinch: UIPinchGestureRecognizer!
 
@@ -51,6 +50,9 @@ final class TouchGestureView: UIView, UIGestureRecognizerDelegate {
         isMultipleTouchEnabled = true
         backgroundColor = .clear
         isAccessibilityElement = false
+
+        let singleTap = UITapGestureRecognizer(target: self, action: #selector(handleSingleTap))
+        addGestureRecognizer(singleTap)
 
         let singlePan = UIPanGestureRecognizer(target: self, action: #selector(handleSinglePan))
         singlePan.minimumNumberOfTouches = 1
@@ -90,6 +92,7 @@ final class TouchGestureView: UIView, UIGestureRecognizerDelegate {
         held.allowableMovement = 12
         held.minimumPressDuration = 0.45
         addGestureRecognizer(held)
+        singleTap.require(toFail: held)
 
         let heldRight = UILongPressGestureRecognizer(target: self, action: #selector(handleLongPress))
         heldRight.numberOfTouchesRequired = 2
@@ -128,29 +131,20 @@ final class TouchGestureView: UIView, UIGestureRecognizerDelegate {
         return pair.contains { $0 === pinch } && pair.contains { $0 === twoPan }
     }
 
+    @objc private func handleSingleTap(_ gesture: UITapGestureRecognizer) {
+        handlers?.onTap(gesture.location(in: self))
+    }
+
     @objc private func handleSinglePan(_ gesture: UIPanGestureRecognizer) {
         let location = gesture.location(in: self)
         switch gesture.state {
-        case .began:
-            suppressSingleTap = false
-        case .changed:
+        case .began, .changed:
             guard !pressActive else { return }
             let translation = gesture.translation(in: self)
             if (translation.x * translation.x + translation.y * translation.y).squareRoot() > 3 {
                 handlers?.onDrag(location)
             }
-        case .ended:
-            let translation = gesture.translation(in: self)
-            let tapped = (translation.x * translation.x + translation.y * translation.y).squareRoot() <= 6
-            if suppressSingleTap {
-                suppressSingleTap = false
-            } else if tapped && !pressActive {
-                handlers?.onTap(location)
-            }
-            if !pressActive {
-                handlers?.onDragEnd()
-            }
-        case .cancelled, .failed:
+        case .ended, .cancelled, .failed:
             if !pressActive {
                 handlers?.onDragEnd()
             }
@@ -226,7 +220,6 @@ final class TouchGestureView: UIView, UIGestureRecognizerDelegate {
         switch gesture.state {
         case .began:
             pressActive = true
-            suppressSingleTap = true
             handlers?.onPressBegan(button, location)
         case .changed:
             handlers?.onPressMoved(location)

@@ -284,4 +284,6 @@
     <string name="session_enable_curtain">开启幕帘模式</string>
     <string name="session_disable_curtain">关闭幕帘模式</string>
     <string name="session_curtain_error">无法发送幕帘模式请求</string>
+    <string name="session_reconnect">重新连接</string>
+    <string name="session_retry_in">将在 %1$d 秒后重试…</string>
 </resources>

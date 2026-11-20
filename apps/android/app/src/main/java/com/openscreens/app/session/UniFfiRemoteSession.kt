@@ -138,6 +138,7 @@ class UniFfiRemoteSession(
 
     private suspend fun open() = openMutex.withLock {
         detach()
+        if (disposed.get()) return
         closed.set(false)
         _events.emit(SessionEvent.Connecting)
 
@@ -188,13 +189,7 @@ class UniFfiRemoteSession(
             throw cancelled
         } catch (error: Exception) {
             Log.w(TAG, "connect to ${connection.address} failed", error)
-            val challenge = when ((error as? SessionFailure.Session)?.kind) {
-                SessionFailureKind.MISSING_USERNAME -> CredentialChallenge.MissingUsername
-                SessionFailureKind.MISSING_PASSWORD -> CredentialChallenge.MissingPassword
-                SessionFailureKind.AUTHENTICATION_FAILED -> CredentialChallenge.Rejected
-                else -> null
-            }
-            _events.emit(SessionEvent.Failed(describe(error), challenge))
+            _events.emit(failureEvent(error))
             return
         }
 
@@ -535,7 +530,7 @@ class UniFfiRemoteSession(
     }
 
     private suspend fun poll(connected: NativeSession) {
-        var disconnectMessage: String? = null
+        var terminal: SessionEvent = SessionEvent.Disconnected()
         try {
             while (true) {
                 val event = connected.nextEvent() ?: break
@@ -595,7 +590,11 @@ class UniFfiRemoteSession(
                         )
                     is NativeEvent.Disconnected -> {
                         Log.i(TAG, "remote closed the session: ${event.reason}")
-                        disconnectMessage = failureText(event.kind, event.reason)
+                        terminal = if (event.kind == SessionFailureKind.UNKNOWN || event.kind == SessionFailureKind.CLOSED) {
+                            SessionEvent.Disconnected(failureText(event.kind, event.reason))
+                        } else {
+                            failureEvent(event.kind, failureText(event.kind, event.reason))
+                        }
                         break
                     }
                 }
@@ -604,10 +603,10 @@ class UniFfiRemoteSession(
             throw cancelled
         } catch (error: Exception) {
             Log.w(TAG, "session poll failed", error)
-            if (!closed.get()) _events.emit(SessionEvent.Failed(describe(error)))
+            if (!closed.get()) _events.emit(failureEvent(error))
             return
         }
-        if (!closed.get()) _events.emit(SessionEvent.Disconnected(disconnectMessage))
+        if (!closed.get()) _events.emit(terminal)
     }
 
     private suspend fun handleFileTransfer(event: NativeEvent.FileTransfer) {
@@ -882,9 +881,21 @@ class UniFfiRemoteSession(
         height = height.coerceIn(0, UShort.MAX_VALUE.toInt()).toUShort(),
     )
 
-    private fun describe(error: Exception): String = when (error) {
-        is SessionFailure.Session -> failureText(error.kind, error.reason)
-        else -> error.message?.takeIf { it.isNotBlank() } ?: error.javaClass.simpleName
+    private fun failureEvent(error: Exception): SessionEvent.Failed = when (error) {
+        is SessionFailure.Session -> failureEvent(error.kind, failureText(error.kind, error.reason))
+        else -> SessionEvent.Failed(error.message?.takeIf { it.isNotBlank() } ?: error.javaClass.simpleName)
+    }
+
+    private fun failureEvent(kind: SessionFailureKind, reason: String): SessionEvent.Failed {
+        val challenge = when (kind) {
+            SessionFailureKind.MISSING_USERNAME -> CredentialChallenge.MissingUsername
+            SessionFailureKind.MISSING_PASSWORD -> CredentialChallenge.MissingPassword
+            SessionFailureKind.AUTHENTICATION_FAILED -> CredentialChallenge.Rejected
+            else -> null
+        }
+        val retryable = kind == SessionFailureKind.NETWORK || kind == SessionFailureKind.CONNECTION_REFUSED ||
+            kind == SessionFailureKind.CLOSED
+        return SessionEvent.Failed(reason, challenge, retryable)
     }
 
     private fun failureText(kind: SessionFailureKind, reason: String): String = when (kind) {

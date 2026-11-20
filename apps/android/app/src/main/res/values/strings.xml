@@ -277,4 +277,6 @@
     <string name="session_use_account">Use a Mac account</string>
     <string name="session_remember_credentials">Remember credentials</string>
     <string name="session_remember_failed">Could not save credentials.</string>
+    <string name="session_reconnect">Reconnect</string>
+    <string name="session_retry_in">Retrying in %1$d s…</string>
 </resources>

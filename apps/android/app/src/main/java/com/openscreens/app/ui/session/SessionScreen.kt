@@ -192,6 +192,11 @@ fun SessionScreen(
         SessionProvider.create(context, login.attempt, quality, sshKey)
     }
 
+    val recovery = remember(session) { SessionRecovery() }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var foreground by remember(lifecycleOwner) {
+        mutableStateOf(lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED))
+    }
     var status by remember { mutableStateOf(SessionStatus.Connecting) }
     var remoteWidth by remember { mutableIntStateOf(0) }
     var remoteHeight by remember { mutableIntStateOf(0) }
@@ -330,6 +335,7 @@ fun SessionScreen(
 
     LaunchedEffect(session) {
         session.events.collect { event ->
+            if (isExiting) return@collect
             when (event) {
                 SessionEvent.Connecting -> {
                     status = SessionStatus.Connecting
@@ -348,7 +354,6 @@ fun SessionScreen(
                     // emits the new crop with its first complete frame.
                     frame = null
                     viewport = null
-                    if (isExiting) return@collect
                     login.accepted()?.let { accepted ->
                         if (!onRemember(accepted)) {
                             scope.launch { snackbarHostState.showSnackbar(context.getString(R.string.session_remember_failed)) }
@@ -467,19 +472,12 @@ fun SessionScreen(
                 -> Unit
                 is SessionEvent.Disconnected -> {
                     status = SessionStatus.Disconnected
-                    if (!isExiting) {
-                        scope.launch {
-                            snackbarHostState.showSnackbar(
-                                event.message
-                                    ?: context.getString(R.string.session_status_disconnected),
-                            )
-                        }
-                    }
+                    recovery.failed(event.message ?: context.getString(R.string.session_status_disconnected), retryable = true)
                 }
                 is SessionEvent.Failed -> {
                     status = SessionStatus.Failed
                     login.failed(event.challenge)
-                    if (event.challenge == null) scope.launch { snackbarHostState.showSnackbar(event.reason) }
+                    if (event.challenge == null) recovery.failed(event.reason, event.retryable)
                 }
             }
         }
@@ -492,20 +490,21 @@ fun SessionScreen(
     // A backgrounded app may come back with a suspended socket: the poller is still
     // blocked in a read that never returns, so no event ever flips the UI out of
     // "Connected". Rebuild the transport once the app has been away long enough.
-    val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner, session) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
-                Lifecycle.Event.ON_STOP -> backgroundedAt = SystemClock.elapsedRealtime()
+                Lifecycle.Event.ON_STOP -> {
+                    foreground = false
+                    backgroundedAt = SystemClock.elapsedRealtime()
+                }
                 Lifecycle.Event.ON_START -> {
+                    foreground = true
                     val leftAt = backgroundedAt
                     backgroundedAt = 0L
                     if (leftAt == 0L || isExiting || login.challenge != null) return@LifecycleEventObserver
                     val away = SystemClock.elapsedRealtime() - leftAt
-                    val lostWhileAway = status == SessionStatus.Disconnected ||
-                        status == SessionStatus.Failed
-                    val stale = away >= RESUME_RECONNECT_MS && status == SessionStatus.Connected
-                    if (lostWhileAway || stale) {
+                    if (away >= RESUME_RECONNECT_MS && status == SessionStatus.Connected) {
+                        status = SessionStatus.Connecting
                         scope.launch { session.reconnect() }
                     }
                 }
@@ -518,6 +517,48 @@ fun SessionScreen(
 
     DisposableEffect(session) {
         onDispose { session.close() }
+    }
+
+    fun retry(manual: Boolean) {
+        if (isExiting || !foreground || login.challenge != null || !recovery.takeRetry(manual)) return
+        status = SessionStatus.Connecting
+        scope.launch { session.reconnect() }
+    }
+
+    // Leaving the foreground, cancelling, or entering authentication cancels the timer.
+    LaunchedEffect(session, recovery.failure, foreground, isExiting, login.challenge) {
+        if (!foreground || isExiting || login.challenge != null) return@LaunchedEffect
+        recovery.nextDelayMillis?.let {
+            delay(it)
+            retry(manual = false)
+        }
+    }
+    LaunchedEffect(session, status) {
+        if (status == SessionStatus.Connected) {
+            delay(10_000)
+            recovery.stable()
+        }
+    }
+
+    if (!isExiting && login.challenge == null) recovery.failure?.let { failure ->
+        AlertDialog(
+            onDismissRequest = exitSession,
+            title = { Text(stringResource(R.string.session_status_disconnected)) },
+            text = {
+                Column {
+                    Text(failure.message)
+                    recovery.nextDelayMillis?.let {
+                        Text(stringResource(R.string.session_retry_in, it / 1000))
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { retry(manual = true) }) { Text(stringResource(R.string.session_reconnect)) }
+            },
+            dismissButton = {
+                TextButton(onClick = exitSession) { Text(stringResource(R.string.library_cancel)) }
+            },
+        )
     }
 
     login.challenge?.let { required ->

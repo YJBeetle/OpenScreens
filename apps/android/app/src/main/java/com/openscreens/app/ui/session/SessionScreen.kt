@@ -156,6 +156,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.openscreens.app.R
 import com.openscreens.app.data.Connection
+import com.openscreens.app.data.DisconnectAction
 import com.openscreens.app.data.QualityPreset
 import com.openscreens.app.data.SshKey
 import com.openscreens.app.session.SessionClipboard
@@ -273,7 +274,7 @@ fun SessionScreen(
     var pendingDownload by remember { mutableStateOf<PendingDownload?>(null) }
     var downloadLabel by remember { mutableStateOf<String?>(null) }
     var showFileTransfers by remember { mutableStateOf(false) }
-    var confirmTransferDisconnect by remember { mutableStateOf(false) }
+    var disconnectRequest by remember(session) { mutableStateOf<DisconnectRequest?>(null) }
     var sentFiles by remember { mutableStateOf<List<SessionTransferItem>>(emptyList()) }
     var receivedFiles by remember { mutableStateOf<List<SessionTransferItem>>(emptyList()) }
     var trackpadPointer by remember { mutableStateOf<IntOffset?>(null) }
@@ -329,6 +330,7 @@ fun SessionScreen(
     }
 
     val toggleObserveMode: (Boolean) -> Unit = { enabled ->
+        disconnectRequest = null
         session.setObserveMode(enabled)
         observing = enabled
         if (enabled) {
@@ -394,7 +396,7 @@ fun SessionScreen(
         if (!isExiting) {
             isExiting = true
             resetTransferProgress()
-            scope.launch {
+            scope.launch(start = kotlinx.coroutines.CoroutineStart.UNDISPATCHED) {
                 session.disconnect()
                 onExit()
             }
@@ -402,11 +404,11 @@ fun SessionScreen(
     }
 
     val requestExit: () -> Unit = {
-        if (pendingUpload != null || pendingDownload != null) {
-            confirmTransferDisconnect = true
-        } else {
-            exitSession()
-        }
+        disconnectRequest = DisconnectRequest.create(
+            currentConnection, status == SessionStatus.Connected && !observing,
+            interruptsTransfers = pendingUpload != null || pendingDownload != null,
+        )
+        if (disconnectRequest == null) exitSession()
     }
     BackHandler { requestExit() }
     // When the soft keyboard is up, Back should close it before it disconnects.
@@ -472,10 +474,12 @@ fun SessionScreen(
             if (isExiting) return@collect
             when (event) {
                 SessionEvent.MacSessionChoiceRequired -> {
+                    disconnectRequest = null
                     needsMacSessionChoice = true
                     status = SessionStatus.Failed
                 }
                 SessionEvent.Connecting -> {
+                    disconnectRequest = null
                     needsMacSessionChoice = false
                     supportsCurtainMode = false
                     clipboard.reset()
@@ -649,6 +653,7 @@ fun SessionScreen(
                 is SessionEvent.FileTransfer,
                 -> Unit
                 is SessionEvent.Disconnected -> {
+                    disconnectRequest = null
                     clipboard.reset()
                     clipboardFetch?.cancel()
                     showClipboardDialog = false
@@ -657,6 +662,7 @@ fun SessionScreen(
                     recovery.failed(event.message ?: context.getString(R.string.session_status_disconnected), retryable = true)
                 }
                 is SessionEvent.Failed -> {
+                    disconnectRequest = null
                     clipboard.reset()
                     clipboardFetch?.cancel()
                     showClipboardDialog = false
@@ -1799,21 +1805,38 @@ fun SessionScreen(
         )
     }
 
-    if (confirmTransferDisconnect) {
+    disconnectRequest?.let { request ->
         AlertDialog(
-            onDismissRequest = { confirmTransferDisconnect = false },
-            title = { Text(stringResource(R.string.session_transfer_in_progress)) },
-            text = { Text(stringResource(R.string.session_transfer_disconnect_warning)) },
+            onDismissRequest = { disconnectRequest = null },
+            title = {
+                Text(stringResource(if (request.interruptsTransfers) R.string.session_transfer_in_progress else R.string.session_disconnect))
+            },
+            text = {
+                Column {
+                    if (request.action != DisconnectAction.None) {
+                        Text(stringResource(R.string.disconnect_action_confirmation, stringResource(request.action.title)))
+                    }
+                    if (request.interruptsTransfers) Text(stringResource(R.string.session_transfer_disconnect_warning))
+                }
+            },
             confirmButton = {
                 TextButton(onClick = {
-                    confirmTransferDisconnect = false
-                    exitSession()
+                    if (disconnectRequest === request && !isExiting) {
+                        disconnectRequest = null
+                        taps.cancel()
+                        twoFingerTaps.cancel()
+                        request.sendConfirmedAction(
+                            currentConnection, status == SessionStatus.Connected && !observing, remoteWidth, remoteHeight,
+                            session::releaseHeldInput, session::sendPointer, session::sendKey,
+                        )
+                        exitSession()
+                    }
                 }) {
                     Text(stringResource(R.string.session_disconnect))
                 }
             },
             dismissButton = {
-                TextButton(onClick = { confirmTransferDisconnect = false }) {
+                TextButton(onClick = { disconnectRequest = null }) {
                     Text(stringResource(R.string.library_cancel))
                 }
             },

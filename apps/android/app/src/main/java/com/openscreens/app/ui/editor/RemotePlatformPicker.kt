@@ -13,6 +13,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.res.stringResource
 import com.openscreens.app.R
 import com.openscreens.app.data.RemotePlatform
+import com.openscreens.app.data.DisconnectAction
 
 @Composable
 private fun RemotePlatform.label(): String = when (this) {
@@ -35,6 +36,26 @@ internal fun RemotePlatformPicker(selected: RemotePlatform, onSelect: (RemotePla
                 DropdownMenuItem(text = { Text(platform.label()) }, onClick = {
                     expanded = false
                     onSelect(platform)
+                })
+            }
+        }
+    }
+}
+
+@Composable
+internal fun DisconnectActionPicker(platform: RemotePlatform, selected: DisconnectAction, onSelect: (DisconnectAction) -> Unit) {
+    var expanded by remember(platform) { mutableStateOf(false) }
+    val actions = DisconnectAction.options(platform)
+    val action = selected.takeIf { it in actions } ?: DisconnectAction.None
+    Box {
+        OutlinedButton(onClick = { expanded = true }) {
+            Text(stringResource(R.string.disconnect_action_setting, stringResource(action.title)))
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            actions.forEach { option ->
+                DropdownMenuItem(text = { Text(stringResource(option.title)) }, onClick = {
+                    expanded = false
+                    onSelect(option)
                 })
             }
         }

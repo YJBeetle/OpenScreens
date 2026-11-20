@@ -36,6 +36,8 @@ interface RemoteSession {
 
     fun sendPointer(x: Int, y: Int, buttonMask: Int)
 
+    fun releaseHeldInput()
+
     fun sendKey(keysym: Int, pressed: Boolean)
 
     suspend fun sendClipboard(text: String, automatic: Boolean = false)

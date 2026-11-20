@@ -23,6 +23,10 @@ internal data class DesktopCommand(@StringRes val title: Int, val keysym: Int, v
 private fun command(@StringRes title: Int, key: Int, vararg modifiers: Int) =
     DesktopCommand(title, key, modifiers.toList())
 
+internal val lockMac = command(R.string.command_lock, 'q'.code, KEY_CONTROL, KEY_SUPER)
+internal val lockWindows = command(R.string.command_lock, 'l'.code, KEY_SUPER)
+internal val ctrlAltDelete = command(R.string.command_ctrl_alt_delete, 0xFFFF, KEY_CONTROL, KEY_ALT)
+
 internal fun desktopCommands(platform: RemotePlatform): List<DesktopCommand> = when (platform) {
     RemotePlatform.MacOS -> listOf(
         command(R.string.command_mission_control, KEY_UP, KEY_CONTROL),
@@ -33,14 +37,14 @@ internal fun desktopCommands(platform: RemotePlatform): List<DesktopCommand> = w
         command(R.string.command_switch_apps, KEY_TAB, KEY_SUPER),
         command(R.string.command_spotlight, ' '.code, KEY_SUPER),
         command(R.string.command_force_quit, KEY_ESCAPE, KEY_ALT, KEY_SUPER),
-        command(R.string.command_lock, 'q'.code, KEY_CONTROL, KEY_SUPER),
+        lockMac,
     )
     RemotePlatform.Windows -> listOf(
-        command(R.string.command_ctrl_alt_delete, 0xFFFF, KEY_CONTROL, KEY_ALT),
+        ctrlAltDelete,
         command(R.string.command_task_manager, KEY_ESCAPE, KEY_SHIFT, KEY_CONTROL),
         command(R.string.command_desktop, 'd'.code, KEY_SUPER),
         command(R.string.command_switch_apps, KEY_TAB, KEY_ALT),
-        command(R.string.command_lock, 'l'.code, KEY_SUPER),
+        lockWindows,
     )
     RemotePlatform.Linux, RemotePlatform.Unix -> listOf(
         command(R.string.command_switch_apps, KEY_TAB, KEY_ALT),

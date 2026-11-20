@@ -8,6 +8,9 @@ import os
 #if DEBUG
 @MainActor @Observable
 public final class CanvasPresentation {
+    public nonisolated static let isEnabled =
+        ProcessInfo.processInfo.environment["OPENSCREENS_FIRST_FRAME_DIAGNOSTICS"] == "1"
+
     public enum Stage { case waiting, uploaded, submitted, presented }
     public fileprivate(set) var stage: Stage = .waiting
     fileprivate var generation = 0
@@ -26,7 +29,7 @@ public final class CanvasPresentation {
 @MainActor
 public final class RemoteCanvasRenderer {
     #if DEBUG
-    public let presentation = CanvasPresentation()
+    public let presentation = CanvasPresentation.isEnabled ? CanvasPresentation() : nil
     #endif
     private static let logger = Logger(subsystem: "app.openscreens.canvas", category: "RemoteCanvas")
     /// Conservative 2D texture limit (the simulator aborts above 8192).
@@ -162,7 +165,7 @@ public final class RemoteCanvasRenderer {
 
     private func didUpload() {
         #if DEBUG
-        if presentation.stage == .waiting { presentation.stage = .uploaded }
+        if let presentation, presentation.stage == .waiting { presentation.stage = .uploaded }
         #endif
         requestRedraw()
     }
@@ -170,8 +173,8 @@ public final class RemoteCanvasRenderer {
     /// Discards the current frame, e.g. when a session disconnects.
     public func reset() {
         #if DEBUG
-        presentation.generation += 1
-        presentation.stage = .waiting
+        presentation?.generation += 1
+        presentation?.stage = .waiting
         #endif
         texture = nil
         frameWidth = 0
@@ -239,7 +242,7 @@ public final class RemoteCanvasRenderer {
         encoder.endEncoding()
 
         #if DEBUG
-        if presentation.stage == .uploaded {
+        if let presentation, presentation.stage == .uploaded {
             presentation.stage = .submitted
             let generation = presentation.generation
             drawable.addPresentedHandler { [weak presentation] drawable in

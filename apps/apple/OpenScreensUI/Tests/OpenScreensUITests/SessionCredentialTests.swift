@@ -28,7 +28,9 @@ final class SessionCredentialTests: XCTestCase {
         try await wait { model.state.isConnected }
         try await wait { model.receivedFrames == 2 }
         #if DEBUG
-        XCTAssertEqual(model.firstUpdateHasColor, true)
+        let diagnosticsRequested = ProcessInfo.processInfo.environment["OPENSCREENS_FIRST_FRAME_DIAGNOSTICS"] == "1"
+        XCTAssertEqual(model.firstUpdateHasColor, diagnosticsRequested ? true : nil)
+        XCTAssertEqual(model.renderer.presentation != nil, diagnosticsRequested)
         #endif
         XCTAssertEqual(model.frameSize, CGSize(width: 2, height: 2))
         if MTLCreateSystemDefaultDevice() != nil {

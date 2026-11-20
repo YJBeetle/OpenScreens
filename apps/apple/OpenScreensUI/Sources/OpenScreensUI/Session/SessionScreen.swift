@@ -570,9 +570,11 @@ public struct SessionScreen: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                 #if DEBUG && os(iOS)
-                Text(firstFrameDetail)
-                    .font(.caption2.monospacedDigit())
-                    .foregroundStyle(.white.opacity(0.7))
+                if let presentation = model.renderer.presentation {
+                    Text(firstFrameDetail(presentation.stage))
+                        .font(.caption2.monospacedDigit())
+                        .foregroundStyle(.white.opacity(0.7))
+                }
                 #endif
             }
 
@@ -803,10 +805,10 @@ public struct SessionScreen: View {
     }
 
     #if DEBUG && os(iOS)
-    private var firstFrameDetail: String {
+    private func firstFrameDetail(_ stage: CanvasPresentation.Stage) -> String {
         guard let hasColor = model.firstUpdateHasColor else { return "RFB · waiting for pixels" }
         let input = hasColor ? "first update has color" : "first update RGB black"
-        let output = switch model.renderer.presentation.stage {
+        let output = switch stage {
         case .waiting: "waiting for upload"
         case .uploaded: "uploaded"
         case .submitted: "submitted"

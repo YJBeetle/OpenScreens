@@ -82,7 +82,9 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
     /// Crop currently subscribed for this session.
     private var viewport: OpenScreensUI.RemoteViewport?
     private var announceViewport = false
+    #if DEBUG
     private var receivedDesktopLayout = false
+    #endif
     private var cursor = CGPoint(x: 0.5, y: 0.5)
     private var buttonMask: UInt8 = 0
     private var observing = false
@@ -848,9 +850,11 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
             continuation.yield(.state(.connected))
 
         case .frame(let sequence, let rects):
-            if sequence == 1 {
+            #if DEBUG
+            if CanvasPresentation.isEnabled, sequence == 1 {
                 logger.info("Received first RFB pixel update with \(rects.count) damage rectangles")
             }
+            #endif
             guard width > 0, height > 0 else { return }
             if let viewport {
                 if announceViewport {
@@ -943,10 +947,12 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
             continuation.yield(.framebufferSize(width: Int(width), height: Int(height)))
 
         case .desktopLayout(let width, let height, let screens):
-            if !receivedDesktopLayout {
+            #if DEBUG
+            if CanvasPresentation.isEnabled, !receivedDesktopLayout {
                 logger.info("Received first desktop layout: \(width)x\(height), \(screens.count) displays")
                 receivedDesktopLayout = true
             }
+            #endif
             self.width = width
             self.height = height
             updateDisplayScale()

@@ -317,7 +317,7 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
     }
 
     public func sendClipboard(_ text: String) async {
-        guard !text.isEmpty else { return }
+        guard !observing, !text.isEmpty else { return }
         lastSentClipboard = text
         inputContinuation.yield(.clipboard(text))
     }
@@ -328,7 +328,7 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
     /// payload; reading the platform pasteboard is gated by the per-connection
     /// shared clipboard setting.
     private func handleClipboardRequest() {
-        guard sharedClipboard, session != nil, !finished else { return }
+        guard sharedClipboard, !observing, session != nil, !finished else { return }
         Task { @MainActor [weak self] in
             guard let self, let text = PlatformClipboard.string, !text.isEmpty else { return }
             await self.respondToClipboardRequest(text)
@@ -336,7 +336,7 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
     }
 
     private func respondToClipboardRequest(_ text: String) async {
-        guard let session, !finished, sharedClipboard else { return }
+        guard let session, !finished, sharedClipboard, !observing else { return }
         guard text != lastRemoteClipboard, text != lastSentClipboard else { return }
         do {
             try await session.sendClipboard(text: text)

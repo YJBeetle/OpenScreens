@@ -59,7 +59,11 @@ public final class SessionViewModel {
     public let profile: ConnectionProfile
     public let renderer: RemoteCanvasRenderer
 
-    public private(set) var state: RemoteSessionState = .idle
+    public private(set) var state: RemoteSessionState = .idle {
+        didSet {
+            updateIdleTimer()
+        }
+    }
     public private(set) var displays: [RemoteDisplay] = []
     public var selectedDisplayID: Int?
     /// Size of the server framebuffer; frames may be sampled down from this.
@@ -106,6 +110,7 @@ public final class SessionViewModel {
     /// On-screen translation of the zoomed image, in points.
     public private(set) var pan: CGSize = .zero
 
+    @ObservationIgnored private let idleTimerOwner = UUID()
     @ObservationIgnored private let service: any RemoteSessionService
     @ObservationIgnored private var session: (any RemoteSessionProtocol)?
     @ObservationIgnored private var eventTask: Task<Void, Never>?
@@ -146,7 +151,6 @@ public final class SessionViewModel {
         isStopping = false
         reconnectAttempts = 0
         failureMessage = nil
-        PlatformScreen.setIdleTimerDisabled(profile.controls.keepScreenAwake)
         beginSession(isReconnect: false)
     }
 
@@ -156,7 +160,7 @@ public final class SessionViewModel {
         reconnectTask?.cancel()
         reconnectTask = nil
         endTransport()
-        PlatformScreen.setIdleTimerDisabled(false)
+        PlatformScreen.setIdleTimerDisabled(false, for: idleTimerOwner)
     }
 
     public func disconnect() {
@@ -166,7 +170,6 @@ public final class SessionViewModel {
         reconnectTask = nil
         state = .disconnected(reason: NSLocalizedString("Disconnected", comment: "Session state"))
         endTransport()
-        PlatformScreen.setIdleTimerDisabled(false)
     }
 
     public func reconnect() {
@@ -203,6 +206,11 @@ public final class SessionViewModel {
         #endif
     }
 
+    private func updateIdleTimer() {
+        let isActive = !isStopping && state != .idle && !state.isTerminal
+        PlatformScreen.setIdleTimerDisabled(profile.controls.keepScreenAwake && isActive, for: idleTimerOwner)
+    }
+
     private func restartTransport() {
         guard !isStopping else { return }
         reconnectTask?.cancel()
@@ -231,7 +239,8 @@ public final class SessionViewModel {
             }
         }
 
-        let profile = profile
+        var profile = profile
+        profile.controls.startInObserveMode = isObserving
         connectTask = Task { [weak self, session, profile] in
             do {
                 try await session.connect(profile: profile)

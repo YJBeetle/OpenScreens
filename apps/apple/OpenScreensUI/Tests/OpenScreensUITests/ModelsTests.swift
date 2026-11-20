@@ -90,6 +90,33 @@ final class ConnectionProfileTests: XCTestCase {
         XCTAssertEqual(customPort.endpoint, "b.local:5901")
     }
 
+    func testObserveLaunchDoesNotChangeSavedPreference() {
+        var profile = ConnectionProfile(name: "Studio", host: "studio.local")
+        let observed = profile.forSession(observeOnly: true)
+
+        XCTAssertEqual(observed.id, profile.id)
+        XCTAssertTrue(observed.controls.startInObserveMode)
+        XCTAssertFalse(profile.controls.startInObserveMode)
+        XCTAssertEqual(profile.forSession(observeOnly: false), profile)
+
+        profile.controls.startInObserveMode = true
+        XCTAssertTrue(profile.forSession(observeOnly: false).controls.startInObserveMode)
+    }
+
+    func testLegacyConnectProfileDecodesIntoCustomLibrary() throws {
+        let profile = ConnectionProfile(name: "Studio", host: "studio.local", groupID: UUID())
+        let encoded = try JSONEncoder().encode(profile)
+        var legacy = try XCTUnwrap(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+        legacy["section"] = "connect"
+
+        let decoded = try JSONDecoder().decode(
+            ConnectionProfile.self,
+            from: JSONSerialization.data(withJSONObject: legacy)
+        )
+        XCTAssertEqual(decoded, profile)
+        XCTAssertFalse(LibrarySection.allCases.contains { $0.rawValue == "connect" })
+    }
+
     func testSuggestedPaletteIsStable() {
         let id = UUID(uuidString: "0F0E0D0C-0B0A-4009-8007-000504030201")!
         let first = ConnectionProfile.suggestedPalette(for: id)

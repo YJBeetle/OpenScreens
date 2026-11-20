@@ -33,7 +33,6 @@
 "Library" = "连接库";
 "Library tabs" = "连接库标签页";
 "Services" = "服务";
-"Not configured" = "未配置";
 "Search" = "搜索";
 "Search Connections" = "搜索连接";
 "Search connections" = "搜索连接";
@@ -56,7 +55,6 @@
 "Computers discovered on this network appear here. You can also add one manually." = "在此网络中发现的计算机会显示在这里。你也可以手动添加。";
 "Connections shared with you as links appear here." = "以链接分享给你的连接会显示在这里。";
 "Add a computer to start a remote session." = "添加一台电脑以开始远程会话。";
-"OpenScreens connects directly to your computers. There is no relay account: use a LAN address, an SSH tunnel or your own VPN." = "OpenScreens 会直接连接你的电脑，无需中继账号：可使用局域网地址、SSH 隧道或你自己的 VPN。";
 
 /* MARK: - Phone library subtitles */
 "1 computer discovered" = "发现 1 台电脑";
@@ -182,6 +180,7 @@
 "Taps jump the pointer to the touched spot. Drag to move the pointer." = "轻点会将指针移到触摸位置，拖移可移动指针。";
 "The screen behaves like a trackpad; the pointer moves relative to your fingers." = "屏幕如同触控板，指针会相对手指移动。";
 "Use relative touch movement and pair a hardware mouse when one is available." = "使用相对触摸移动，并在有硬件鼠标时配对使用。";
+"Connect in Observe Mode" = "以观察模式连接";
 "Start in Observe Mode" = "以查看模式启动";
 "Use Shared Clipboard" = "使用共享剪贴板";
 "Session" = "会话";

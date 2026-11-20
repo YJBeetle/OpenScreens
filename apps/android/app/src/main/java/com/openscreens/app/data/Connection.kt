@@ -34,6 +34,7 @@ data class Connection(
     val lastConnectedAt: Long? = null,
     /** User-created library folder, when the connection belongs to one. */
     val groupId: String? = null,
+    val requestMacSharing: Boolean = false,
 ) {
     val address: String
         get() = "$host:$port"

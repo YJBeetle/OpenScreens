@@ -85,6 +85,7 @@ impl From<SessionConfig> for EngineConfig {
             // Apple servers are detected during the handshake; non-Apple
             // servers keep the standard 3.8 flow.
             apple_session: true,
+            request_mac_sharing: false,
             adaptive_dct: true,
             wireguard: config
                 .wireguard_config
@@ -518,6 +519,18 @@ impl RemoteSession {
     #[uniffi::constructor]
     pub async fn connect(config: SessionConfig) -> Result<Arc<Self>, SessionFailure> {
         let session = Session::connect(config.into()).await.map_err(to_failure)?;
+        Ok(Arc::new(Self {
+            session: Arc::new(session),
+        }))
+    }
+
+    #[uniffi::constructor]
+    pub async fn connect_requesting_mac_sharing(
+        config: SessionConfig,
+    ) -> Result<Arc<Self>, SessionFailure> {
+        let mut config: EngineConfig = config.into();
+        config.request_mac_sharing = true;
+        let session = Session::connect(config).await.map_err(to_failure)?;
         Ok(Arc::new(Self {
             session: Arc::new(session),
         }))

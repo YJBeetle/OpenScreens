@@ -108,6 +108,8 @@ pub struct SessionConfig {
     pub frame_interval_ms: u16,
     /// Negotiate Apple's RFB 3.889 extension handshake when available.
     pub apple_session: bool,
+    /// Explicitly request the console session after authenticating a Mac account.
+    pub request_mac_sharing: bool,
     /// Advertise and decode Apple Adaptive DCT (encoding 1011).
     pub adaptive_dct: bool,
     /// Route the target connection through a userspace WireGuard tunnel.
@@ -171,6 +173,7 @@ impl SessionConfig {
             quality: 9,
             frame_interval_ms: 16,
             apple_session: false,
+            request_mac_sharing: false,
             adaptive_dct: false,
             wireguard: None,
             openvpn: None,
@@ -497,6 +500,7 @@ impl Session {
                 password: config.password.clone(),
                 shared: config.shared,
                 apple_session: config.apple_session,
+                request_mac_sharing: config.request_mac_sharing,
             },
         )
         .await?;

@@ -164,7 +164,11 @@ class UniFfiRemoteSession(
         )
 
         val connected = try {
-            NativeSession.connect(config)
+            if (connection.requestMacSharing) {
+                NativeSession.connectRequestingMacSharing(config)
+            } else {
+                NativeSession.connect(config)
+            }
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (error: Exception) {

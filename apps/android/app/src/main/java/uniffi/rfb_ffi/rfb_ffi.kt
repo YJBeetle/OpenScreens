@@ -752,6 +752,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Int
     external fun uniffi_rfb_ffi_checksum_constructor_remotesession_connect(
     ): Int
+    external fun uniffi_rfb_ffi_checksum_constructor_remotesession_connect_requesting_mac_sharing(
+    ): Int
     external fun ffi_rfb_ffi_uniffi_contract_version(
     ): Int
 
@@ -777,6 +779,8 @@ internal object UniffiLib {
     external fun uniffi_rfb_ffi_fn_free_remotesession(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
     external fun uniffi_rfb_ffi_fn_constructor_remotesession_connect(`config`: RustBuffer.ByValue,
+    ): Long
+    external fun uniffi_rfb_ffi_fn_constructor_remotesession_connect_requesting_mac_sharing(`config`: RustBuffer.ByValue,
     ): Long
     external fun uniffi_rfb_ffi_fn_method_remotesession_announce_upload(`ptr`: Long,`handle`: Int,`fileUrls`: RustBuffer.ByValue,
     ): Long
@@ -1068,6 +1072,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_rfb_ffi_checksum_constructor_remotesession_connect() and 0xFFFF) != 42150) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_rfb_ffi_checksum_constructor_remotesession_connect_requesting_mac_sharing() and 0xFFFF) != 55922) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
 }
@@ -2396,6 +2403,23 @@ open class RemoteSession: Disposable, AutoCloseable, RemoteSessionInterface
     }
 
         
+    @Throws(SessionFailure::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+     suspend fun `connectRequestingMacSharing`(`config`: SessionConfig) : RemoteSession {
+        return uniffiRustCallAsync(
+        UniffiLib.uniffi_rfb_ffi_fn_constructor_remotesession_connect_requesting_mac_sharing(
+        FfiConverterTypeSessionConfig.lower(`config`),),
+        { future, callback, continuation -> UniffiLib.ffi_rfb_ffi_rust_future_poll_u64(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_rfb_ffi_rust_future_complete_u64(future, continuation) },
+        { future -> UniffiLib.ffi_rfb_ffi_rust_future_free_u64(future) },
+        // lift function
+        { FfiConverterTypeRemoteSession.lift(it) },
+        // Error FFI converter
+        SessionFailure.ErrorHandler,
+    )
+    }
+
+
     }
     
 }

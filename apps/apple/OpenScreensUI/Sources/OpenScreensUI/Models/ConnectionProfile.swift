@@ -362,6 +362,7 @@ public enum RemoteOS: String, Codable, CaseIterable, Identifiable, Sendable {
 public enum AuthenticationMethod: String, Codable, CaseIterable, Identifiable, Sendable {
     case vncPassword
     case macOSAccount
+    case macOSAccountSharing
     case none
 
     public var id: String { rawValue }
@@ -369,12 +370,13 @@ public enum AuthenticationMethod: String, Codable, CaseIterable, Identifiable, S
     public var title: String {
         switch self {
         case .vncPassword: NSLocalizedString("VNC Password", comment: "Authentication method")
+        case .macOSAccountSharing: NSLocalizedString("Mac Account — Request Shared Session", comment: "Authentication method")
         case .macOSAccount: NSLocalizedString("macOS Account", comment: "Authentication method")
         case .none: NSLocalizedString("None", comment: "Authentication method")
         }
     }
 
-    public var requiresUsername: Bool { self == .macOSAccount }
+    public var requiresUsername: Bool { self == .macOSAccount || self == .macOSAccountSharing }
 }
 
 /// How touch input is translated into remote pointer movement.

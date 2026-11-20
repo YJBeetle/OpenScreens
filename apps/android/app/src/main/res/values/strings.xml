@@ -275,4 +275,5 @@
     <string name="session_enable_curtain">Enable Curtain Mode</string>
     <string name="session_disable_curtain">Disable Curtain Mode</string>
     <string name="session_curtain_error">Could not send Curtain Mode request</string>
+    <string name="editor_request_mac_sharing">Mac account — request shared session</string>
 </resources>

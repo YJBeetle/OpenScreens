@@ -273,4 +273,5 @@
     <string name="session_enable_curtain">开启幕帘模式</string>
     <string name="session_disable_curtain">关闭幕帘模式</string>
     <string name="session_curtain_error">无法发送幕帘模式请求</string>
+    <string name="editor_request_mac_sharing">Mac 账户 — 请求共享现有会话</string>
 </resources>

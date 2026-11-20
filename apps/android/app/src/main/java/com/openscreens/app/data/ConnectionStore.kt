@@ -141,6 +141,7 @@ class ConnectionStore(
                 .put("host", connection.host)
                 .put("port", connection.port)
                 .put("username", connection.username)
+                .put("requestMacSharing", connection.requestMacSharing)
                 .put("vncPassword", connection.vncPassword)
                 .put("quality", connection.quality.name)
                 .put("zoomEnabled", connection.zoomEnabled)
@@ -208,6 +209,7 @@ class ConnectionStore(
                         host = item.getString("host"),
                         port = item.optInt("port", Connection.DEFAULT_VNC_PORT),
                         username = item.optString("username"),
+                        requestMacSharing = item.optBoolean("requestMacSharing", false),
                         vncPassword = item.optString("vncPassword"),
                         wireGuardConfig = item.optString("wireGuardConfig").takeIf { it.isNotBlank() },
                         openVpnConfig = item.optString("openVpnConfig").takeIf { it.isNotBlank() },

@@ -965,7 +965,8 @@ struct ReaderState {
     dct: Option<rfb_codec::apple_dct::AdaptiveDctDecoder>,
     dct_active: bool,
     dct_failed: bool,
-    dct_full_refresh: bool,
+    full_refresh: bool,
+    refresh_on_first_layout: bool,
     downloads: Arc<Mutex<HashMap<u32, DownloadTransfer>>>,
     commands: mpsc::Sender<Vec<u8>>,
     last_clipboard: Arc<Mutex<Option<Vec<u8>>>>,
@@ -1014,7 +1015,8 @@ async fn reader_task<R>(
         dct: None,
         dct_active: adaptive_dct,
         dct_failed: false,
-        dct_full_refresh: false,
+        full_refresh: false,
+        refresh_on_first_layout: apple_session,
         downloads,
         commands: commands.clone(),
         last_clipboard,
@@ -1081,7 +1083,7 @@ async fn reader_task<R>(
                                 (0, 0, width, height)
                             }
                         };
-                    let incremental = !std::mem::take(&mut state.dct_full_refresh);
+                    let incremental = !std::mem::take(&mut state.full_refresh);
                     let request = framebuffer_update_request(incremental, x, y, width, height);
                     if commands.send(request.to_vec()).await.is_err() {
                         break;
@@ -1631,6 +1633,9 @@ where
                         height,
                     },
                 ) {
+                    // Type 2 only updates quantisation tables. Copying the DCT
+                    // backing store here would publish untouched pixels as damage.
+                    Ok(_) if data[4] == 2 => continue,
                     Ok(_) => {
                         let stride = usize::from(frame_width) * 4;
                         let row_bytes = usize::from(width) * 4;
@@ -1663,7 +1668,7 @@ where
                 state.dct = None;
                 state.dct_active = false;
                 state.dct_failed = true;
-                state.dct_full_refresh = true;
+                state.full_refresh = true;
             }
             continue;
         }
@@ -1717,6 +1722,18 @@ where
     }
 
     if let Some((width, height, screens)) = layout {
+        // An Apple server can answer the initial full request with just
+        // DisplayInfo. An incremental request can then wait on an idle desktop
+        // forever. Ask once for pixels using the newly advertised geometry.
+        if state.refresh_on_first_layout
+            && *sequence == 0
+            && damaged.is_empty()
+            && width > 0
+            && height > 0
+        {
+            state.refresh_on_first_layout = false;
+            state.full_refresh = true;
+        }
         events
             .send(Event::DesktopLayout {
                 width,

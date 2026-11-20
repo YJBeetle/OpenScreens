@@ -88,6 +88,7 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
     private var cursor = CGPoint(x: 0.5, y: 0.5)
     private var buttonMask: UInt8 = 0
     private var observing = false
+    private var connecting: OpenScreensCore.ConnectionAttempt?
     private var finished = false
     private var sharedClipboard = true
     /// Callers waiting for the 0x20 drag info that answers a 0x0E drag-out.
@@ -133,7 +134,7 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
     }
 
     public func connect(profile: ConnectionProfile, password: String?, macSessionChoice: MacSessionChoice?) async throws {
-        guard session == nil, !finished else { return }
+        guard session == nil, connecting == nil, !finished else { return }
         observing = profile.controls.startInObserveMode
         sharedClipboard = profile.controls.sharedClipboard
         cursor = CGPoint(x: 0.5, y: 0.5)
@@ -229,14 +230,22 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
             sshHostKeyFingerprint: sshFingerprint
         )
 
+        let target: MacSessionTarget?
+        if macSessionChoice == .personal {
+            target = .personal
+        } else if macSessionChoice == .share || profile.authentication == .macOSAccountSharing {
+            target = .shared
+        } else {
+            target = nil
+        }
+        let attempt = OpenScreensCore.ConnectionAttempt()
+        connecting = attempt
+        defer { connecting = nil }
         do {
-            let session: OpenScreensCore.RemoteSession
-            if macSessionChoice == .personal {
-                session = try await OpenScreensCore.RemoteSession.connectPersonalMacSession(config: config)
-            } else if macSessionChoice == .share || profile.authentication == .macOSAccountSharing {
-                session = try await OpenScreensCore.RemoteSession.connectRequestingMacSharing(config: config)
-            } else {
-                session = try await OpenScreensCore.RemoteSession.connect(config: config)
+            let session = try await withTaskCancellationHandler {
+                try await attempt.connect(config: config, target: target)
+            } onCancel: {
+                attempt.cancel()
             }
             guard !finished, !Task.isCancelled else { throw CancellationError() }
             try await session.setClipboardSharing(enabled: sharedClipboard && !observing)
@@ -249,6 +258,7 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
             startEventPump(session)
             startInputPump(session)
         } catch {
+            if Task.isCancelled || finished { throw CancellationError() }
             logger.error("connect failed: \(error.localizedDescription, privacy: .public)")
             if case let OpenScreensCore.SessionFailure.Session(kind, reason) = error {
                 throw RemoteSessionFailure(kind: kind.remoteKind, reason: reason)
@@ -258,6 +268,7 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
     }
 
     public func disconnect() async {
+        connecting?.cancel()
         let reason = NSLocalizedString("Connection closed", comment: "Session disconnect reason")
         guard let native = session else {
             finish(reason: reason)

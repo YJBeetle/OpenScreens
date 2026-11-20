@@ -31,6 +31,8 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import uniffi.rfb_ffi.ConnectionAttempt
+import uniffi.rfb_ffi.MacSessionTarget
 import uniffi.rfb_ffi.Rect
 import uniffi.rfb_ffi.SessionConfig
 import uniffi.rfb_ffi.SessionFailure
@@ -89,6 +91,8 @@ class UniFfiRemoteSession(
     @Volatile private var clipboardSharing = connection.sharedClipboard
     private val disposed = AtomicBoolean(false)
     private val openMutex = Mutex()
+    private val attemptLock = Any()
+    private var pendingAttempt: ConnectionAttempt? = null
     // Serializes viewport reallocation against frame rendering: the UI may
     // change the crop while the poller is painting the previous buffer.
     private val frameMutex = Mutex()
@@ -191,17 +195,21 @@ class UniFfiRemoteSession(
             sshHostKeyFingerprint = ssh?.hostKeyFingerprint?.ifBlank { null },
         )
 
+        val target = when {
+            macSessionChoice == MacSessionChoice.Personal -> MacSessionTarget.PERSONAL
+            macSessionChoice == MacSessionChoice.Share || connection.requestMacSharing -> MacSessionTarget.SHARED
+            else -> null
+        }
+        val attempt = synchronized(attemptLock) {
+            if (disposed.get()) return
+            ConnectionAttempt().also { pendingAttempt = it }
+        }
         val connected = try {
-            if (macSessionChoice == MacSessionChoice.Personal) {
-                NativeSession.connectPersonalMacSession(config)
-            } else if (macSessionChoice == MacSessionChoice.Share || connection.requestMacSharing) {
-                NativeSession.connectRequestingMacSharing(config)
-            } else {
-                NativeSession.connect(config)
-            }
+            attempt.connect(config, target)
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (error: Exception) {
+            if (disposed.get()) return
             Log.w(TAG, "connect to ${connection.address} failed", error)
             if (error is SessionFailure.Session && error.kind == SessionFailureKind.MAC_SESSION_CHOICE_REQUIRED) {
                 _events.emit(SessionEvent.MacSessionChoiceRequired)
@@ -209,6 +217,9 @@ class UniFfiRemoteSession(
                 _events.emit(failureEvent(error))
             }
             return
+        } finally {
+            synchronized(attemptLock) { pendingAttempt = null }
+            attempt.close()
         }
 
         try {
@@ -268,15 +279,14 @@ class UniFfiRemoteSession(
     }
 
     override suspend fun disconnect() {
-        val hadSession = session != null
         close()
-        // A pending handshake releases its own transport when it returns.
-        if (hadSession) shutdown.join()
+        shutdown.join()
         _events.emit(SessionEvent.Disconnected())
     }
 
     override fun close() {
         disposed.set(true)
+        synchronized(attemptLock) { pendingAttempt?.cancel() }
         shutdown.start()
     }
 

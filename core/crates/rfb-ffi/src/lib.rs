@@ -511,6 +511,53 @@ pub fn validate_openvpn_profile(
     })
 }
 
+/// The Apple session to request if the server offers a selection.
+#[derive(uniffi::Enum)]
+pub enum MacSessionTarget {
+    Personal,
+    Shared,
+}
+
+/// Cancels the transport even before authentication yields a RemoteSession.
+/// Cancellation is sticky so closing just before the first poll also works.
+#[derive(uniffi::Object)]
+pub struct ConnectionAttempt {
+    cancelled: tokio::sync::watch::Sender<bool>,
+}
+
+#[uniffi::export(async_runtime = "tokio")]
+impl ConnectionAttempt {
+    #[uniffi::constructor]
+    pub fn new() -> Arc<Self> {
+        Arc::new(Self {
+            cancelled: tokio::sync::watch::Sender::new(false),
+        })
+    }
+
+    pub fn cancel(&self) {
+        self.cancelled.send_replace(true);
+    }
+
+    pub async fn connect(
+        &self,
+        config: SessionConfig,
+        target: Option<MacSessionTarget>,
+    ) -> Result<Arc<RemoteSession>, SessionFailure> {
+        let mut cancelled = self.cancelled.subscribe();
+        tokio::select! {
+            biased;
+            _ = cancelled.wait_for(|value| *value) => Err(to_failure(rfb_engine::session::SessionError::Closed)),
+            result = async {
+                match target {
+                    Some(MacSessionTarget::Personal) => RemoteSession::connect_personal_mac_session(config).await,
+                    Some(MacSessionTarget::Shared) => RemoteSession::connect_requesting_mac_sharing(config).await,
+                    None => RemoteSession::connect(config).await,
+                }
+            } => result
+        }
+    }
+}
+
 #[derive(uniffi::Object)]
 pub struct RemoteSession {
     session: Arc<Session>,

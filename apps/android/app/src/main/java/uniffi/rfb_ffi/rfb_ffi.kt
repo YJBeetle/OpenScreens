@@ -2497,7 +2497,7 @@ open class RemoteSession: Disposable, AutoCloseable, RemoteSessionInterface
     )
     }
 
-
+        
     @Throws(SessionFailure::class)
     @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
      suspend fun `connectRequestingMacSharing`(`config`: SessionConfig) : RemoteSession {

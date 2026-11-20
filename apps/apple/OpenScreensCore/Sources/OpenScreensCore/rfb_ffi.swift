@@ -817,7 +817,7 @@ public static func connectPersonalMacSession(config: SessionConfig)async throws 
             errorHandler: FfiConverterTypeSessionFailure_lift
         )
 }
-
+    
 public static func connectRequestingMacSharing(config: SessionConfig)async throws  -> RemoteSession  {
     return
         try  await uniffiRustCallAsync(
@@ -2382,7 +2382,7 @@ public struct FfiConverterTypeSessionFailureKind: FfiConverterRustBuffer {
         case 14: return .invalidInput
         
         case 15: return .macSessionChoiceRequired
-
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -2446,10 +2446,10 @@ public struct FfiConverterTypeSessionFailureKind: FfiConverterRustBuffer {
         case .invalidInput:
             writeInt(&buf, Int32(14))
         
-
+        
         case .macSessionChoiceRequired:
             writeInt(&buf, Int32(15))
-
+        
         }
     }
 }

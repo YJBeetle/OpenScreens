@@ -99,7 +99,7 @@ public final class NearbyDiscovery: NSObject {
 }
 
 /// NetService calls its delegates on the run loop the browser was created on.
-extension NearbyDiscovery: @MainActor NetServiceBrowserDelegate, @MainActor NetServiceDelegate {
+extension NearbyDiscovery: @preconcurrency NetServiceBrowserDelegate, @preconcurrency NetServiceDelegate {
     public func netServiceBrowser(
         _ browser: NetServiceBrowser,
         didFind service: NetService,

@@ -15,9 +15,11 @@ internal class SessionClipboard(
         latestRemote = null
     }
 
-    fun receive(text: String, focused: Boolean, requested: Boolean = false) {
+    fun receive(text: String, focused: Boolean, requested: Boolean = false): Boolean {
         latestRemote = text
-        if (requested || (shared && focused)) write(text)
+        if (!focused || (!requested && !shared)) return false
+        write(text)
+        return true
     }
 
     fun localText(): String? = read()?.takeIf { it.isNotEmpty() }

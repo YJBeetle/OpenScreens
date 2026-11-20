@@ -31,6 +31,17 @@ class SessionClipboardTest {
         assertEquals("remote", clipboard.localText())
     }
 
+    @Test fun delayedReplyAfterFocusLossIsCachedUntilExplicitCopy() {
+        for (shared in listOf(false, true)) {
+            var local = "copied in another app"
+            val clipboard = SessionClipboard(shared, { local }, { local = it })
+            assertFalse(clipboard.receive("late reply", focused = false, requested = true))
+            assertEquals("copied in another app", local)
+            assertTrue(clipboard.copyLatest())
+            assertEquals("late reply", local)
+        }
+    }
+
     @Test fun pushOnlyCopyUsesTheLatestTextFromThisTransport() {
         var local = "unrelated"
         val clipboard = SessionClipboard(true, { local }, { local = it })

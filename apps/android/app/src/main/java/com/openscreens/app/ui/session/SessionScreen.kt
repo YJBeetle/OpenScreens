@@ -115,6 +115,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.Role
@@ -219,6 +220,7 @@ fun SessionScreen(
         )
     }
     var clipboardFetch by remember(session) { mutableStateOf<Job?>(null) }
+    var fetchAfterDialog by remember(session) { mutableStateOf(false) }
 
     var status by remember { mutableStateOf(SessionStatus.Connecting) }
     var remoteWidth by remember { mutableIntStateOf(0) }
@@ -478,6 +480,7 @@ fun SessionScreen(
                     needsMacSessionChoice = false
                     supportsCurtainMode = false
                     clipboard.reset()
+                    fetchAfterDialog = false
                     clipboardFetch?.cancel()
                     showClipboardDialog = false
                     status = SessionStatus.Connecting
@@ -590,8 +593,7 @@ fun SessionScreen(
                 is SessionEvent.RemoteClipboard -> {
                     val requested = clipboardFetch?.isActive == true
                     clipboardFetch?.cancel()
-                    clipboard.receive(event.text, view.hasWindowFocus(), requested)
-                    if (requested || (clipboard.shared && view.hasWindowFocus())) {
+                    if (clipboard.receive(event.text, view.hasWindowFocus(), requested)) {
                         lastAction = context.getString(R.string.session_clipboard_received)
                     }
                 }
@@ -650,6 +652,7 @@ fun SessionScreen(
                 is SessionEvent.Disconnected -> {
                     disconnectRequest = null
                     clipboard.reset()
+                    fetchAfterDialog = false
                     clipboardFetch?.cancel()
                     showClipboardDialog = false
                     status = SessionStatus.Disconnected
@@ -660,6 +663,7 @@ fun SessionScreen(
                 is SessionEvent.Failed -> {
                     disconnectRequest = null
                     clipboard.reset()
+                    fetchAfterDialog = false
                     clipboardFetch?.cancel()
                     showClipboardDialog = false
                     status = SessionStatus.Failed
@@ -679,6 +683,33 @@ fun SessionScreen(
         onDispose { if (listen) manager?.removePrimaryClipChangedListener(listener) }
     }
 
+    // The clipboard dialog owns a separate window. Start the pull once its
+    // dismissal has returned focus, so even an immediate reply can be copied.
+    val windowFocused = LocalWindowInfo.current.isWindowFocused
+    LaunchedEffect(session, fetchAfterDialog, windowFocused, showClipboardDialog) {
+        if (!fetchAfterDialog || showClipboardDialog || !windowFocused || !view.hasWindowFocus()) {
+            return@LaunchedEffect
+        }
+        fetchAfterDialog = false
+        if (status != SessionStatus.Connected) return@LaunchedEffect
+        clipboardFetch = scope.launch {
+            try {
+                if (session.requestClipboard()) {
+                    delay(5_000)
+                    lastAction = context.getString(R.string.session_clipboard_no_reply)
+                } else if (view.hasWindowFocus()) {
+                    lastAction = context.getString(
+                        if (clipboard.copyLatest()) R.string.session_clipboard_copied_latest
+                        else R.string.session_clipboard_copy_first,
+                    )
+                }
+            } catch (error: Exception) {
+                if (error is CancellationException) throw error
+                lastAction = context.getString(R.string.session_clipboard_fetch_failed)
+            }
+        }
+    }
+
     LaunchedEffect(session) {
         session.connect()
     }
@@ -689,6 +720,10 @@ fun SessionScreen(
     DisposableEffect(lifecycleOwner, session) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
+                Lifecycle.Event.ON_PAUSE -> {
+                    fetchAfterDialog = false
+                    clipboardFetch?.cancel()
+                }
                 Lifecycle.Event.ON_STOP -> {
                     foreground = false
                     backgroundedAt = SystemClock.elapsedRealtime()
@@ -1958,22 +1993,7 @@ fun SessionScreen(
                 showClipboardDialog = false
                 clipboardFetch?.cancel()
                 lastAction = context.getString(R.string.session_clipboard_requesting)
-                clipboardFetch = scope.launch {
-                    try {
-                        if (session.requestClipboard()) {
-                            delay(5_000)
-                            lastAction = context.getString(R.string.session_clipboard_no_reply)
-                        } else {
-                            lastAction = context.getString(
-                                if (clipboard.copyLatest()) R.string.session_clipboard_copied_latest
-                                else R.string.session_clipboard_copy_first,
-                            )
-                        }
-                    } catch (error: Exception) {
-                        if (error is CancellationException) throw error
-                        lastAction = context.getString(R.string.session_clipboard_fetch_failed)
-                    }
-                }
+                fetchAfterDialog = true
             },
         )
     }

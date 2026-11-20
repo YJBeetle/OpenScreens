@@ -11,64 +11,129 @@ struct SessionToolbar: View {
     let onDisconnect: () -> Void
     var showsDragHandle = false
 
-    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    #if os(iOS)
+    private let buttonSize: CGFloat = 44
+    #else
+    private let buttonSize: CGFloat = 40
+    #endif
 
-    private var buttonSize: CGFloat {
-        #if os(iOS)
-        horizontalSizeClass == .regular ? 40 : (orientation == .vertical ? 34 : 40)
-        #else
-        40
-        #endif
+    private var visibleItems: [SessionToolbarItem] {
+        items.filter { item in
+            if item == .displays {
+                return model.displays.count > 1 || model.selectedDisplayID != nil
+            }
+            #if os(macOS)
+            if item == .keyboard { return false }
+            #endif
+            return true
+        }
     }
 
     var body: some View {
-        FloatingBar(orientation: orientation) {
+        #if os(iOS)
+        ViewThatFits(in: orientation == .horizontal ? .horizontal : .vertical) {
+            bar(items: visibleItems, primaryLimit: nil)
+            bar(items: visibleItems, primaryLimit: 3)
+            bar(items: visibleItems, primaryLimit: 0)
+        }
+        #else
+        bar(items: visibleItems, primaryLimit: nil)
+        #endif
+    }
+
+    private func bar(items: [SessionToolbarItem], primaryLimit: Int?) -> some View {
+        let primaryItems = items.prefix(primaryLimit ?? items.count)
+        return FloatingBar(orientation: orientation) {
             if showsDragHandle {
                 ToolbarDragHandle(orientation: orientation)
             }
 
-            ForEach(items) { item in
-                toolbarItem(item)
+            ForEach(primaryItems) { item in
+                control(item, inMenu: false)
             }
 
-            FloatingIconButton(
-                systemImage: "chevron.down",
-                title: "Hide Toolbar",
-                size: buttonSize
-            ) {
-                model.toggleChrome()
-            }
-
-            FloatingIconButton(
-                systemImage: "rectangle.portrait.and.arrow.right",
-                title: "Disconnect",
-                size: buttonSize
-            ) {
-                onDisconnect()
+            if primaryLimit != nil {
+                Menu {
+                    ForEach(items.dropFirst(primaryItems.count)) { item in
+                        control(item, inMenu: true)
+                    }
+                    RemoteCommandMenu(model: model)
+                    Divider()
+                    Button("Hide Toolbar", systemImage: "chevron.down") { model.toggleChrome() }
+                    Button("Disconnect", systemImage: "rectangle.portrait.and.arrow.right",
+                           role: .destructive, action: onDisconnect)
+                } label: {
+                    Label("More", systemImage: "ellipsis")
+                        .labelStyle(.iconOnly)
+                        .frame(width: buttonSize, height: buttonSize)
+                        .contentShape(Rectangle())
+                }
+                .menuIndicator(.hidden)
+                .buttonStyle(.plain)
+                .accessibilityLabel("More")
+            } else {
+                FloatingIconButton(systemImage: "chevron.down", title: "Hide Toolbar", size: buttonSize) {
+                    model.toggleChrome()
+                }
+                FloatingIconButton(systemImage: "rectangle.portrait.and.arrow.right", title: "Disconnect",
+                                   size: buttonSize, action: onDisconnect)
             }
         }
+        .fixedSize()
     }
 
+    private func control(_ item: SessionToolbarItem, inMenu: Bool) -> some View {
+        SessionToolbarControl(model: model, item: item, buttonSize: buttonSize, inMenu: inMenu,
+                              onUpload: onUpload, onDownload: onDownload)
+    }
+
+    /// Grab area for moving the floating toolbar between screen edges.
+    private struct ToolbarDragHandle: View {
+        let orientation: FloatingBarOrientation
+
+        var body: some View {
+            Group {
+                if orientation == .horizontal {
+                    VStack(spacing: 3) { dot; dot; dot }
+                        .frame(width: 10, height: 30)
+                } else {
+                    HStack(spacing: 3) { dot; dot; dot }
+                        .frame(width: 30, height: 10)
+                }
+            }
+            .accessibilityHidden(true)
+        }
+
+        private var dot: some View {
+            Circle()
+                .fill(.secondary.opacity(0.7))
+                .frame(width: 3, height: 3)
+        }
+    }
+}
+
+private struct SessionToolbarControl: View {
+    let model: SessionViewModel
+    let item: SessionToolbarItem
+    let buttonSize: CGFloat
+    let inMenu: Bool
+    let onUpload: () -> Void
+    let onDownload: () -> Void
+
     @ViewBuilder
-    private func toolbarItem(_ item: SessionToolbarItem) -> some View {
+    var body: some View {
         switch item {
         case .pointer:
             cursorMenu
         case .displays:
-            if model.displays.count > 1 || model.selectedDisplayID != nil {
-                displayPickerMenu
-            }
+            displayPickerMenu
         case .keyboard:
             #if os(iOS)
-            FloatingIconButton(
-                systemImage: "keyboard",
-                title: model.isKeyboardActive ? "Hide Keyboard" : "Show Keyboard",
-                isSelected: model.isKeyboardActive,
-                size: buttonSize
-            ) {
-                model.toggleKeyboard()
+            if inMenu {
+                keyboardButton
+            } else {
+                keyboardButton.contextMenu { RemoteCommandMenu(model: model) }
             }
-            .contextMenu { RemoteCommandMenu(model: model) }
             #endif
         case .clipboard:
             clipboardMenu
@@ -91,11 +156,10 @@ struct SessionToolbar: View {
         case .hotCorners:
             hotCornersMenu
         case .observe:
-            FloatingIconButton(
+            actionButton(
                 systemImage: model.isObserving ? "eye.fill" : "eye",
                 title: model.isObserving ? "Observe Mode On" : "Observe Mode Off",
-                isSelected: model.isObserving,
-                size: buttonSize
+                isSelected: model.isObserving
             ) {
                 model.toggleObserveMode()
             }
@@ -111,14 +175,35 @@ struct SessionToolbar: View {
             .buttonStyle(.plain)
             .accessibilityLabel("Screenshot")
             #else
-            FloatingIconButton(
+            actionButton(
                 systemImage: "camera",
-                title: "Screenshot",
-                size: buttonSize
+                title: "Screenshot"
             ) {
                 model.grabScreenshot()
             }
             #endif
+        }
+    }
+
+    #if os(iOS)
+    private var keyboardButton: some View {
+        actionButton(systemImage: "keyboard",
+                     title: model.isKeyboardActive ? "Hide Keyboard" : "Show Keyboard",
+                     isSelected: model.isKeyboardActive) {
+            model.toggleKeyboard()
+        }
+    }
+    #endif
+
+    @ViewBuilder
+    private func actionButton(systemImage: String, title: String, isSelected: Bool = false,
+                              action: @escaping () -> Void) -> some View {
+        if inMenu {
+            Button(NSLocalizedString(title, comment: "Session control"), systemImage: systemImage, action: action)
+                .accessibilityAddTraits(isSelected ? .isSelected : [])
+        } else {
+            FloatingIconButton(systemImage: systemImage, title: title, isSelected: isSelected,
+                               size: buttonSize, action: action)
         }
     }
 
@@ -273,35 +358,16 @@ struct SessionToolbar: View {
         )
     }
 
-    /// Grab area for moving the floating toolbar between screen edges.
-    private struct ToolbarDragHandle: View {
-        let orientation: FloatingBarOrientation
-
-        var body: some View {
-            Group {
-                if orientation == .horizontal {
-                    VStack(spacing: 3) { dot; dot; dot }
-                        .frame(width: 10, height: 30)
-                } else {
-                    HStack(spacing: 3) { dot; dot; dot }
-                        .frame(width: 30, height: 10)
-                }
-            }
-            .accessibilityHidden(true)
-        }
-
-        private var dot: some View {
-            Circle()
-                .fill(.secondary.opacity(0.7))
-                .frame(width: 3, height: 3)
-        }
-    }
-
+    @ViewBuilder
     private func menuIcon(_ systemImage: String, title: String) -> some View {
-        Image(systemName: systemImage)
-            .font(.system(size: 16, weight: .medium))
-            .foregroundStyle(.primary)
-            .frame(width: buttonSize, height: buttonSize)
-            .contentShape(Rectangle())
+        if inMenu {
+            Label(NSLocalizedString(title, comment: "Session control"), systemImage: systemImage)
+        } else {
+            Image(systemName: systemImage)
+                .font(.system(size: 16, weight: .medium))
+                .foregroundStyle(.primary)
+                .frame(width: buttonSize, height: buttonSize)
+                .contentShape(Rectangle())
+        }
     }
 }

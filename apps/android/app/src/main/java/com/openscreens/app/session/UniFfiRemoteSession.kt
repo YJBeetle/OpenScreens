@@ -381,7 +381,12 @@ class UniFfiRemoteSession(
     override suspend fun sendClipboard(text: String, automatic: Boolean) {
         check(!inputMode.observing)
         if (automatic && !clipboardSharing) return
-        checkNotNull(session).sendClipboard(text, automatic)
+        try {
+            checkNotNull(session).sendClipboard(text, automatic)
+        } catch (error: SessionFailure.Session) {
+            if (error.kind == SessionFailureKind.INVALID_INPUT) throw ClipboardEncodingException()
+            throw error
+        }
     }
 
     private fun enqueueInput(send: suspend (NativeSession) -> Unit) {
@@ -645,7 +650,7 @@ class UniFfiRemoteSession(
                         _events.emit(
                             SessionEvent.UploadRequest(event.handle.toInt(), event.path),
                         )
-                    NativeEvent.ClipboardRequest -> if (clipboardSharing) {
+                    NativeEvent.ClipboardRequest -> if (clipboardSharing && !inputMode.observing) {
                         _events.emit(SessionEvent.ClipboardRequest)
                     }
                     is NativeEvent.DragOutInfo -> Unit

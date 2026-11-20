@@ -48,6 +48,7 @@ final class SessionClipboardTests: XCTestCase {
         let model = SessionViewModel(
             profile: ConnectionProfile(controls: ControlPreferences(sharedClipboard: false)),
             service: session,
+            readClipboardChangeCount: { 0 },
             readClipboard: { reads += 1; return local },
             writeClipboard: { local = $0 }
         )
@@ -71,11 +72,36 @@ final class SessionClipboardTests: XCTestCase {
         XCTAssertEqual(reads, 1)
     }
 
+    func testObservingAllowsManualFetchWithoutReadingLocalText() async throws {
+        let session = ClipboardTransport(pull: true)
+        var local = "local"
+        let model = SessionViewModel(
+            profile: ConnectionProfile(controls: ControlPreferences(startInObserveMode: true)),
+            service: session,
+            readClipboardChangeCount: { 0 },
+            readClipboard: { XCTFail("Observing read local text"); return local },
+            writeClipboard: { local = $0 }
+        )
+        model.start()
+        defer { model.stop() }
+        try await waitFor { model.state.isConnected }
+        model.sendLocalClipboard()
+        await model.watchLocalClipboard()
+        session.output.yield(.clipboardRequest)
+        model.fetchRemoteClipboard()
+        try await waitFor { await session.requests == 1 }
+        session.output.yield(.clipboard("requested"))
+        try await waitFor { local == "requested" }
+        let sent = await session.sent
+        XCTAssertTrue(sent.isEmpty)
+    }
+
     func testManualPullWhilePrivateAcceptsOnlyOnePush() async throws {
         let session = ClipboardTransport(pull: true)
         var writes: [String] = []
         let model = SessionViewModel(
             profile: ConnectionProfile(), service: session,
+            readClipboardChangeCount: { 0 },
             readClipboard: { "local change" }, writeClipboard: { writes.append($0) }
         )
         model.start()

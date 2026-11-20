@@ -1,5 +1,7 @@
 package com.openscreens.app.session
 
+internal class ClipboardEncodingException : IllegalArgumentException()
+
 /** Text stays in memory for a single transport. The platform clipboard is read
  * only on explicit send or for foreground automatic sharing. */
 internal class SessionClipboard(

@@ -303,6 +303,7 @@
 "Local clipboard is empty." = "本地剪贴板为空。";
 "Sent local clipboard." = "已发送本地剪贴板。";
 "Could not update clipboard sharing." = "无法更新剪贴板共享设置。";
+"This server’s clipboard supports only Latin-1 text." = "此服务器的剪贴板仅支持 Latin-1 字符。";
 "Could not send clipboard text." = "无法发送剪贴板文本。";
 "Requesting remote clipboard…" = "正在请求远程剪贴板…";
 "No clipboard text received." = "未收到剪贴板文本。";

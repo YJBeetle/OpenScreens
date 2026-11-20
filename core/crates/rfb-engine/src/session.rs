@@ -230,12 +230,14 @@ pub enum FailureKind {
     SshTunnel,
     Closed,
     MacSessionChoiceRequired,
+    InvalidInput,
 }
 
 impl FailureKind {
     pub fn classify(error: &SessionError) -> Self {
         match error {
             SessionError::Io(_) => Self::Network,
+            SessionError::InvalidInput(_) => Self::InvalidInput,
             SessionError::Handshake(error) => match error {
                 HandshakeError::MacSessionChoiceRequired => Self::MacSessionChoiceRequired,
                 HandshakeError::Io(_) => Self::Network,
@@ -336,6 +338,7 @@ pub enum Event {
 
 #[derive(Debug)]
 pub enum SessionError {
+    InvalidInput(&'static str),
     Io(io::Error),
     Handshake(HandshakeError),
     Decode(DecodeError),
@@ -348,6 +351,7 @@ pub enum SessionError {
 impl fmt::Display for SessionError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::InvalidInput(message) => f.write_str(message),
             Self::Io(error) => write!(f, "I/O error: {error}"),
             Self::Handshake(error) => write!(f, "handshake failed: {error}"),
             Self::Decode(error) => write!(f, "decode failed: {error:?}"),
@@ -780,10 +784,23 @@ impl Session {
     ///
     /// Explicit sends always reach the host, including when sharing is off.
     pub async fn send_clipboard(&self, text: &str, automatic: bool) -> Result<(), SessionError> {
+        // RFC 6143 cut text uses Latin-1 and LF. Keep Apple's UTF-8 archive
+        // byte-for-byte faithful to the original text, including line endings.
+        let normalized;
+        let text = if !self.apple_pasteboard && text.contains('\r') {
+            normalized = text.replace("\r\n", "\n").replace('\r', "\n");
+            &normalized
+        } else {
+            text
+        };
         let message = if self.apple_pasteboard {
             apple_input::client_pasteboard_message(text)
         } else {
-            client_cut_text(text.as_bytes())
+            let bytes: Result<Vec<_>, _> =
+                text.chars().map(|c| u8::try_from(u32::from(c))).collect();
+            client_cut_text(&bytes.map_err(|_| {
+                SessionError::InvalidInput("This server's clipboard supports only Latin-1 text.")
+            })?)
         };
         {
             let mut clipboard = self.clipboard.lock().expect("clipboard lock");
@@ -2029,7 +2046,11 @@ where
         return Err(SessionError::Protocol("cut text too long"));
     }
     fill_buffer(read, &mut state.buffer, length).await?;
-    let text = String::from_utf8_lossy(&state.buffer[..length]).into_owned();
+    let text: String = state.buffer[..length]
+        .iter()
+        .copied()
+        .map(char::from)
+        .collect();
     state.buffer.advance(length);
     state.received_clipboard(&text);
     events

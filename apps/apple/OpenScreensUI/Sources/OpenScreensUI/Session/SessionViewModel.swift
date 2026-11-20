@@ -134,6 +134,7 @@ public final class SessionViewModel {
     @ObservationIgnored private let idleTimerOwner = UUID()
     private var displaySelectionTask: Task<Void, Never>?
     @ObservationIgnored private var pendingDisplayRestore: Int?
+    @ObservationIgnored private let readClipboardChangeCount: @MainActor () -> Int
     @ObservationIgnored private let readClipboard: @MainActor () -> String?
     @ObservationIgnored private let writeClipboard: @MainActor (String) -> Void
     @ObservationIgnored private var latestRemoteText: String?
@@ -172,6 +173,7 @@ public final class SessionViewModel {
         profile: ConnectionProfile,
         service: any RemoteSessionService = MockSessionService(),
         connectionStore: ConnectionStore? = nil,
+        readClipboardChangeCount: @escaping @MainActor () -> Int = { PlatformClipboard.changeCount },
         readClipboard: @escaping @MainActor () -> String? = { PlatformClipboard.string },
         writeClipboard: @escaping @MainActor (String) -> Void = { PlatformClipboard.setString($0) }
     ) {
@@ -179,6 +181,7 @@ public final class SessionViewModel {
         self.profile = profile
         self.service = service
         self.store = connectionStore
+        self.readClipboardChangeCount = readClipboardChangeCount
         self.readClipboard = readClipboard
         self.writeClipboard = writeClipboard
         self.sharedClipboard = profile.controls.sharedClipboard
@@ -486,7 +489,7 @@ public final class SessionViewModel {
             fetchTask?.cancel()
             fetchTask = nil
             writeClipboard(text)
-            if sharedClipboard { clipboardChangeCount = PlatformClipboard.changeCount }
+            if sharedClipboard { clipboardChangeCount = readClipboardChangeCount() }
             showMessage(NSLocalizedString("Remote clipboard copied.", comment: "Clipboard toast"))
 
         case .clipboardRequest:
@@ -1062,7 +1065,7 @@ public final class SessionViewModel {
 
     public func setClipboardSharing(_ enabled: Bool) {
         sharedClipboard = enabled
-        clipboardChangeCount = enabled ? PlatformClipboard.changeCount : nil
+        clipboardChangeCount = enabled ? readClipboardChangeCount() : nil
         guard let session else { return }
         Task {
             do {
@@ -1084,7 +1087,7 @@ public final class SessionViewModel {
     func watchLocalClipboard() async {
         guard state.isConnected, sharedClipboard, !isObserving else { return }
         while !Task.isCancelled {
-            let current = PlatformClipboard.changeCount
+            let current = readClipboardChangeCount()
             if let previous = clipboardChangeCount, current != previous {
                 shareLocalClipboardIfNeeded()
             }
@@ -1103,6 +1106,8 @@ public final class SessionViewModel {
             do {
                 try await session.sendClipboard(text, automatic: false)
                 showMessage(NSLocalizedString("Sent local clipboard.", comment: "Clipboard toast"))
+            } catch let error as RemoteSessionFailure where error.kind == .invalidInput {
+                showMessage(NSLocalizedString("This server’s clipboard supports only Latin-1 text.", comment: "Legacy RFB clipboard"))
             } catch {
                 showMessage(NSLocalizedString("Could not send clipboard text.", comment: "Clipboard toast"))
             }

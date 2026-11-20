@@ -125,7 +125,7 @@ public struct SessionScreen: View {
         .onDisappear {
             model.stop()
         }
-        .onChange(of: scenePhase) { _, phase in
+        .onChange(of: scenePhase, initial: true) { _, phase in
             model.handleScenePhase(phase)
         }
         .onChange(of: model.state, initial: true) { _, state in

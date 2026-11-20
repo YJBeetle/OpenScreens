@@ -8,7 +8,11 @@ private actor ClipboardTransport: RemoteSessionProtocol, RemoteSessionService {
     private(set) var sent: [String] = []
     private(set) var requests = 0
 
-    init(pull: Bool) {
+    private var pausedRequest: CheckedContinuation<Bool, Never>?
+    private let pauseFirstRequest: Bool
+
+    init(pull: Bool, pauseFirstRequest: Bool = false) {
+        self.pauseFirstRequest = pauseFirstRequest
         (events, output) = AsyncStream.makeStream()
         self.pull = pull
     }
@@ -24,7 +28,15 @@ private actor ClipboardTransport: RemoteSessionProtocol, RemoteSessionService {
     func sendClipboard(_ text: String, automatic: Bool) async { sent.append(text) }
     func requestClipboard() async -> Bool {
         requests += 1
+        if pauseFirstRequest && requests == 1 {
+            return await withCheckedContinuation { pausedRequest = $0 }
+        }
         return pull
+    }
+
+    func finishFirstRequest() {
+        pausedRequest?.resume(returning: pull)
+        pausedRequest = nil
     }
 }
 
@@ -39,6 +51,73 @@ final class SessionClipboardTests: XCTestCase {
             }
             try await Task.sleep(for: .milliseconds(5))
         }
+    }
+
+    func testManualPullExpiresWhenSceneBecomesInactive() async throws {
+        let session = ClipboardTransport(pull: true)
+        var local = "original"
+        let model = SessionViewModel(
+            profile: ConnectionProfile(controls: ControlPreferences(sharedClipboard: false)), service: session,
+            readClipboardChangeCount: { 0 }, readClipboard: { nil }, writeClipboard: { local = $0 }
+        )
+        model.start()
+        defer { model.stop() }
+        try await waitFor { model.state.isConnected }
+        model.fetchRemoteClipboard()
+        try await waitFor { await session.requests == 1 }
+        model.handleScenePhase(.inactive)
+        local = "copied elsewhere"
+        session.output.yield(.clipboard("late reply"))
+        session.output.yield(.pointerPosition(x: 0.25, y: 0.25))
+        try await waitFor { model.remoteCursor.x == 0.25 }
+        XCTAssertEqual(local, "copied elsewhere")
+
+        model.fetchRemoteClipboard() // An inactive scene cannot start a new fetch.
+        model.handleScenePhase(.active)
+        session.output.yield(.clipboard("unsolicited after return"))
+        session.output.yield(.pointerPosition(x: 0.75, y: 0.75))
+        try await waitFor { model.remoteCursor.x == 0.75 }
+        XCTAssertEqual(local, "copied elsewhere")
+        model.fetchRemoteClipboard()
+        try await waitFor { await session.requests >= 2 }
+        session.output.yield(.clipboard("fresh reply"))
+        try await waitFor { local == "fresh reply" }
+        let count = await session.requests
+        XCTAssertEqual(count, 2)
+    }
+
+    func testCachedFallbackCannotCompleteAfterLeavingAndReturning() async throws {
+        let session = ClipboardTransport(pull: false, pauseFirstRequest: true)
+        var local = "original"
+        let unexpectedWrite = expectation(description: "Expired fallback wrote the clipboard")
+        unexpectedWrite.isInverted = true
+        let model = SessionViewModel(
+            profile: ConnectionProfile(controls: ControlPreferences(sharedClipboard: false)), service: session,
+            readClipboardChangeCount: { 0 }, readClipboard: { nil }, writeClipboard: {
+                if $0 == "cached before leaving" { unexpectedWrite.fulfill() }
+                local = $0
+            }
+        )
+        model.start()
+        defer { model.stop() }
+        try await waitFor { model.state.isConnected }
+        session.output.yield(.clipboard("cached before leaving"))
+        session.output.yield(.pointerPosition(x: 0.25, y: 0.25))
+        try await waitFor { model.remoteCursor.x == 0.25 }
+        model.fetchRemoteClipboard()
+        try await waitFor { await session.requests == 1 }
+        model.handleScenePhase(.background)
+        local = "copied elsewhere"
+        model.handleScenePhase(.active)
+        await session.finishFirstRequest()
+        await fulfillment(of: [unexpectedWrite], timeout: 0.2)
+        XCTAssertEqual(local, "copied elsewhere")
+
+        session.output.yield(.clipboard("fresh cached text"))
+        session.output.yield(.pointerPosition(x: 0.75, y: 0.75))
+        try await waitFor { model.remoteCursor.x == 0.75 }
+        model.fetchRemoteClipboard()
+        try await waitFor { local == "fresh cached text" }
     }
 
     func testPrivatePushOnlySessionPreservesManualActions() async throws {

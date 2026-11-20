@@ -285,8 +285,9 @@ public final class SessionViewModel {
     /// Scene phase hook. A suspended app can return with a socket that never
     /// reports an error, which would leave the last frame on screen forever.
     public func handleScenePhase(_ phase: ScenePhase) {
-        if phase == .background { previewRecorder.flush() }
         sceneIsActive = phase == .active
+        if !sceneIsActive { cancelClipboardFetch() }
+        if phase == .background { previewRecorder.flush() }
         #if os(iOS)
         switch phase {
         case .background:
@@ -506,9 +507,8 @@ public final class SessionViewModel {
         case .clipboard(let text):
             guard state.isConnected else { return }
             latestRemoteText = text
-            guard (sharedClipboard && sceneIsActive) || fetchTask != nil else { return }
-            fetchTask?.cancel()
-            fetchTask = nil
+            guard sceneIsActive, sharedClipboard || fetchTask != nil else { return }
+            cancelClipboardFetch()
             writeClipboard(text)
             if sharedClipboard { clipboardChangeCount = readClipboardChangeCount() }
             showMessage(NSLocalizedString("Remote clipboard copied.", comment: "Clipboard toast"))
@@ -1077,9 +1077,13 @@ public final class SessionViewModel {
 
     // MARK: - Clipboard
 
-    private func resetClipboard() {
+    private func cancelClipboardFetch() {
         fetchTask?.cancel()
         fetchTask = nil
+    }
+
+    private func resetClipboard() {
+        cancelClipboardFetch()
         latestRemoteText = nil
         clipboardChangeCount = nil
     }
@@ -1136,12 +1140,13 @@ public final class SessionViewModel {
     }
 
     public func fetchRemoteClipboard() {
-        guard state.isConnected, let session else { return }
+        guard sceneIsActive, state.isConnected, let session else { return }
         fetchTask?.cancel()
         showMessage(NSLocalizedString("Requesting remote clipboard…", comment: "Clipboard toast"))
         fetchTask = Task {
             defer { if !Task.isCancelled { fetchTask = nil } }
             do {
+                try Task.checkCancellation()
                 let requested = try await session.requestClipboard()
                 try Task.checkCancellation()
                 if requested {

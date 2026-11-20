@@ -272,4 +272,9 @@
     <string name="editor_ssh_no_keys">Add a key in Settings → SSH keys.</string>
     <string name="editor_ssh_manage_keys">Manage keys in Settings → SSH keys.</string>
     <string name="editor_ssh_key_required">Select an SSH key</string>
+    <string name="session_auth_required">Authentication required</string>
+    <string name="session_auth_rejected">Authentication failed. Try again.</string>
+    <string name="session_use_account">Use a Mac account</string>
+    <string name="session_remember_credentials">Remember credentials</string>
+    <string name="session_remember_failed">Could not save credentials.</string>
 </resources>

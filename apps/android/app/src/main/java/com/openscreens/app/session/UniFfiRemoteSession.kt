@@ -144,7 +144,7 @@ class UniFfiRemoteSession(
             host = connection.host,
             port = connection.port.toUShort(),
             username = connection.username.ifBlank { null },
-            password = connection.vncPassword.ifBlank { null },
+            password = connection.vncPassword.ifEmpty { null },
             shared = true,
             localCursor = true,
             quality = when (quality) {
@@ -169,10 +169,20 @@ class UniFfiRemoteSession(
             throw cancelled
         } catch (error: Exception) {
             Log.w(TAG, "connect to ${connection.address} failed", error)
-            _events.emit(SessionEvent.Failed(describe(error)))
+            val challenge = when ((error as? SessionFailure.Session)?.kind) {
+                SessionFailureKind.MISSING_USERNAME -> CredentialChallenge.MissingUsername
+                SessionFailureKind.MISSING_PASSWORD -> CredentialChallenge.MissingPassword
+                SessionFailureKind.AUTHENTICATION_FAILED -> CredentialChallenge.Rejected
+                else -> null
+            }
+            _events.emit(SessionEvent.Failed(describe(error), challenge))
             return
         }
 
+        if (disposed.get() || closed.get()) {
+            connected.close()
+            return
+        }
         val size = connected.size()
         if (size == null) {
             connected.close()

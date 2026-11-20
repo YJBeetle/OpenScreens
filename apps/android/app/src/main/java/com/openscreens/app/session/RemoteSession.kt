@@ -99,6 +99,8 @@ data class TransferEntry(
     val linkTarget: String?,
 )
 
+enum class CredentialChallenge { MissingUsername, MissingPassword, Rejected }
+
 sealed interface SessionEvent {
     data object Connecting : SessionEvent
     data class Connected(val width: Int, val height: Int) : SessionEvent
@@ -171,7 +173,7 @@ sealed interface SessionEvent {
 
     /** The transport ended; [message] is the localized reason when the remote side closed it. */
     data class Disconnected(val message: String? = null) : SessionEvent
-    data class Failed(val reason: String) : SessionEvent
+    data class Failed(val reason: String, val challenge: CredentialChallenge? = null) : SessionEvent
 }
 
 /**

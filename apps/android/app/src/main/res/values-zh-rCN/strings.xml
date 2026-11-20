@@ -270,4 +270,9 @@
     <string name="editor_ssh_no_keys">在设置 → SSH 密钥中添加密钥。</string>
     <string name="editor_ssh_manage_keys">在设置 → SSH 密钥中管理。</string>
     <string name="editor_ssh_key_required">请选择 SSH 密钥</string>
+    <string name="session_auth_required">需要身份验证</string>
+    <string name="session_auth_rejected">验证失败，请重试。</string>
+    <string name="session_use_account">使用 Mac 账户</string>
+    <string name="session_remember_credentials">记住凭据</string>
+    <string name="session_remember_failed">无法保存凭据。</string>
 </resources>

@@ -6,6 +6,9 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
@@ -71,29 +74,10 @@ fun OpenScreensApp(viewModel: MainViewModel = viewModel()) {
                     onEditConnection = { viewModel.navigate(Route.Editor(it.id)) },
                     onOpenSettings = { viewModel.navigate(Route.Settings) },
                     onQuickConnect = { host, port, username ->
-                        viewModel.navigate(
-                            Route.Editor(
-                                connectionId = null,
-                                draft = Connection(
-                                    name = host,
-                                    host = host,
-                                    port = port,
-                                    username = username.orEmpty(),
-                                ),
-                            ),
-                        )
+                        viewModel.openEndpoint(Connection(name = host, host = host, port = port, username = username.orEmpty()))
                     },
                     onOpenNearby = { server ->
-                        viewModel.navigate(
-                            Route.Editor(
-                                connectionId = null,
-                                draft = Connection(
-                                    name = server.name,
-                                    host = server.host,
-                                    port = server.port,
-                                ),
-                            ),
-                        )
+                        viewModel.openEndpoint(Connection(name = server.name, host = server.host, port = server.port), nearby = true)
                     },
                 )
 
@@ -133,15 +117,20 @@ fun OpenScreensApp(viewModel: MainViewModel = viewModel()) {
                 )
 
                 is Route.Session -> {
-                    val connection = viewModel.connection(current.connectionId)
+                    val connection = viewModel.connection(current.connectionId) ?: current.nearby
                     if (connection == null) {
                         LaunchedEffect(Unit) { viewModel.back() }
                     } else {
+                        var quality by remember(connection.id) { mutableStateOf(connection.quality) }
                         SessionScreen(
                             connection = connection,
                             sshKey = viewModel.sshKey(connection.ssh?.keyId),
-                            quality = connection.quality,
-                            onQualityChange = { viewModel.setConnectionQuality(connection.id, it) },
+                            quality = quality,
+                            onQualityChange = {
+                                quality = it
+                                viewModel.setConnectionQuality(connection.id, it)
+                            },
+                            onRemember = viewModel::rememberLogin,
                             onConnected = { viewModel.markConnected(connection.id) },
                             onExit = viewModel::back,
                         )

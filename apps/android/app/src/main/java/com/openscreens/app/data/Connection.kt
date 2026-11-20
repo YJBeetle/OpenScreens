@@ -43,6 +43,14 @@ data class Connection(
     }
 }
 
+internal fun Connection.sameEndpoint(other: Connection): Boolean =
+    port == other.port && host.trim().removeSuffix(".").equals(other.host.trim().removeSuffix("."), ignoreCase = true)
+
+/** A supplied account must match before using a saved server's password and tunnel. */
+internal fun List<Connection>.matchingEndpoint(target: Connection): Connection? = firstOrNull {
+    it.sameEndpoint(target) && (target.username.isEmpty() || it.username == target.username)
+}
+
 data class ConnectionGroup(
     val id: String = UUID.randomUUID().toString(),
     val name: String,

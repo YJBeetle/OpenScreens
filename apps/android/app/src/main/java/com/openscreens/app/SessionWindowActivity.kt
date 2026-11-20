@@ -30,7 +30,7 @@ class SessionWindowActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        val connectionStore = ConnectionStore(applicationContext)
+        val connectionStore = ConnectionStore.shared(applicationContext)
         val sshKeyStore = SshKeyStore(applicationContext)
         val settingsStore = SettingsStore(applicationContext)
         val connection = intent.getStringExtra(EXTRA_CONNECTION_ID)?.let(connectionStore::find)
@@ -56,8 +56,9 @@ class SessionWindowActivity : ComponentActivity() {
                         quality = quality,
                         onQualityChange = { preset ->
                             quality = preset
-                            connectionStore.save(connection.copy(quality = preset))
+                            connectionStore.find(connection.id)?.let { connectionStore.save(it.copy(quality = preset)) }
                         },
+                        onRemember = connectionStore::rememberLogin,
                         onConnected = { connectionStore.markConnected(connection.id) },
                         onExit = { finish() },
                     )

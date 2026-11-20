@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import com.openscreens.app.data.AppSettings
 import com.openscreens.app.data.Connection
+import com.openscreens.app.data.matchingEndpoint
 import com.openscreens.app.data.ConnectionStore
 import com.openscreens.app.data.LibrarySortOrder
 import com.openscreens.app.data.NearbyDiscovery
@@ -21,7 +22,7 @@ import kotlinx.coroutines.flow.update
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
 
-    private val connectionStore = ConnectionStore(application)
+    private val connectionStore = ConnectionStore.shared(application)
     val connections = connectionStore.connections
     val groups = connectionStore.groups
 
@@ -50,6 +51,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun connection(id: String): Connection? = connectionStore.find(id)
+
+    fun openEndpoint(target: Connection, nearby: Boolean = false) {
+        val saved = connections.value.matchingEndpoint(target)
+        if (saved == null && !nearby) connectionStore.save(target)
+        navigate(Route.Session(saved?.id ?: target.id, if (saved == null && nearby) target else null))
+    }
+
+    fun rememberLogin(connection: Connection): Boolean = connectionStore.rememberLogin(connection)
 
     fun saveConnection(connection: Connection) {
         connectionStore.save(connection)
@@ -147,5 +156,5 @@ sealed interface Route {
     data object Settings : Route
     data object SshKeys : Route
     data class Editor(val connectionId: String?, val draft: Connection? = null) : Route
-    data class Session(val connectionId: String) : Route
+    data class Session(val connectionId: String, val nearby: Connection? = null) : Route
 }

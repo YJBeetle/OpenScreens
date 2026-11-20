@@ -56,6 +56,18 @@ class ConnectionStore(
         persist()
     }
 
+    fun rememberLogin(source: Connection): Boolean {
+        val current = find(source.id) ?: _connections.value.matchingEndpoint(source) ?: source
+        if (!current.sameEndpoint(source)) return false
+        val updated = current.copy(username = source.username, vncPassword = source.vncPassword)
+        val next = _connections.value.toMutableList()
+        val index = next.indexOfFirst { it.id == current.id }
+        if (index >= 0) next[index] = updated else next.add(updated)
+        if (!persist(next)) return false
+        _connections.value = next
+        return true
+    }
+
     fun markConnected(id: String, at: Long = System.currentTimeMillis()) {
         _connections.update { current ->
             current.map { connection ->
@@ -114,20 +126,24 @@ class ConnectionStore(
     private fun load(): StoredLibrary? {
         if (!file.exists()) return null
         return runCatching {
-            decode(String(decrypt(file.readBytes()), Charsets.UTF_8))
+            decode(String(decrypt(android.util.AtomicFile(file).readFully()), Charsets.UTF_8))
         }.onFailure { error ->
             Log.e(TAG, "Unable to read saved connections", error)
         }.getOrNull()
     }
 
-    private fun persist() {
-        runCatching {
-            val payload = encode(_connections.value, _groups.value)
-            file.writeBytes(encrypt(payload.toByteArray(Charsets.UTF_8)))
-        }.onFailure { error ->
-            Log.e(TAG, "Unable to save connections", error)
+    private fun persist(connections: List<Connection> = _connections.value): Boolean = runCatching {
+        val payload = encrypt(encode(connections, _groups.value).toByteArray(Charsets.UTF_8))
+        val atomic = android.util.AtomicFile(file)
+        val stream = atomic.startWrite()
+        try {
+            stream.write(payload)
+            atomic.finishWrite(stream)
+        } catch (error: Exception) {
+            atomic.failWrite(stream)
+            throw error
         }
-    }
+    }.onFailure { error -> Log.e(TAG, "Unable to save connections", error) }.isSuccess
 
     private fun encode(
         connections: List<Connection>,
@@ -287,12 +303,18 @@ class ConnectionStore(
         val groups: List<ConnectionGroup>,
     )
 
-    private companion object {
-        const val TAG = "ConnectionStore"
-        const val KEYSTORE = "AndroidKeyStore"
-        const val KEY_ALIAS = "openscreens.connections"
-        const val TRANSFORMATION = "AES/GCM/NoPadding"
-        const val DEFAULT_GROUP_NAME = "Group"
+    companion object {
+        @Volatile private var sharedInstance: ConnectionStore? = null
+
+        fun shared(context: Context): ConnectionStore = sharedInstance ?: synchronized(this) {
+            sharedInstance ?: ConnectionStore(context.applicationContext).also { sharedInstance = it }
+        }
+
+        private const val TAG = "ConnectionStore"
+        private const val KEYSTORE = "AndroidKeyStore"
+        private const val KEY_ALIAS = "openscreens.connections"
+        private const val TRANSFORMATION = "AES/GCM/NoPadding"
+        private const val DEFAULT_GROUP_NAME = "Group"
     }
 }
 

@@ -40,9 +40,10 @@ final class SessionCredentialTests: XCTestCase {
         }
         XCTAssertFalse(model.rememberLogin)
         let transport = await service.log.latest
+        await service.log.failNextHandshakes([.connectionRefused, .network])
         transport?.yield(.state(.disconnected(reason: "network")))
         try await wait { if case .reconnecting = model.state { return true }; return false }
-        try await wait { model.state.isConnected }
+        try await wait(timeout: .seconds(9)) { model.state.isConnected }
         let count = await service.log.accepted
         XCTAssertEqual(count, 2)
 
@@ -62,8 +63,87 @@ final class SessionCredentialTests: XCTestCase {
     }
     #endif
 
-    private func wait(until condition: () -> Bool) async throws {
-        let deadline = ContinuousClock.now + .seconds(5)
+    func testAutomaticReconnectStopsAfterThreeFailedHandshakes() async throws {
+        let service = LoginService()
+        let model = SessionViewModel(profile: ConnectionProfile(name: "Test", host: "localhost"), service: service)
+        defer { model.stop() }
+
+        try await establishSession(model)
+        let transport = await service.log.latest
+        let before = await service.log.handshakes
+        await service.log.failNextHandshakes([.network, .network, .connectionRefused])
+        transport?.yield(.state(.disconnected(reason: "network")))
+        try await wait(timeout: .seconds(9)) {
+            if case .disconnected(_, .connectionRefused) = model.state { return true }
+            return false
+        }
+        let after = await service.log.handshakes
+        XCTAssertEqual(after - before, 3)
+        model.reconnect()
+        try await wait { model.state.isConnected }
+    }
+
+    func testRecoveryPausesForInteractionAndExplicitDisconnectCancelsPendingRetry() async throws {
+        let service = LoginService()
+        let model = SessionViewModel(profile: ConnectionProfile(name: "Test", host: "localhost"), service: service)
+        defer { model.stop() }
+        try await establishSession(model)
+
+        let first = await service.log.latest
+        await service.log.failNextHandshakes([.macSessionChoiceRequired])
+        first?.yield(.state(.disconnected(reason: "network")))
+        try await wait { model.needsMacSessionChoice }
+        try await verifyNoFurtherHandshakes(service)
+        model.chooseMacSession(.personal)
+        try await wait { model.state.isConnected }
+
+        let second = await service.log.latest
+        await service.log.failNextHandshakes([.authenticationFailed])
+        second?.yield(.state(.disconnected(reason: "network")))
+        try await wait { model.credentialChallenge == .authenticationFailed }
+        try await verifyNoFurtherHandshakes(service)
+        model.submitCredentials(username: "user", password: " test ", remember: false)
+        try await wait { model.state.isConnected }
+
+        let third = await service.log.latest
+        await service.log.failNextHandshakes([.network])
+        third?.yield(.state(.disconnected(reason: "network")))
+        try await wait { model.state == .reconnecting(attempt: 2) }
+        model.disconnect()
+        try await verifyNoFurtherHandshakes(service)
+    }
+
+    func testFirstNetworkFailureWaitsForUser() async throws {
+        let service = LoginService()
+        let model = SessionViewModel(profile: ConnectionProfile(name: "Test", host: "localhost"), service: service)
+        defer { model.stop() }
+
+        await service.log.failNextHandshakes([.connectionRefused])
+        model.start()
+        try await wait { model.state.isTerminal }
+        try await verifyNoFurtherHandshakes(service)
+        let count = await service.log.handshakes
+        XCTAssertEqual(count, 1)
+    }
+
+    private func verifyNoFurtherHandshakes(_ service: LoginService) async throws {
+        let before = await service.log.handshakes
+        try await Task.sleep(for: .milliseconds(2250))
+        let after = await service.log.handshakes
+        XCTAssertEqual(before, after)
+    }
+
+    private func establishSession(_ model: SessionViewModel) async throws {
+        model.start()
+        try await wait { model.credentialChallenge == .missingUsername }
+        model.submitCredentials(username: "user", password: " test ", remember: false)
+        try await wait { model.needsMacSessionChoice }
+        model.chooseMacSession(.personal)
+        try await wait { model.state.isConnected }
+    }
+
+    private func wait(timeout: Duration = .seconds(5), until condition: () -> Bool) async throws {
+        let deadline = ContinuousClock.now + timeout
         while !condition() {
             guard ContinuousClock.now < deadline else {
                 throw NSError(domain: "SessionCredentialTests.Timeout", code: 1)
@@ -76,6 +156,19 @@ final class SessionCredentialTests: XCTestCase {
 private actor LoginLog {
     var latest: AsyncStream<RemoteSessionEvent>.Continuation?
     var accepted = 0
+    var handshakes = 0
+    private var failures: [RemoteFailureKind] = []
+
+    func failNextHandshakes(_ failures: [RemoteFailureKind]) {
+        self.failures = failures
+    }
+
+    func beginHandshake() throws {
+        handshakes += 1
+        if !failures.isEmpty {
+            throw RemoteSessionFailure(kind: failures.removeFirst(), reason: "scripted handshake failure")
+        }
+    }
 
     func connected(_ stream: AsyncStream<RemoteSessionEvent>.Continuation) {
         latest = stream
@@ -100,6 +193,8 @@ private struct LoginTransport: RemoteSessionProtocol {
 
     func selectDisplay(_ id: Int?) async throws {}
     func connect(profile: ConnectionProfile, password: String?, macSessionChoice: MacSessionChoice?) async throws {
+        stream.yield(.state(.connecting))
+        try await log.beginHandshake()
         guard !profile.username.isEmpty else { throw RemoteSessionFailure(kind: .missingUsername, reason: "") }
         guard profile.username == "user", password == " test " else {
             throw RemoteSessionFailure(kind: .authenticationFailed, reason: "")

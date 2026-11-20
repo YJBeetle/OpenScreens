@@ -328,7 +328,7 @@ public final class SessionViewModel {
                 // The user stopped the session while it was connecting.
             } catch {
                 guard !Task.isCancelled else { return }
-                self?.handleTransportFailure(error)
+                self?.handleTransportFailure(error, isReconnect: isReconnect)
             }
         }
     }
@@ -522,28 +522,35 @@ public final class SessionViewModel {
         if let reason, !reason.isEmpty {
             failureMessage = SessionFailureText.localized(kind, reason: reason)
         }
-        guard profile.controls.autoReconnect, reconnectAttempts < 3 else { return }
+        if !needsMacSessionChoice { scheduleReconnect() }
+    }
+
+    private func scheduleReconnect() {
+        guard !isStopping, profile.controls.autoReconnect, reconnectAttempts < 3 else { return }
         reconnectAttempts += 1
         state = .reconnecting(attempt: reconnectAttempts)
         reconnectTask?.cancel()
         reconnectTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(2))
             guard !Task.isCancelled, let self else { return }
+            self.reconnectTask = nil
             self.beginSession(isReconnect: true)
         }
     }
 
-    private func handleTransportFailure(_ error: Error) {
+    private func handleTransportFailure(_ error: Error, isReconnect: Bool) {
         let failure = error as? RemoteSessionFailure
         if let failure, challengeIfNeeded(failure.kind) { return }
         let localized = failure.map {
             SessionFailureText.localized($0.kind, reason: $0.reason)
         } ?? error.localizedDescription
         failureMessage = localized
-        state = .disconnected(reason: localized, kind: failure?.kind ?? .unknown)
-        connectTask = nil
-        eventTask?.cancel()
-        eventTask = nil
+        let kind = failure?.kind ?? .unknown
+        state = .disconnected(reason: localized, kind: kind)
+        endTransport()
+        if isReconnect && (kind == .network || kind == .connectionRefused || kind == .closed) {
+            scheduleReconnect()
+        }
     }
 
     private func challengeIfNeeded(_ kind: RemoteFailureKind) -> Bool {

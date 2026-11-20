@@ -461,3 +461,4 @@
 "The credentials could not be saved." = "无法保存凭据。";
 
 "Authentication failed. Try again." = "验证失败，请重试。";
+"Click and drag to control the remote desktop" = "点按和拖移以控制远程桌面";

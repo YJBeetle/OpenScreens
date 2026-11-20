@@ -54,20 +54,22 @@ struct SessionToolbar: View {
 
             if primaryLimit != nil {
                 Menu {
+                    Section {
+                        RemoteCommandMenu(model: model)
+                        Button("Hide Toolbar", systemImage: "chevron.down") { model.toggleChrome() }
+                        Button("Disconnect", systemImage: "rectangle.portrait.and.arrow.right",
+                               role: .destructive, action: onDisconnect)
+                    }
                     ForEach(items.dropFirst(primaryItems.count)) { item in
                         control(item, inMenu: true)
                     }
-                    RemoteCommandMenu(model: model)
-                    Divider()
-                    Button("Hide Toolbar", systemImage: "chevron.down") { model.toggleChrome() }
-                    Button("Disconnect", systemImage: "rectangle.portrait.and.arrow.right",
-                           role: .destructive, action: onDisconnect)
                 } label: {
                     Label("More", systemImage: "ellipsis")
                         .labelStyle(.iconOnly)
                         .frame(width: buttonSize, height: buttonSize)
                         .contentShape(Rectangle())
                 }
+                .menuOrder(.fixed)
                 .menuIndicator(.hidden)
                 .buttonStyle(.plain)
                 .accessibilityLabel("More")

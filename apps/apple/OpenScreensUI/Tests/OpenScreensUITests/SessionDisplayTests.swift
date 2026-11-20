@@ -85,13 +85,44 @@ final class SessionDisplayTests: XCTestCase {
         XCTAssertEqual(requestedQuality, .high)
     }
 
-    private func waitUntil(_ condition: () -> Bool, line: UInt = #line) async {
+    func testProjectionUsesWholeDesktopAndRestoresZoomedSubscription() async {
+        let transport = DisplayTestTransport()
+        let model = SessionViewModel(profile: ConnectionProfile(name: "Studio", host: "localhost"),
+                                     service: DisplayTestService(transport: transport))
+        model.start()
+        defer { model.stop() }
+        transport.emit(.state(.connected))
+        transport.emit(.framebufferSize(width: 1600, height: 1200))
+        await waitUntil { model.serverSize != nil }
+        let size = CGSize(width: 400, height: 300)
+        let center = CGPoint(x: 200, y: 150)
+        model.applyPinch(scale: 2, startZoom: 1, startPan: .zero,
+                         startFocal: center, currentFocal: center, in: size)
+        model.scheduleViewportUpdate(in: size, screenPixelWidth: 800)
+        let crop = CGRect(x: 0.25, y: 0.25, width: 0.5, height: 0.5)
+        await waitUntil { await transport.viewport?.rect == crop }
+
+        model.setExternalDisplayPixelWidth(1920)
+        await waitUntil {
+            let request = await transport.viewport
+            return request?.rect == CGRect(x: 0, y: 0, width: 1, height: 1) && request?.pixels == 1920
+        }
+        XCTAssertEqual(model.zoom, 2)
+        model.setExternalDisplayPixelWidth(nil)
+        await waitUntil {
+            let request = await transport.viewport
+            return request?.rect == crop && request?.pixels == 800
+        }
+    }
+
+    private func waitUntil(_ condition: () async -> Bool, line: UInt = #line) async {
         let clock = ContinuousClock()
         let deadline = clock.now + .seconds(2)
-        while !condition() && clock.now < deadline {
+        while !(await condition()) && clock.now < deadline {
             try? await clock.sleep(for: .milliseconds(10))
         }
-        XCTAssertTrue(condition(), line: line)
+        let met = await condition()
+        XCTAssertTrue(met, line: line)
     }
 }
 
@@ -126,5 +157,10 @@ private actor DisplayTestTransport: RemoteSessionProtocol {
     func sendClipboard(_ text: String, automatic: Bool) async {}
     func requestClipboard() async -> Bool { false }
     func setObserveMode(_ observing: Bool) async {}
+    private(set) var viewport: (rect: CGRect?, pixels: Int)?
+    func setViewport(_ normalizedRect: CGRect?, screenPixelWidth: Int) async {
+        viewport = (normalizedRect, screenPixelWidth)
+    }
+
     func selectDisplay(_ id: Int?) async throws { selections.append(id) }
 }

@@ -64,8 +64,20 @@ public final class RemoteCanvasRenderer {
     /// View that presents this renderer, redrawn only when content changes.
     private weak var hostView: RemoteCanvasMetalView?
 
-    func attach(_ view: RemoteCanvasMetalView) {
-        hostView = view
+    // Accessory scenes have their own drawable and always fit the framebuffer.
+    private let mirrors = NSHashTable<RemoteCanvasMetalView>.weakObjects()
+
+    func attach(_ view: RemoteCanvasMetalView, asMirror: Bool) {
+        if asMirror {
+            mirrors.add(view)
+        } else {
+            hostView = view
+        }
+    }
+
+    private func redrawFrame() {
+        requestRedraw()
+        for view in mirrors.allObjects { view.requestRedraw() }
     }
 
     private func requestRedraw() {
@@ -167,7 +179,7 @@ public final class RemoteCanvasRenderer {
         #if DEBUG
         if let presentation, presentation.stage == .waiting { presentation.stage = .uploaded }
         #endif
-        requestRedraw()
+        redrawFrame()
     }
 
     /// Discards the current frame, e.g. when a session disconnects.
@@ -180,7 +192,7 @@ public final class RemoteCanvasRenderer {
         frameWidth = 0
         frameHeight = 0
         framePixelSize = nil
-        requestRedraw()
+        redrawFrame()
     }
 
     /// Copies the latest frame into an immutable image, or returns nil when no
@@ -220,7 +232,7 @@ public final class RemoteCanvasRenderer {
     }
 
     /// Draws the latest frame into the supplied view.
-    func draw(in view: MTKView) {
+    func draw(in view: MTKView, asMirror: Bool) {
         guard let pipeline, let commandQueue, let texture,
               let descriptor = view.currentRenderPassDescriptor,
               let drawable = view.currentDrawable
@@ -236,13 +248,13 @@ public final class RemoteCanvasRenderer {
         encoder.setRenderPipelineState(pipeline)
         encoder.setFragmentTexture(texture, index: 0)
 
-        var uniforms = canvasUniforms(for: target)
+        var uniforms = canvasUniforms(for: target, asMirror: asMirror)
         encoder.setVertexBytes(&uniforms, length: MemoryLayout<CanvasUniforms>.stride, index: 0)
         encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
         encoder.endEncoding()
 
         #if DEBUG
-        if let presentation, presentation.stage == .uploaded {
+        if !asMirror, let presentation, presentation.stage == .uploaded {
             presentation.stage = .submitted
             // The simulator SDK exposes submission but no drawable presentation callback.
             #if !targetEnvironment(simulator)
@@ -271,8 +283,8 @@ public final class RemoteCanvasRenderer {
         var size: SIMD2<Float>
     }
 
-    private func canvasUniforms(for target: CGSize) -> CanvasUniforms {
-        if let imageRect, containerSize.width > 0, containerSize.height > 0,
+    private func canvasUniforms(for target: CGSize, asMirror: Bool) -> CanvasUniforms {
+        if !asMirror, let imageRect, containerSize.width > 0, containerSize.height > 0,
            imageRect.width > 0, imageRect.height > 0 {
             return CanvasUniforms(
                 origin: SIMD2(
@@ -285,7 +297,7 @@ public final class RemoteCanvasRenderer {
                 )
             )
         }
-        let scale = viewportScale(for: target)
+        let scale = viewportScale(for: target, mode: asMirror ? .fit : contentMode)
         return CanvasUniforms(
             origin: SIMD2((1 - scale.x) / 2, (1 - scale.y) / 2),
             size: scale
@@ -329,12 +341,12 @@ public final class RemoteCanvasRenderer {
         return newTexture
     }
 
-    private func viewportScale(for target: CGSize) -> SIMD2<Float> {
+    private func viewportScale(for target: CGSize, mode: RemoteContentMode) -> SIMD2<Float> {
         guard frameWidth > 0, frameHeight > 0 else { return SIMD2(1, 1) }
         let frameAspect = CGFloat(frameWidth) / CGFloat(frameHeight)
         let targetAspect = target.width / target.height
 
-        switch contentMode {
+        switch mode {
         case .stretch:
             return SIMD2(1, 1)
         case .fit:

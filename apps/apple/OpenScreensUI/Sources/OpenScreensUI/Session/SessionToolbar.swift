@@ -3,6 +3,8 @@ import SwiftUI
 
 /// Floating/docked session controls.
 struct SessionToolbar: View {
+    @Environment(\.externalDisplayMirroring) private var externalDisplayMirroring
+
     let model: SessionViewModel
     let orientation: FloatingBarOrientation
     let items: [SessionToolbarItem]
@@ -55,6 +57,9 @@ struct SessionToolbar: View {
             if primaryLimit != nil {
                 Menu {
                     Section {
+                        if let externalDisplayMirroring {
+                            Toggle("Mirror to External Display", systemImage: "airplayvideo", isOn: externalDisplayMirroring)
+                        }
                         RemoteCommandMenu(model: model)
                         Button("Hide Toolbar", systemImage: "chevron.down") { model.toggleChrome() }
                         Button("Disconnect", systemImage: "rectangle.portrait.and.arrow.right",
@@ -74,6 +79,12 @@ struct SessionToolbar: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel("More")
             } else {
+                if let externalDisplayMirroring {
+                    Toggle("Mirror to External Display", systemImage: "airplayvideo", isOn: externalDisplayMirroring)
+                        .labelStyle(.iconOnly)
+                        .toggleStyle(.button)
+                        .frame(minWidth: buttonSize, minHeight: buttonSize)
+                }
                 FloatingIconButton(systemImage: "chevron.down", title: "Hide Toolbar", size: buttonSize) {
                     model.toggleChrome()
                 }

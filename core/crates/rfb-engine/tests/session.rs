@@ -1026,6 +1026,76 @@ async fn curtain_requests_require_the_advertised_capability() {
 }
 
 #[tokio::test]
+async fn apple_layout_before_pixels_requests_one_full_refresh() {
+    let (client, mut server) = duplex(4096);
+    let peer = tokio::spawn(async move {
+        perform_apple_handshake(&mut server).await;
+        read_setup(&mut server).await;
+
+        // DisplayInfo2 and a DCT quantisation table in one update.
+        let mut update = vec![0, 0, 0, 2];
+        update.extend_from_slice(&[0; 8]);
+        update.extend_from_slice(&1105i32.to_be_bytes());
+        update.extend_from_slice(&76u16.to_be_bytes());
+        update.extend_from_slice(&[0, 0, 0, 2, 0, 2, 0, 2, 0, 2]);
+        update.extend_from_slice(&[0; 8]);
+        update.extend_from_slice(&1u16.to_be_bytes());
+        update.extend_from_slice(&1f64.to_be_bytes());
+        update.extend_from_slice(&1f64.to_be_bytes());
+        update.extend_from_slice(&1u32.to_be_bytes());
+        for _ in 0..2 {
+            update.extend_from_slice(&[0, 0, 0, 0, 0, 2, 0, 2]);
+        }
+        update.extend_from_slice(&[0; 4]);
+        update.extend_from_slice(&rfb_proto::pixel_format::PixelFormat::bgra8888().encode());
+        update.extend_from_slice(&[0, 0, 0, 0, 0, 2, 0, 2]);
+        update.extend_from_slice(&1011i32.to_be_bytes());
+        update.extend_from_slice(&129u32.to_be_bytes());
+        update.push(2);
+        update.extend_from_slice(&[1; 128]);
+        let mut request = [0; 10];
+        for incremental in [0, 1] {
+            server.write_all(&update).await.unwrap();
+            server.read_exact(&mut request).await.unwrap();
+            assert_eq!(request, [3, incremental, 0, 0, 0, 0, 0, 2, 0, 2]);
+        }
+        server.write_all(&raw_update()).await.unwrap();
+        server.read_exact(&mut request).await.unwrap();
+        assert_eq!(request[1], 1);
+    });
+
+    let mut config = SessionConfig::new("mock", 5900);
+    config.apple_session = true;
+    config.adaptive_dct = true;
+    let session = Session::connect_stream(client, config).await.unwrap();
+    timeout(Duration::from_secs(2), peer)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(matches!(
+        session.next_event().await,
+        Some(Event::Connected { .. })
+    ));
+    for _ in 0..2 {
+        assert!(matches!(
+            session.next_event().await,
+            Some(Event::DesktopLayout { .. })
+        ));
+    }
+    assert!(matches!(
+        session.next_event().await,
+        Some(Event::Frame { sequence: 1, .. })
+    ));
+    let rect = Rect {
+        x: 0,
+        y: 0,
+        width: WIDTH,
+        height: HEIGHT,
+    };
+    assert_eq!(session.copy_region(rect).unwrap(), raw_update()[16..]);
+}
+
+#[tokio::test]
 async fn unsupported_adaptive_dct_reference_falls_back_to_standard_encodings() {
     let (client, mut server) = duplex(64 * 1024);
 

@@ -9,6 +9,7 @@ final class SessionCredentialTests: XCTestCase {
         let model = SessionViewModel(profile: profile, service: service)
         defer { model.stop() }
 
+        model.scheduleViewportUpdate(in: CGSize(width: 320, height: 640), screenPixelWidth: 960)
         model.start()
         try await wait { model.credentialChallenge == .missingUsername }
         model.reconnect()
@@ -19,6 +20,8 @@ final class SessionCredentialTests: XCTestCase {
 
         model.submitCredentials(username: "user", password: " test ", remember: false)
         try await wait { model.state.isConnected }
+        try await wait { model.receivedFrames == 1 }
+        XCTAssertEqual(model.frameSize, CGSize(width: 2, height: 2))
         XCTAssertFalse(model.rememberLogin)
         let transport = await service.log.latest
         transport?.yield(.state(.disconnected(reason: "network")))
@@ -78,7 +81,14 @@ private struct LoginTransport: RemoteSessionProtocol {
             throw RemoteSessionFailure(kind: .authenticationFailed, reason: "")
         }
         await log.connected(stream)
+        stream.yield(.displays([RemoteDisplay(id: 0, name: "Fixture", width: 2, height: 2)]))
         stream.yield(.state(.connected))
+    }
+
+    func setViewport(_ normalizedRect: CGRect?, screenPixelWidth: Int) async {
+        guard normalizedRect == CGRect(x: 0, y: 0, width: 1, height: 1),
+              screenPixelWidth == 960 else { return }
+        stream.yield(.frame(RemoteFrame(width: 2, height: 2, data: Data(repeating: 255, count: 16))))
     }
 
     func disconnect() async { stream.finish() }

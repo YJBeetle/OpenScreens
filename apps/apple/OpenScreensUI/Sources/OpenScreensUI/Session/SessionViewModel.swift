@@ -78,7 +78,7 @@ public final class SessionViewModel {
         if let viewport {
             return CGSize(width: viewport.framebufferWidth, height: viewport.framebufferHeight)
         }
-        return frameSize
+        return frameSize ?? serverSize
     }
 
     public var cursorMode: CursorMode
@@ -147,7 +147,10 @@ public final class SessionViewModel {
     @ObservationIgnored private var backgroundedAt: Date?
     @ObservationIgnored private var scrollRemainder = CGSize.zero
     @ObservationIgnored private var viewportTask: Task<Void, Never>?
+    @ObservationIgnored private var canvasSize: CGSize = .zero
+    @ObservationIgnored private var canvasPixelWidth = 0
     @ObservationIgnored private var lastViewportRect: CGRect?
+    @ObservationIgnored private var lastViewportPixelWidth = 0
 
     private static let resumeReconnectDelay: TimeInterval = 5
     private static let maxZoom: CGFloat = 6
@@ -260,6 +263,9 @@ public final class SessionViewModel {
         pendingDisplayRestore = saved.remembersSelectedDisplay ? saved.preferredDisplayID : nil
         inputQueue?.events.finish()
         inputQueue = SessionInputQueue(session: session)
+        renderer.reset()
+        receivedFrames = 0
+        frameSize = nil
         lastViewportRect = nil
         viewport = nil
         state = isReconnect ? .reconnecting(attempt: reconnectAttempts) : .connecting
@@ -315,8 +321,10 @@ public final class SessionViewModel {
     private func handle(_ event: RemoteSessionEvent) {
         switch event {
         case .state(let newState):
+            let wasConnected = state.isConnected
             state = newState
             if newState.isConnected {
+                if !wasConnected { scheduleCurrentViewport() }
                 if rememberLogin, let sessionPassword {
                     if store?.rememberLogin(for: profile, username: loginUsername, password: sessionPassword) != true {
                         showMessage(NSLocalizedString("The credentials could not be saved.", comment: "Credential storage failure"))
@@ -340,7 +348,12 @@ public final class SessionViewModel {
         case .curtainModeSupport(let supported):
             supportsCurtainMode = supported
         case .framebufferSize(let width, let height):
-            serverSize = CGSize(width: width, height: height)
+            let size = CGSize(width: width, height: height)
+            if serverSize != size {
+                serverSize = size
+                lastViewportRect = nil
+                scheduleCurrentViewport()
+            }
 
         case .displays(let list):
             displays = list
@@ -684,16 +697,23 @@ public final class SessionViewModel {
     /// Debounces a viewport subscription for the visible part of the image, so
     /// a pinch or pan settles before the server is re-asked.
     public func scheduleViewportUpdate(in size: CGSize, screenPixelWidth: CGFloat) {
-        guard state.isConnected, serverSize != nil else { return }
+        canvasSize = size
+        canvasPixelWidth = Int(max(1, screenPixelWidth.rounded()))
+        scheduleCurrentViewport()
+    }
+
+    private func scheduleCurrentViewport() {
+        guard state.isConnected, serverSize != nil, canvasSize.width > 0, canvasSize.height > 0 else { return }
         viewportTask?.cancel()
         viewportTask = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(150))
             guard !Task.isCancelled else { return }
-            await self?.updateViewport(in: size, screenPixelWidth: screenPixelWidth)
+            await self?.updateViewport()
         }
     }
 
-    private func updateViewport(in size: CGSize, screenPixelWidth: CGFloat) async {
+    private func updateViewport() async {
+        let size = canvasSize
         guard let session,
               let displayed = displayedImageRect(in: size),
               displayed.width > 0, displayed.height > 0
@@ -710,12 +730,10 @@ public final class SessionViewModel {
             height: visible.height / displayed.height
         ).intersection(unit)
         guard normalized.width > 0, normalized.height > 0 else { return }
-        guard normalized != lastViewportRect else { return }
+        guard normalized != lastViewportRect || canvasPixelWidth != lastViewportPixelWidth else { return }
         lastViewportRect = normalized
-        await session.setViewport(
-            normalized,
-            screenPixelWidth: Int(max(1, screenPixelWidth.rounded()))
-        )
+        lastViewportPixelWidth = canvasPixelWidth
+        await session.setViewport(normalized, screenPixelWidth: canvasPixelWidth)
     }
 
     private func clampedPan(_ value: CGSize, in size: CGSize) -> CGSize {

@@ -272,4 +272,7 @@
     <string name="editor_ssh_no_keys">Add a key in Settings → SSH keys.</string>
     <string name="editor_ssh_manage_keys">Manage keys in Settings → SSH keys.</string>
     <string name="editor_ssh_key_required">Select an SSH key</string>
+    <string name="session_enable_curtain">Enable Curtain Mode</string>
+    <string name="session_disable_curtain">Disable Curtain Mode</string>
+    <string name="session_curtain_error">Could not send Curtain Mode request</string>
 </resources>

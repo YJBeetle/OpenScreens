@@ -197,7 +197,7 @@ class UniFfiRemoteSession(
         viewportEmitted = true
 
         session = connected
-        _events.emit(SessionEvent.Connected(width, height))
+        _events.emit(SessionEvent.Connected(width, height, connected.supportsCurtainMode()))
         Log.i(
             TAG,
             "connected to ${connection.address} (${connected.serverName()}) at " +
@@ -346,6 +346,10 @@ class UniFfiRemoteSession(
         Log.i(TAG, "startDownload handle=$handle path=$path root=$root")
         runCatching { session?.startDownload(handle.toUInt(), path, root) }
             .onFailure { error -> Log.w(TAG, "startDownload failed", error) }
+    }
+
+    override suspend fun requestCurtainMode(enabled: Boolean) {
+        session?.requestCurtainMode(enabled)
     }
 
     override suspend fun selectDisplay(displayId: Int?) {

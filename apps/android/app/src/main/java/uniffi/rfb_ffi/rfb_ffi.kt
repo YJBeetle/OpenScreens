@@ -712,6 +712,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Int
     external fun uniffi_rfb_ffi_checksum_method_remotesession_next_transfer_handle(
     ): Int
+    external fun uniffi_rfb_ffi_checksum_method_remotesession_request_curtain_mode(
+    ): Int
     external fun uniffi_rfb_ffi_checksum_method_remotesession_request_download(
     ): Int
     external fun uniffi_rfb_ffi_checksum_method_remotesession_request_refresh(
@@ -735,6 +737,8 @@ internal object IntegrityCheckingUniffiLib {
     external fun uniffi_rfb_ffi_checksum_method_remotesession_start_download(
     ): Int
     external fun uniffi_rfb_ffi_checksum_method_remotesession_start_drag_out(
+    ): Int
+    external fun uniffi_rfb_ffi_checksum_method_remotesession_supports_curtain_mode(
     ): Int
     external fun uniffi_rfb_ffi_checksum_method_remotesession_upload_complete(
     ): Int
@@ -788,6 +792,8 @@ internal object UniffiLib {
     ): Long
     external fun uniffi_rfb_ffi_fn_method_remotesession_next_transfer_handle(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Int
+    external fun uniffi_rfb_ffi_fn_method_remotesession_request_curtain_mode(`ptr`: Long,`enabled`: Byte,
+    ): Long
     external fun uniffi_rfb_ffi_fn_method_remotesession_request_download(`ptr`: Long,`handle`: Int,`path`: RustBuffer.ByValue,
     ): Long
     external fun uniffi_rfb_ffi_fn_method_remotesession_request_refresh(`ptr`: Long,
@@ -812,6 +818,8 @@ internal object UniffiLib {
     ): Long
     external fun uniffi_rfb_ffi_fn_method_remotesession_start_drag_out(`ptr`: Long,`handle`: Int,
     ): Long
+    external fun uniffi_rfb_ffi_fn_method_remotesession_supports_curtain_mode(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Byte
     external fun uniffi_rfb_ffi_fn_method_remotesession_upload_complete(`ptr`: Long,`handle`: Int,
     ): Long
     external fun uniffi_rfb_ffi_fn_method_remotesession_upload_data(`ptr`: Long,`handle`: Int,`chunk`: RustBuffer.ByValue,
@@ -1002,6 +1010,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if ((lib.uniffi_rfb_ffi_checksum_method_remotesession_next_transfer_handle() and 0xFFFF) != 13031) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if ((lib.uniffi_rfb_ffi_checksum_method_remotesession_request_curtain_mode() and 0xFFFF) != 63674) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if ((lib.uniffi_rfb_ffi_checksum_method_remotesession_request_download() and 0xFFFF) != 60308) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -1036,6 +1047,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_rfb_ffi_checksum_method_remotesession_start_drag_out() and 0xFFFF) != 1458) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_rfb_ffi_checksum_method_remotesession_supports_curtain_mode() and 0xFFFF) != 26734) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_rfb_ffi_checksum_method_remotesession_upload_complete() and 0xFFFF) != 6976) {
@@ -1624,6 +1638,8 @@ public interface RemoteSessionInterface {
     
     fun `nextTransferHandle`(): kotlin.UInt
     
+    suspend fun `requestCurtainMode`(`enabled`: kotlin.Boolean)
+    
     suspend fun `requestDownload`(`handle`: kotlin.UInt, `path`: kotlin.String)
     
     suspend fun `requestRefresh`()
@@ -1658,6 +1674,8 @@ public interface RemoteSessionInterface {
     suspend fun `startDownload`(`handle`: kotlin.UInt, `path`: kotlin.String, `root`: kotlin.String)
     
     suspend fun `startDragOut`(`handle`: kotlin.UInt)
+    
+    fun `supportsCurtainMode`(): kotlin.Boolean
     
     suspend fun `uploadComplete`(`handle`: kotlin.UInt)
     
@@ -1917,6 +1935,29 @@ open class RemoteSession: Disposable, AutoCloseable, RemoteSessionInterface
     )
     }
     
+
+    
+    @Throws(SessionFailure::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `requestCurtainMode`(`enabled`: kotlin.Boolean) {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_rfb_ffi_fn_method_remotesession_request_curtain_mode(
+                uniffiHandle,
+                
+        FfiConverterBoolean.lower(`enabled`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_rfb_ffi_rust_future_poll_void(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_rfb_ffi_rust_future_complete_void(future, continuation) },
+        { future -> UniffiLib.ffi_rfb_ffi_rust_future_free_void(future) },
+        // lift function
+        { },
+        
+        // Error FFI converter
+        SessionFailure.ErrorHandler,
+    )
+    }
 
     
     @Throws(SessionFailure::class)
@@ -2195,6 +2236,19 @@ open class RemoteSession: Disposable, AutoCloseable, RemoteSessionInterface
         SessionFailure.ErrorHandler,
     )
     }
+
+    override fun `supportsCurtainMode`(): kotlin.Boolean {
+            return FfiConverterBoolean.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_rfb_ffi_fn_method_remotesession_supports_curtain_mode(
+        it,
+        _status)
+}
+    }
+    )
+    }
+    
 
     
     @Throws(SessionFailure::class)

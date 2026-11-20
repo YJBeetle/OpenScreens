@@ -69,6 +69,8 @@ interface RemoteSession {
 
     suspend fun startDownload(handle: Int, path: String, root: String)
 
+    suspend fun requestCurtainMode(enabled: Boolean)
+
     suspend fun selectDisplay(displayId: Int?)
 }
 
@@ -101,7 +103,7 @@ data class TransferEntry(
 
 sealed interface SessionEvent {
     data object Connecting : SessionEvent
-    data class Connected(val width: Int, val height: Int) : SessionEvent
+    data class Connected(val width: Int, val height: Int, val supportsCurtainMode: Boolean) : SessionEvent
     data class Resized(val width: Int, val height: Int) : SessionEvent
 
     data class DesktopLayout(

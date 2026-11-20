@@ -270,4 +270,7 @@
     <string name="editor_ssh_no_keys">在设置 → SSH 密钥中添加密钥。</string>
     <string name="editor_ssh_manage_keys">在设置 → SSH 密钥中管理。</string>
     <string name="editor_ssh_key_required">请选择 SSH 密钥</string>
+    <string name="session_enable_curtain">开启幕帘模式</string>
+    <string name="session_disable_curtain">关闭幕帘模式</string>
+    <string name="session_curtain_error">无法发送幕帘模式请求</string>
 </resources>

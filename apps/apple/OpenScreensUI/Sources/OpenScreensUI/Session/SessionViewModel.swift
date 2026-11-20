@@ -338,9 +338,11 @@ public final class SessionViewModel {
 
         case .frame(let frame):
             #if DEBUG
-            if receivedFrames == 0 { firstSequence = frame.sequence }
-            if receivedFrames == 0 || (firstSequence != nil && frame.sequence == firstSequence && firstUpdateHasColor == false) {
-                firstUpdateHasColor = Self.containsNonblackPixel(frame.data)
+            if CanvasPresentation.isEnabled {
+                if receivedFrames == 0 { firstSequence = frame.sequence }
+                if receivedFrames == 0 || (firstSequence != nil && frame.sequence == firstSequence && firstUpdateHasColor == false) {
+                    firstUpdateHasColor = Self.containsNonblackPixel(frame.data)
+                }
             }
             #endif
             receivedFrames += 1

@@ -244,6 +244,8 @@ public final class RemoteCanvasRenderer {
         #if DEBUG
         if let presentation, presentation.stage == .uploaded {
             presentation.stage = .submitted
+            // The simulator SDK exposes submission but no drawable presentation callback.
+            #if !targetEnvironment(simulator)
             let generation = presentation.generation
             drawable.addPresentedHandler { [weak presentation] drawable in
                 guard drawable.presentedTime > 0 else { return }
@@ -252,6 +254,7 @@ public final class RemoteCanvasRenderer {
                     presentation.stage = .presented
                 }
             }
+            #endif
         }
         #endif
         commandBuffer.present(drawable)

@@ -459,7 +459,7 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
                 "Only regular files can be sent to the remote computer.",
                 comment: "Upload error"
             )))
-            continuation.yield(.transferFinished(name: nil))
+            continuation.yield(.transferFinished(names: [], destination: ""))
             return
         }
 
@@ -481,7 +481,7 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
                 format: NSLocalizedString("Could not send files: %@", comment: "Upload error"),
                 error.localizedDescription
             )))
-            continuation.yield(.transferFinished(name: nil))
+            continuation.yield(.transferFinished(names: [], destination: ""))
         }
     }
 
@@ -506,6 +506,7 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
         urls: [URL],
         session: OpenScreensCore.RemoteSession
     ) async {
+        defer { uploadFileNames.removeValue(forKey: handle) }
         let files = urls.compactMap(Self.describeUpload)
         guard !files.isEmpty else {
             try? await session.cancelTransfer(handle: handle)
@@ -513,7 +514,7 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
                 "The dropped items could not be read.",
                 comment: "Upload error"
             )))
-            continuation.yield(.transferFinished(name: nil))
+            continuation.yield(.transferFinished(names: [], destination: ""))
             return
         }
 
@@ -555,10 +556,11 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
             }
 
             try await session.uploadComplete(handle: handle)
+            guard !finished else { return }
             logger.info(
                 "uploaded \(files.count) file(s), \(sentBytes) bytes to \(destination, privacy: .public)"
             )
-            continuation.yield(.transferFinished(name: files.last?.name))
+            continuation.yield(.transferFinished(names: files.map(\.name), destination: destination))
         } catch {
             logger.error("upload failed: \(error.localizedDescription, privacy: .public)")
             try? await session.cancelTransfer(handle: handle)
@@ -566,9 +568,8 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
                 format: NSLocalizedString("File transfer failed: %@", comment: "Upload error"),
                 error.localizedDescription
             )))
-            continuation.yield(.transferFinished(name: nil))
+            continuation.yield(.transferFinished(names: [], destination: ""))
         }
-        uploadFileNames.removeValue(forKey: handle)
     }
 
     private static func describeUpload(_ url: URL) -> UploadFile? {
@@ -631,21 +632,25 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
             yieldDownloadFailure(NSLocalizedString("The session is not connected.", comment: "Download error"))
             return
         }
-        guard let root = downloadRootDirectory() else {
+        guard let directory = downloadRootDirectory() else {
             yieldDownloadFailure(NSLocalizedString("No local folder is available for downloads.", comment: "Download error"))
             return
         }
 
         let handle = session.nextTransferHandle()
-        // Store the destination before starting so a fast completion can find it.
-        downloadRoots[handle] = root.path
+        // A fresh directory lets completion identify exactly what this request saved.
+        let root = directory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         do {
+            try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+            downloadRoots[handle] = root.path
             try await session.startDownload(handle: handle, path: path, root: root.path)
             logger.info(
                 "download started handle=\(handle) path=\(path, privacy: .public) root=\(root.path, privacy: .public)"
             )
         } catch {
-            downloadRoots.removeValue(forKey: handle)
+            if downloadRoots.removeValue(forKey: handle) != nil {
+                try? FileManager.default.removeItem(at: root)
+            }
             let message = error.localizedDescription
             logger.error("download failed: \(message, privacy: .public)")
             continuation.yield(.failure(String(
@@ -654,7 +659,7 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
                 message
             )))
             // Also closes the in-flight status in the UI.
-            continuation.yield(.downloadComplete(savedPath: nil, error: message))
+            continuation.yield(.downloadComplete(items: [], error: message))
         }
     }
 
@@ -776,37 +781,26 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
     /// Reports a download that could not start and clears any UI progress.
     private func yieldDownloadFailure(_ message: String) {
         continuation.yield(.failure(message))
-        continuation.yield(.downloadComplete(savedPath: nil, error: message))
+        continuation.yield(.downloadComplete(items: [], error: message))
     }
 
-    /// The first usable local folder: Downloads, then Documents. The folder is
-    /// created on demand because iOS does not ship a Downloads directory.
     private func downloadRootDirectory() -> URL? {
         let manager = FileManager.default
-        let candidates = [
-            manager.urls(for: .downloadsDirectory, in: .userDomainMask).first,
-            manager.urls(for: .documentDirectory, in: .userDomainMask).first,
-        ]
-        for candidate in candidates.compactMap({ $0 }) {
-            if manager.fileExists(atPath: candidate.path) {
-                return candidate
-            }
-            do {
-                try manager.createDirectory(at: candidate, withIntermediateDirectories: true)
-                return candidate
-            } catch {
-                logger.error(
-                    "could not create \(candidate.path, privacy: .public): \(error.localizedDescription, privacy: .public)"
-                )
-            }
-        }
-        return nil
+        #if os(iOS)
+        // Files exposes the app's Documents directory under On My iPhone/iPad.
+        return manager.urls(for: .documentDirectory, in: .userDomainMask).first?
+            .appendingPathComponent("Downloads", isDirectory: true)
+        #else
+        return manager.urls(for: .downloadsDirectory, in: .userDomainMask).first?
+            .appendingPathComponent("OpenScreens", isDirectory: true)
+        #endif
     }
 
     private func handleFileTransfer(subtype: UInt16, handle: UInt32, payload: Data) {
         switch subtype {
         case Self.transferProgressSubtype:
-            guard let progress = OpenScreensCore.parseTransferProgress(payload: payload)
+            guard uploadFileNames[handle] != nil,
+                  let progress = OpenScreensCore.parseTransferProgress(payload: payload)
             else { return }
             switch progress {
             case .ratio(let value):
@@ -822,7 +816,6 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
             if let ack = OpenScreensCore.parseTransferAck(payload: payload), !ack.isEmpty {
                 logger.info("file transfer ack: \(ack, privacy: .public)")
             }
-            continuation.yield(.transferFinished(name: uploadFileNames.removeValue(forKey: handle)))
         default:
             break
         }
@@ -1037,12 +1030,25 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
                     format: NSLocalizedString("Download failed: %@", comment: "Download error"),
                     error
                 )))
-                continuation.yield(.downloadComplete(savedPath: nil, error: error))
+                continuation.yield(.downloadComplete(items: [], error: error))
             } else {
                 logger.info(
                     "downloaded \(files) file(s), \(directories) folder(s), \(bytes) bytes to \(root, privacy: .public)"
                 )
-                continuation.yield(.downloadComplete(savedPath: root, error: nil))
+                do {
+                    let directory = URL(fileURLWithPath: root, isDirectory: true)
+                    let items = try FileManager.default.contentsOfDirectory(
+                        at: directory,
+                        includingPropertiesForKeys: nil
+                    ).sorted { $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending }
+                    guard !items.isEmpty else {
+                        try? FileManager.default.removeItem(at: directory)
+                        throw RemoteTransferError.missingDownloadedFile("")
+                    }
+                    continuation.yield(.downloadComplete(items: items, error: nil))
+                } catch {
+                    yieldDownloadFailure(error.localizedDescription)
+                }
             }
 
         case .disconnected(let kind, let reason):

@@ -234,7 +234,7 @@ public enum SessionToolbarItem: String, Codable, CaseIterable, Identifiable, Sen
         case .displays: NSLocalizedString("Select Display", comment: "Toolbar item")
         case .keyboard: NSLocalizedString("Keyboard", comment: "Toolbar item")
         case .clipboard: NSLocalizedString("Clipboard", comment: "Toolbar item")
-        case .download: NSLocalizedString("Download", comment: "Toolbar item")
+        case .download: NSLocalizedString("File Transfers", comment: "Toolbar item")
         case .display: NSLocalizedString("Display options", comment: "Toolbar item")
         case .hotCorners: NSLocalizedString("Hot Corners", comment: "Toolbar item")
         case .observe: NSLocalizedString("Observe Mode", comment: "Toolbar item")
@@ -248,7 +248,7 @@ public enum SessionToolbarItem: String, Codable, CaseIterable, Identifiable, Sen
         case .displays: "rectangle.on.rectangle"
         case .keyboard: "keyboard"
         case .clipboard: "doc.on.clipboard"
-        case .download: "arrow.down.doc"
+        case .download: "arrow.up.arrow.down"
         case .display: "display"
         case .hotCorners: "square.grid.3x3"
         case .observe: "eye"

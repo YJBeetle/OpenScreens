@@ -209,14 +209,13 @@ public enum RemoteSessionEvent: Sendable {
     /// Upload status for files dropped onto the remote screen. `name` is the
     /// remote file currently being received; `fraction` is 0...1 when known.
     case transferProgress(name: String?, fraction: Double?)
-    /// An upload finished or was aborted. `name` is the last known file.
-    case transferFinished(name: String?)
+    /// One upload ended. An empty list indicates failure.
+    case transferFinished(names: [String], destination: String)
     /// Download status for a file requested with `download(remotePath:)`.
     /// `total` is 0 when the server does not report a size.
     case downloadProgress(name: String?, received: Int64, total: Int64)
-    /// A download finished. `savedPath` is the local folder the file was
-    /// written to; `error` is set when the transfer failed.
-    case downloadComplete(savedPath: String?, error: String?)
+    /// The top-level items written by this download, empty on failure.
+    case downloadComplete(items: [URL], error: String?)
     case failure(String)
 }
 

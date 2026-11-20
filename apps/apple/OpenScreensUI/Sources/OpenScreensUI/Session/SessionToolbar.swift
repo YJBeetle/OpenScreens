@@ -6,6 +6,7 @@ struct SessionToolbar: View {
     let model: SessionViewModel
     let orientation: FloatingBarOrientation
     let items: [SessionToolbarItem]
+    let onUpload: () -> Void
     let onDownload: () -> Void
     let onDisconnect: () -> Void
     var showsDragHandle = false
@@ -71,13 +72,18 @@ struct SessionToolbar: View {
         case .clipboard:
             clipboardMenu
         case .download:
-            FloatingIconButton(
-                systemImage: "arrow.down.doc",
-                title: "Download Remote File",
-                size: buttonSize
-            ) {
-                onDownload()
+            Menu {
+                Button("Send Files…", systemImage: "arrow.up.doc", action: onUpload)
+                Button("Download Remote File", systemImage: "arrow.down.doc", action: onDownload)
+                Button("File Transfers", systemImage: "arrow.up.arrow.down") {
+                    model.showsFileTransfers = true
+                }
+            } label: {
+                menuIcon("arrow.up.arrow.down", title: "File Transfers")
             }
+            .menuIndicator(.hidden)
+            .buttonStyle(.plain)
+            .accessibilityLabel("File Transfers")
         case .display:
             displayMenu
         case .hotCorners:
@@ -92,6 +98,17 @@ struct SessionToolbar: View {
                 model.toggleObserveMode()
             }
         case .screenshot:
+            #if os(macOS)
+            Menu {
+                Button("Copy Screenshot") { model.grabScreenshot() }
+                Button("Save Screenshot As…") { model.saveScreenshotAs() }
+            } label: {
+                menuIcon("camera", title: "Screenshot")
+            }
+            .menuIndicator(.hidden)
+            .buttonStyle(.plain)
+            .accessibilityLabel("Screenshot")
+            #else
             FloatingIconButton(
                 systemImage: "camera",
                 title: "Screenshot",
@@ -99,6 +116,7 @@ struct SessionToolbar: View {
             ) {
                 model.grabScreenshot()
             }
+            #endif
         }
     }
 

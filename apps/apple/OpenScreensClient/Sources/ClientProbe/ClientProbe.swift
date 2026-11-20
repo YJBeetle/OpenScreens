@@ -41,12 +41,12 @@ struct ClientProbe {
                     print("bell")
                 case .transferProgress(let name, let fraction):
                     print("transfer: \(name ?? "-") \(fraction.map { String(format: "%.0f%%", $0 * 100) } ?? "")")
-                case .transferFinished(let name):
-                    print("transfer finished: \(name ?? "-")")
+                case .transferFinished(let names, let destination):
+                    print("transfer finished: \(names.joined(separator: ", ")) \(destination)")
                 case .downloadProgress(let name, let received, let total):
                     print("download: \(name ?? "-") \(received)/\(total)")
-                case .downloadComplete(let savedPath, let error):
-                    print("download complete: \(savedPath ?? "-") \(error ?? "")")
+                case .downloadComplete(let items, let error):
+                    print("download complete: \(items.map(\.path).joined(separator: ", ")) \(error ?? "")")
                 case .failure(let reason):
                     print("failure: \(reason)")
                 }

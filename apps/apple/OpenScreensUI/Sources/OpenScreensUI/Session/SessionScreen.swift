@@ -117,6 +117,11 @@ public struct SessionScreen: View {
             }
             model.start(store: store)
         }
+        #if os(macOS)
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
+            model.flushSessionPreview()
+        }
+        #endif
         .onDisappear {
             model.stop()
         }

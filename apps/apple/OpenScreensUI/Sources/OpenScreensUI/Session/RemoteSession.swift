@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 import OpenScreensCanvas
 
@@ -79,12 +80,14 @@ public struct RemoteDisplay: Identifiable, Hashable, Sendable {
     public var width: Int
     public var height: Int
     public var isPrimary: Bool
+    public var origin: CGPoint
 
-    public init(id: Int, name: String, width: Int, height: Int, isPrimary: Bool = true) {
+    public init(id: Int, name: String, width: Int, height: Int, isPrimary: Bool = true, origin: CGPoint = .zero) {
         self.id = id
         self.name = name
         self.width = width
         self.height = height
+        self.origin = origin
         self.isPrimary = isPrimary
     }
 

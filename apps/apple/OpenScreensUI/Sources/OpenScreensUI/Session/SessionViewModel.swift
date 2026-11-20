@@ -97,6 +97,7 @@ public final class SessionViewModel {
     @ObservationIgnored private var sessionPassword: String?
     private(set) var rememberLogin = false
     @ObservationIgnored private weak var store: ConnectionStore?
+    @ObservationIgnored private let previewRecorder: SessionPreviewRecorder
     @ObservationIgnored private var recordedConnection = false
     public private(set) var receivedFrames = 0
     #if DEBUG
@@ -188,7 +189,9 @@ public final class SessionViewModel {
         self.cursorMode = profile.controls.cursorMode
         self.isObserving = profile.controls.startInObserveMode
         self.scaling = profile.controls.scaling
-        self.renderer = RemoteCanvasRenderer()
+        let renderer = RemoteCanvasRenderer()
+        self.renderer = renderer
+        self.previewRecorder = SessionPreviewRecorder(id: profile.id, renderer: renderer)
     }
 
     // MARK: - Lifecycle
@@ -196,12 +199,15 @@ public final class SessionViewModel {
     public func start(store: ConnectionStore? = nil) {
         guard credentialChallenge == nil, eventTask == nil, connectTask == nil else { return }
         if let store { self.store = store }
+        previewRecorder.store = self.store
         recordedConnection = false
         isStopping = false
         reconnectAttempts = 0
         failureMessage = nil
         beginSession(isReconnect: false)
     }
+
+    func flushSessionPreview() { previewRecorder.flush() }
 
     public func stop() {
         isStopping = true
@@ -279,6 +285,7 @@ public final class SessionViewModel {
     /// Scene phase hook. A suspended app can return with a socket that never
     /// reports an error, which would leave the last frame on screen forever.
     public func handleScenePhase(_ phase: ScenePhase) {
+        if phase == .background { previewRecorder.flush() }
         sceneIsActive = phase == .active
         #if os(iOS)
         switch phase {
@@ -331,6 +338,7 @@ public final class SessionViewModel {
         pendingDisplayRestore = saved.remembersSelectedDisplay ? saved.preferredDisplayID : nil
         inputQueue?.events.finish()
         inputQueue = SessionInputQueue(session: session)
+        previewRecorder.beginSession()
         renderer.reset()
         receivedFrames = 0
         #if DEBUG
@@ -374,6 +382,8 @@ public final class SessionViewModel {
     private(set) var supportsCurtainMode = false
 
     private func endTransport() {
+        previewRecorder.flush()
+        previewRecorder.reset()
         cancelDisconnectConfirmation()
         supportsCurtainMode = false
         releasePointerInput()
@@ -428,12 +438,14 @@ public final class SessionViewModel {
         case .framebufferSize(let width, let height):
             let size = CGSize(width: width, height: height)
             if serverSize != size {
+                previewRecorder.reset()
                 serverSize = size
                 lastViewportRect = nil
                 scheduleCurrentViewport()
             }
 
         case .displays(let list):
+            if displays != list { previewRecorder.reset() }
             displays = list
             // Some transports report a single display before the first frame.
             if serverSize == nil, list.count == 1, let display = list.first {
@@ -453,6 +465,7 @@ public final class SessionViewModel {
             #endif
             receivedFrames += 1
             frameSize = CGSize(width: frame.width, height: frame.height)
+            let revision = renderer.frameRevision
             if let region = frame.region {
                 renderer.update(
                     region: region,
@@ -464,7 +477,15 @@ public final class SessionViewModel {
                 renderer.updateFullFrame(width: frame.width, height: frame.height, pixels: frame.data)
             }
 
+            if renderer.frameRevision != revision, state.isConnected, !isSwitchingDisplay {
+                previewRecorder.received(frame, displays: displays, selectedID: selectedDisplayID,
+                                         viewport: viewport, serverSize: serverSize)
+            }
+
         case .viewport(let viewport):
+            if self.viewport != viewport {
+                previewRecorder.reset()
+            }
             self.viewport = viewport
 
         case .cursor(let shape):
@@ -1295,6 +1316,8 @@ public final class SessionViewModel {
                 return
             }
         }
+        previewRecorder.flush()
+        previewRecorder.reset()
         displaySelectionTask = Task { [weak self] in
             do {
                 try await session.selectDisplay(id)

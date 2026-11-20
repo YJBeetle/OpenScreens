@@ -4,65 +4,57 @@ import SwiftUI
 public struct ConnectionTile: View {
     private let profile: ConnectionProfile
 
-    public init(profile: ConnectionProfile) {
+    private let preview: CGImage?
+
+    public init(profile: ConnectionProfile, preview: CGImage? = nil) {
+        self.preview = preview
         self.profile = profile
     }
 
     public var body: some View {
-        ZStack(alignment: .bottomLeading) {
-            profile.palette.gradient
-
-            motif
-
-            LinearGradient(
-                colors: [.clear, .black.opacity(0.10), .black.opacity(0.62)],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(alignment: .top) {
-                    Image(systemName: profile.platform.symbolName)
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.92))
-                        .frame(width: 26, height: 26)
-                        .background(.black.opacity(0.18), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
-
-                    Spacer(minLength: 8)
-
-                    if profile.isFavorite {
-                        Image(systemName: "star.fill")
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(.white.opacity(0.9))
-                            .accessibilityHidden(true)
-                    }
-
-                    if profile.section == .nearby {
-                        StatusDot(color: Theme.Colors.success, diameter: 7)
-                            .padding(.top, 4)
+        VStack(alignment: .leading, spacing: 0) {
+            Rectangle()
+                .fill(.black)
+                .aspectRatio(2.1, contentMode: .fit)
+                .overlay {
+                    if let preview {
+                        Image(decorative: preview, scale: 1)
+                            .resizable()
+                            .scaledToFill()
+                    } else {
+                        profile.palette.gradient.overlay { motif }
                     }
                 }
+                .clipped()
 
-                Spacer(minLength: 12)
-
-                Text(profile.name)
-                    .font(Theme.Typography.tileName)
-                    .foregroundStyle(.white)
-                    .lineLimit(1)
-                    .shadow(color: .black.opacity(0.25), radius: 4, y: 1)
-
-                Text(profile.subtitle)
-                    .font(Theme.Typography.tileDetail)
-                    .foregroundStyle(.white.opacity(0.74))
-                    .lineLimit(1)
+            HStack(spacing: 8) {
+                Image(systemName: profile.platform.symbolName)
+                    .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(profile.name)
+                        .font(Theme.Typography.tileName)
+                        .foregroundStyle(.primary)
+                    Text(profile.subtitle)
+                        .font(Theme.Typography.tileDetail)
+                        .foregroundStyle(.secondary)
+                }
+                .lineLimit(1)
+                Spacer(minLength: 0)
+                if profile.isFavorite {
+                    Image(systemName: "star.fill").font(.caption).foregroundStyle(.secondary)
+                }
+                if profile.section == .nearby {
+                    StatusDot(color: Theme.Colors.success, diameter: 7)
+                }
             }
-            .padding(12)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
         }
-        .aspectRatio(1.55, contentMode: .fit)
+        .background(.background)
         .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.tile, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: Theme.Radius.tile, style: .continuous)
-                .strokeBorder(Theme.Colors.tileStroke, lineWidth: 1)
+                .strokeBorder(.primary.opacity(0.12), lineWidth: 1)
         }
         .shadow(color: .black.opacity(0.18), radius: 12, y: 5)
         .accessibilityElement(children: .ignore)

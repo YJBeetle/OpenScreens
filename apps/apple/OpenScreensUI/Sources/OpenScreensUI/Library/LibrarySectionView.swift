@@ -34,7 +34,7 @@ struct ConnectionGrid: View {
                     Button {
                         onConnect(profile, false)
                     } label: {
-                        ConnectionTile(profile: profile)
+                        ConnectionTile(profile: profile, preview: profile.isDiscovered ? nil : store.previews.image(for: profile.id))
                     }
                     .buttonStyle(TilePressStyle())
                     .contextMenu {

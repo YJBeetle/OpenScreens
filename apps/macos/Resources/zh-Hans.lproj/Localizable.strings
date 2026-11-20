@@ -330,6 +330,7 @@
 "Theme" = "主题";
 "Light" = "浅色";
 "Dark" = "深色";
+"Show Last Session Preview" = "显示上次会话预览";
 "Library Tile Size" = "连接库卡片大小";
 "Compact" = "紧凑";
 "Comfortable" = "舒适";

@@ -1003,7 +1003,8 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
                         Int64(screen.id)
                     ),
                     width: Int(screen.width),
-                    height: Int(screen.height)
+                    height: Int(screen.height),
+                    origin: CGPoint(x: Int(screen.x), y: Int(screen.y))
                 )
             }))
 

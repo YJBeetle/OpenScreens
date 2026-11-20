@@ -10,10 +10,24 @@ TARGETS=(aarch64-apple-darwin aarch64-apple-ios aarch64-apple-ios-sim x86_64-app
 if command -v rustup >/dev/null 2>&1; then
   TOOLCHAIN_BIN="$(dirname "$(rustup which rustc)")"
   CARGO=(env "PATH=$TOOLCHAIN_BIN:$PATH" cargo)
-  rustup target add "${TARGETS[@]}" >/dev/null
+  installed="$(rustup target list --installed)"
+  for target in "${TARGETS[@]}"; do
+    if ! grep -Fxq "$target" <<< "$installed"; then
+      rustup target add "$target"
+    fi
+  done
 else
   CARGO=(cargo)
 fi
+
+# Native dependencies compile C and assembly alongside Rust. Pass the
+# deployment version to their compiler as well as to rustc.
+export MACOSX_DEPLOYMENT_TARGET=15.0
+export IPHONEOS_DEPLOYMENT_TARGET=18.0
+export CFLAGS_aarch64_apple_darwin="${CFLAGS_aarch64_apple_darwin:-} -mmacosx-version-min=15.0"
+export CFLAGS_aarch64_apple_ios="${CFLAGS_aarch64_apple_ios:-} -miphoneos-version-min=18.0"
+export CFLAGS_aarch64_apple_ios_sim="${CFLAGS_aarch64_apple_ios_sim:-} -mios-simulator-version-min=18.0"
+export CFLAGS_x86_64_apple_ios="${CFLAGS_x86_64_apple_ios:-} -mios-simulator-version-min=18.0"
 
 cd "$CORE"
 for target in "${TARGETS[@]}"; do

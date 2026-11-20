@@ -39,6 +39,8 @@ struct ClientProbe {
                     if frames >= 2 { exit(0) }
                 case .viewport(let viewport):
                     print("viewport: \(viewport.width)x\(viewport.height) at \(viewport.x),\(viewport.y), scale 1/\(viewport.scale)")
+                case .clipboardRequest:
+                    print("clipboard requested")
                 case .clipboard(let text):
                     print("clipboard: \(text.count) chars")
                 case .cursor(let shape):

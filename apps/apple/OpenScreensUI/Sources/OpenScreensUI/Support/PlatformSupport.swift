@@ -18,6 +18,14 @@ import UIKit
 /// the shared UI free of AppKit/UIKit imports.
 @MainActor
 public enum PlatformClipboard {
+    public static var changeCount: Int {
+        #if os(macOS)
+        NSPasteboard.general.changeCount
+        #else
+        UIPasteboard.general.changeCount
+        #endif
+    }
+
     public static var string: String? {
         #if os(macOS)
         NSPasteboard.general.string(forType: .string)

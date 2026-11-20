@@ -112,14 +112,17 @@ public actor MockRemoteSession: RemoteSessionProtocol {
         keyTime = Date()
     }
 
-    public func sendClipboard(_ text: String) async {
+    public func setClipboardSharing(_ enabled: Bool) async {}
+
+    public func sendClipboard(_ text: String, automatic: Bool) async {
         localClipboard = text
     }
 
-    public func requestClipboard() async {
+    public func requestClipboard() async -> Bool {
         let text = localClipboard
             ?? "Mock clipboard. Use Send Local Clipboard, then Copy Remote Clipboard to fetch it back."
         continuation.yield(.clipboard(text))
+        return true
     }
 
     public func setObserveMode(_ observing: Bool) async {

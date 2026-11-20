@@ -75,6 +75,7 @@ struct SessionToolbar: View {
         case .download:
             Menu {
                 Button("Send Files…", systemImage: "arrow.up.doc", action: onUpload)
+                    .disabled(model.isObserving)
                 Button("Download Remote File", systemImage: "arrow.down.doc", action: onDownload)
                 Button("File Transfers", systemImage: "arrow.up.arrow.down") {
                     model.showsFileTransfers = true
@@ -182,27 +183,26 @@ struct SessionToolbar: View {
             } label: {
                 Label("Send Local Clipboard", systemImage: "arrow.up.doc")
             }
+            .disabled(model.isObserving)
 
             Button {
                 model.fetchRemoteClipboard()
             } label: {
                 Label("Copy Remote Clipboard", systemImage: "arrow.down.doc")
             }
+            Divider()
+            Toggle("Use Shared Clipboard", isOn: Binding(
+                get: { model.sharedClipboard },
+                set: { model.setClipboardSharing($0) }
+            ))
         } label: {
             menuIcon("doc.on.clipboard", title: "Clipboard")
         }
         .menuIndicator(.hidden)
         .buttonStyle(.plain)
-        .disabled(!model.profile.controls.sharedClipboard)
-        .opacity(model.profile.controls.sharedClipboard ? 1 : 0.4)
+        .disabled(!model.state.isConnected)
         .accessibilityLabel("Clipboard")
-        .accessibilityHint(clipboardHint)
-    }
-
-    private var clipboardHint: String {
-        model.profile.controls.sharedClipboard
-            ? NSLocalizedString("Send or fetch clipboard text", comment: "Clipboard hint")
-            : NSLocalizedString("Shared clipboard is turned off for this connection", comment: "Clipboard hint")
+        .accessibilityHint(Text("Send or fetch clipboard text"))
     }
 
     /// Parks the remote pointer on a screen edge, so the host's hot corners
@@ -237,7 +237,7 @@ struct SessionToolbar: View {
 
     private var displayMenu: some View {
         Menu {
-            if model.state.isConnected && model.supportsCurtainMode {
+            if model.state.isConnected && !model.isObserving && model.supportsCurtainMode {
                 Section("Curtain Mode") {
                     Button("Enable Curtain Mode") { model.requestCurtainMode(true) }
                     Button("Disable Curtain Mode") { model.requestCurtainMode(false) }

@@ -30,8 +30,9 @@ private actor InputRecorder: RemoteSessionProtocol, RemoteSessionService {
     func sendScroll(at point: CGPoint, stepsX: Int32, stepsY: Int32) { recorded.append(.scroll(point, stepsX, stepsY)) }
     func sendKey(_ event: RemoteKeyEvent) { recorded.append(.key(event.key, event.modifiers)) }
     func setObserveMode(_ observing: Bool) { recorded.append(.observe(observing)) }
-    func sendClipboard(_ text: String) {}
-    func requestClipboard() {}
+    func setClipboardSharing(_ enabled: Bool) async {}
+    func sendClipboard(_ text: String, automatic: Bool) {}
+    func requestClipboard() async -> Bool { false }
 }
 
 @MainActor

@@ -82,6 +82,7 @@ public final class SessionViewModel {
     }
 
     public var cursorMode: CursorMode
+    public private(set) var sharedClipboard: Bool
     public var isObserving: Bool
     public var scaling: RemoteContentMode
     public var showsChrome = true
@@ -128,7 +129,11 @@ public final class SessionViewModel {
     @ObservationIgnored private let idleTimerOwner = UUID()
     private var displaySelectionTask: Task<Void, Never>?
     @ObservationIgnored private var pendingDisplayRestore: Int?
-    @ObservationIgnored private let connectionStore: ConnectionStore?
+    @ObservationIgnored private let readClipboard: @MainActor () -> String?
+    @ObservationIgnored private let writeClipboard: @MainActor (String) -> Void
+    @ObservationIgnored private var latestRemoteText: String?
+    @ObservationIgnored private var clipboardChangeCount: Int?
+    @ObservationIgnored private var fetchTask: Task<Void, Never>?
     @ObservationIgnored private let service: any RemoteSessionService
     @ObservationIgnored private var session: (any RemoteSessionProtocol)?
     @ObservationIgnored private var inputQueue: SessionInputQueue?
@@ -144,6 +149,7 @@ public final class SessionViewModel {
     @ObservationIgnored private var isStopping = false
     @ObservationIgnored private var reconnectAttempts = 0
     @ObservationIgnored private var lastHoverPixel: CGPoint?
+    @ObservationIgnored private var sceneIsActive = true
     @ObservationIgnored private var backgroundedAt: Date?
     @ObservationIgnored private var scrollRemainder = CGSize.zero
     @ObservationIgnored private var viewportTask: Task<Void, Never>?
@@ -160,12 +166,17 @@ public final class SessionViewModel {
     public init(
         profile: ConnectionProfile,
         service: any RemoteSessionService = MockSessionService(),
-        connectionStore: ConnectionStore? = nil
+        connectionStore: ConnectionStore? = nil,
+        readClipboard: @escaping @MainActor () -> String? = { PlatformClipboard.string },
+        writeClipboard: @escaping @MainActor (String) -> Void = { PlatformClipboard.setString($0) }
     ) {
         self.loginUsername = profile.username
         self.profile = profile
         self.service = service
-        self.connectionStore = connectionStore
+        self.store = connectionStore
+        self.readClipboard = readClipboard
+        self.writeClipboard = writeClipboard
+        self.sharedClipboard = profile.controls.sharedClipboard
         self.cursorMode = profile.controls.cursorMode
         self.isObserving = profile.controls.startInObserveMode
         self.scaling = profile.controls.scaling
@@ -176,7 +187,7 @@ public final class SessionViewModel {
 
     public func start(store: ConnectionStore? = nil) {
         guard credentialChallenge == nil, eventTask == nil, connectTask == nil else { return }
-        self.store = store
+        if let store { self.store = store }
         recordedConnection = false
         isStopping = false
         reconnectAttempts = 0
@@ -212,6 +223,7 @@ public final class SessionViewModel {
     /// Scene phase hook. A suspended app can return with a socket that never
     /// reports an error, which would leave the last frame on screen forever.
     public func handleScenePhase(_ phase: ScenePhase) {
+        sceneIsActive = phase == .active
         #if os(iOS)
         switch phase {
         case .background:
@@ -259,7 +271,7 @@ public final class SessionViewModel {
         self.session = session
         resetDisplaySelection()
         serverSize = nil
-        let saved = connectionStore?.connection(id: profile.id) ?? profile
+        let saved = store?.connection(id: profile.id) ?? profile
         pendingDisplayRestore = saved.remembersSelectedDisplay ? saved.preferredDisplayID : nil
         inputQueue?.events.finish()
         inputQueue = SessionInputQueue(session: session)
@@ -284,6 +296,7 @@ public final class SessionViewModel {
         profile.controls.startInObserveMode = isObserving
         profile.username = loginUsername
         let password = sessionPassword
+        profile.controls.sharedClipboard = sharedClipboard
         connectTask = Task { [weak self, session, profile] in
             do {
                 try await session.connect(profile: profile, password: password)
@@ -303,6 +316,7 @@ public final class SessionViewModel {
         releasePointerInput()
         inputQueue?.events.finish()
         inputQueue = nil
+        resetClipboard()
         session = nil
         resetDisplaySelection()
         connectTask?.cancel()
@@ -342,6 +356,7 @@ public final class SessionViewModel {
             if case .disconnected(let reason, let kind) = newState {
                 resetDisplaySelection()
                 resetTransferProgress()
+                resetClipboard()
                 handleRemoteClose(reason: reason, kind: kind)
             }
 
@@ -392,8 +407,17 @@ public final class SessionViewModel {
             )
 
         case .clipboard(let text):
-            PlatformClipboard.setString(text)
+            guard state.isConnected else { return }
+            latestRemoteText = text
+            guard (sharedClipboard && sceneIsActive) || fetchTask != nil else { return }
+            fetchTask?.cancel()
+            fetchTask = nil
+            writeClipboard(text)
+            if sharedClipboard { clipboardChangeCount = PlatformClipboard.changeCount }
             showMessage(NSLocalizedString("Remote clipboard copied.", comment: "Clipboard toast"))
+
+        case .clipboardRequest:
+            shareLocalClipboardIfNeeded()
 
         case .bell:
             PlatformFeedback.selection()
@@ -917,22 +941,87 @@ public final class SessionViewModel {
 
     // MARK: - Clipboard
 
+    private func resetClipboard() {
+        fetchTask?.cancel()
+        fetchTask = nil
+        latestRemoteText = nil
+        clipboardChangeCount = nil
+    }
+
+    public func setClipboardSharing(_ enabled: Bool) {
+        sharedClipboard = enabled
+        clipboardChangeCount = enabled ? PlatformClipboard.changeCount : nil
+        guard let session else { return }
+        Task {
+            do {
+                try await session.setClipboardSharing(enabled)
+            } catch {
+                showMessage(NSLocalizedString("Could not update clipboard sharing.", comment: "Clipboard toast"))
+            }
+        }
+    }
+
+    private func shareLocalClipboardIfNeeded() {
+        guard sharedClipboard, sceneIsActive, state.isConnected, !isObserving, let session,
+              let text = readClipboard(), !text.isEmpty else { return }
+        Task { try? await session.sendClipboard(text, automatic: true) }
+    }
+
+    /// Poll the change counter only while the session scene is active. Starting
+    /// a new session skips existing text. Resuming detects changes since it was active.
+    func watchLocalClipboard() async {
+        guard state.isConnected, sharedClipboard, !isObserving else { return }
+        while !Task.isCancelled {
+            let current = PlatformClipboard.changeCount
+            if let previous = clipboardChangeCount, current != previous {
+                shareLocalClipboardIfNeeded()
+            }
+            clipboardChangeCount = current
+            do { try await Task.sleep(for: .milliseconds(750)) } catch { return }
+        }
+    }
+
     public func sendLocalClipboard() {
-        guard state.isConnected, !isObserving else { return }
-        guard let text = PlatformClipboard.string, !text.isEmpty else {
+        guard state.isConnected, !isObserving, let session else { return }
+        guard let text = readClipboard(), !text.isEmpty else {
             showMessage(NSLocalizedString("Local clipboard is empty.", comment: "Clipboard toast"))
             return
         }
-        guard let session else { return }
         Task {
-            await session.sendClipboard(text)
-            self.showMessage(NSLocalizedString("Sent local clipboard.", comment: "Clipboard toast"))
+            do {
+                try await session.sendClipboard(text, automatic: false)
+                showMessage(NSLocalizedString("Sent local clipboard.", comment: "Clipboard toast"))
+            } catch {
+                showMessage(NSLocalizedString("Could not send clipboard text.", comment: "Clipboard toast"))
+            }
         }
     }
 
     public func fetchRemoteClipboard() {
-        guard state.isConnected, !isObserving, let session else { return }
-        Task { await session.requestClipboard() }
+        guard state.isConnected, let session else { return }
+        fetchTask?.cancel()
+        showMessage(NSLocalizedString("Requesting remote clipboard…", comment: "Clipboard toast"))
+        fetchTask = Task {
+            defer { if !Task.isCancelled { fetchTask = nil } }
+            do {
+                let requested = try await session.requestClipboard()
+                try Task.checkCancellation()
+                if requested {
+                    // The clipboard event cancels this timeout, including a reply
+                    // that arrived while the native call was still returning.
+                    try await Task.sleep(for: .seconds(5))
+                    showMessage(NSLocalizedString("No clipboard text received.", comment: "Clipboard toast"))
+                } else if let latestRemoteText {
+                    writeClipboard(latestRemoteText)
+                    showMessage(NSLocalizedString("Copied the last text received from this server.", comment: "Clipboard toast"))
+                } else {
+                    showMessage(NSLocalizedString("Copy text on the remote computer first.", comment: "Clipboard toast"))
+                }
+            } catch {
+                guard !Task.isCancelled else { return }
+                showMessage(NSLocalizedString("Could not request remote clipboard.", comment: "Clipboard toast"))
+            }
+        }
     }
 
     // MARK: - File transfer
@@ -940,7 +1029,7 @@ public final class SessionViewModel {
     /// Sends files dropped onto the remote screen. The transport announces the
     /// drag first and uploads once the server answers with a destination.
     public func uploadFiles(_ urls: [URL]) {
-        guard state.isConnected, !urls.isEmpty, let session else { return }
+        guard state.isConnected, !isObserving, !urls.isEmpty, let session else { return }
         if urls.count == 1 {
             let name = urls[0].lastPathComponent
             uploadFileName = name.isEmpty
@@ -1051,7 +1140,7 @@ public final class SessionViewModel {
     }
 
     func requestCurtainMode(_ enabled: Bool) {
-        guard state.isConnected, supportsCurtainMode, let session else { return }
+        guard state.isConnected, !isObserving, supportsCurtainMode, let session else { return }
         Task { await session.requestCurtainMode(enabled) }
     }
 
@@ -1084,7 +1173,7 @@ public final class SessionViewModel {
         if userInitiated {
             pendingDisplayRestore = nil
             if id == selectedDisplayID {
-                connectionStore?.setPreferredDisplay(id, for: profile.id)
+                store?.setPreferredDisplay(id, for: profile.id)
                 return
             }
         }
@@ -1094,7 +1183,7 @@ public final class SessionViewModel {
                 guard let self, !Task.isCancelled else { return }
                 selectedDisplayID = id
                 if userInitiated {
-                    connectionStore?.setPreferredDisplay(id, for: profile.id)
+                    store?.setPreferredDisplay(id, for: profile.id)
                 }
             } catch {
                 guard let self, !Task.isCancelled else { return }

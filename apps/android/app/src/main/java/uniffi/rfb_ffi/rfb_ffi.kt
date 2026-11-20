@@ -732,6 +732,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Int
     external fun uniffi_rfb_ffi_checksum_method_remotesession_server_name(
     ): Int
+    external fun uniffi_rfb_ffi_checksum_method_remotesession_set_clipboard_sharing(
+    ): Int
     external fun uniffi_rfb_ffi_checksum_method_remotesession_set_viewport(
     ): Int
     external fun uniffi_rfb_ffi_checksum_method_remotesession_size(
@@ -808,7 +810,7 @@ internal object UniffiLib {
     ): Long
     external fun uniffi_rfb_ffi_fn_method_remotesession_select_display(`ptr`: Long,`displayId`: RustBuffer.ByValue,
     ): Long
-    external fun uniffi_rfb_ffi_fn_method_remotesession_send_clipboard(`ptr`: Long,`text`: RustBuffer.ByValue,
+    external fun uniffi_rfb_ffi_fn_method_remotesession_send_clipboard(`ptr`: Long,`text`: RustBuffer.ByValue,`automatic`: Byte,
     ): Long
     external fun uniffi_rfb_ffi_fn_method_remotesession_send_key(`ptr`: Long,`down`: Byte,`keysym`: Int,
     ): Long
@@ -818,6 +820,8 @@ internal object UniffiLib {
     ): Long
     external fun uniffi_rfb_ffi_fn_method_remotesession_server_name(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
+    external fun uniffi_rfb_ffi_fn_method_remotesession_set_clipboard_sharing(`ptr`: Long,`enabled`: Byte,
+    ): Long
     external fun uniffi_rfb_ffi_fn_method_remotesession_set_viewport(`ptr`: Long,`x`: Short,`y`: Short,`width`: Short,`height`: Short,
     ): Long
     external fun uniffi_rfb_ffi_fn_method_remotesession_size(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
@@ -1033,7 +1037,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if ((lib.uniffi_rfb_ffi_checksum_method_remotesession_select_display() and 0xFFFF) != 55335) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if ((lib.uniffi_rfb_ffi_checksum_method_remotesession_send_clipboard() and 0xFFFF) != 53268) {
+    if ((lib.uniffi_rfb_ffi_checksum_method_remotesession_send_clipboard() and 0xFFFF) != 39415) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_rfb_ffi_checksum_method_remotesession_send_key() and 0xFFFF) != 45868) {
@@ -1046,6 +1050,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_rfb_ffi_checksum_method_remotesession_server_name() and 0xFFFF) != 53654) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_rfb_ffi_checksum_method_remotesession_set_clipboard_sharing() and 0xFFFF) != 23849) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_rfb_ffi_checksum_method_remotesession_set_viewport() and 0xFFFF) != 37258) {
@@ -1669,7 +1676,7 @@ public interface RemoteSessionInterface {
      */
     suspend fun `selectDisplay`(`displayId`: kotlin.UInt?)
     
-    suspend fun `sendClipboard`(`text`: kotlin.String)
+    suspend fun `sendClipboard`(`text`: kotlin.String, `automatic`: kotlin.Boolean)
     
     suspend fun `sendKey`(`down`: kotlin.Boolean, `keysym`: kotlin.UInt)
     
@@ -1678,6 +1685,8 @@ public interface RemoteSessionInterface {
     suspend fun `sendScroll`(`x`: kotlin.UShort, `y`: kotlin.UShort, `stepsX`: kotlin.Int, `stepsY`: kotlin.Int)
     
     fun `serverName`(): kotlin.String
+    
+    suspend fun `setClipboardSharing`(`enabled`: kotlin.Boolean)
     
     /**
      * Restricts incremental update requests to a region and refreshes it.
@@ -2079,13 +2088,14 @@ open class RemoteSession: Disposable, AutoCloseable, RemoteSessionInterface
     
     @Throws(SessionFailure::class)
     @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
-    override suspend fun `sendClipboard`(`text`: kotlin.String) {
+    override suspend fun `sendClipboard`(`text`: kotlin.String, `automatic`: kotlin.Boolean) {
         return uniffiRustCallAsync(
         callWithHandle { uniffiHandle ->
             UniffiLib.uniffi_rfb_ffi_fn_method_remotesession_send_clipboard(
                 uniffiHandle,
                 
         FfiConverterString.lower(`text`),
+        FfiConverterBoolean.lower(`automatic`),
             )
         },
         { future, callback, continuation -> UniffiLib.ffi_rfb_ffi_rust_future_poll_void(future, callback, continuation) },
@@ -2186,6 +2196,29 @@ open class RemoteSession: Disposable, AutoCloseable, RemoteSessionInterface
     )
     }
     
+
+    
+    @Throws(SessionFailure::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `setClipboardSharing`(`enabled`: kotlin.Boolean) {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_rfb_ffi_fn_method_remotesession_set_clipboard_sharing(
+                uniffiHandle,
+                
+        FfiConverterBoolean.lower(`enabled`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_rfb_ffi_rust_future_poll_void(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_rfb_ffi_rust_future_complete_void(future, continuation) },
+        { future -> UniffiLib.ffi_rfb_ffi_rust_future_free_void(future) },
+        // lift function
+        { },
+        
+        // Error FFI converter
+        SessionFailure.ErrorHandler,
+    )
+    }
 
     
     /**

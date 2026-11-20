@@ -129,6 +129,7 @@ fun ConnectionEditorScreen(
         mutableStateOf(seed?.rememberSelectedDisplay ?: true)
     }
     var platform by rememberSaveable(editorKey) { mutableStateOf(seed?.platform ?: RemotePlatform.Other) }
+    var sharedClipboard by rememberSaveable(editorKey) { mutableStateOf(seed?.sharedClipboard ?: true) }
     var zoomEnabled by rememberSaveable(editorKey) {
         mutableStateOf(seed?.zoomEnabled ?: true)
     }
@@ -317,6 +318,7 @@ fun ConnectionEditorScreen(
                 zoomEnabled = zoomEnabled,
                 startInObserveMode = startInObserveMode,
                 platform = platform,
+                sharedClipboard = sharedClipboard,
                 groupId = groupId,
                 ssh = ssh,
                 wireGuardConfig = wireGuardConfig?.takeIf { it.isNotBlank() },
@@ -664,6 +666,26 @@ fun ConnectionEditorScreen(
                     Spacer(Modifier.width(12.dp))
                     Switch(checked = startInObserveMode, onCheckedChange = null)
                 }
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .toggleable(value = sharedClipboard, role = Role.Switch, onValueChange = { sharedClipboard = it })
+                        .padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(stringResource(R.string.editor_shared_clipboard), style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            stringResource(R.string.editor_shared_clipboard_hint),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Switch(checked = sharedClipboard, onCheckedChange = null)
+                }
+
 
                 HorizontalDivider(Modifier.padding(vertical = 4.dp))
 

@@ -166,7 +166,7 @@ private struct NearbyDiscoveryLifecycle: ViewModifier {
                 }
             }
             .onChange(of: discovery.computers) { _, computers in
-                store.syncDiscovered(computers)
+                store.syncDiscovered(computers, sharedClipboard: settings.settings.sharedClipboard)
             }
             .onChange(of: scenePhase) { _, phase in
                 guard settings.settings.discoverNearby else { return }

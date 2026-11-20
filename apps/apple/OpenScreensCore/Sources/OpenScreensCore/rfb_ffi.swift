@@ -696,7 +696,7 @@ public protocol RemoteSessionProtocol: AnyObject, Sendable {
      */
     func selectDisplay(displayId: UInt32?) async throws 
     
-    func sendClipboard(text: String) async throws 
+    func sendClipboard(text: String, automatic: Bool) async throws 
     
     func sendKey(down: Bool, keysym: UInt32) async throws 
     
@@ -705,6 +705,8 @@ public protocol RemoteSessionProtocol: AnyObject, Sendable {
     func sendScroll(x: UInt16, y: UInt16, stepsX: Int32, stepsY: Int32) async throws 
     
     func serverName()  -> String
+    
+    func setClipboardSharing(enabled: Bool) async throws 
     
     /**
      * Restricts incremental update requests to a region and refreshes it.
@@ -1014,12 +1016,12 @@ open func selectDisplay(displayId: UInt32?)async throws   {
         )
 }
     
-open func sendClipboard(text: String)async throws   {
+open func sendClipboard(text: String, automatic: Bool)async throws   {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_rfb_ffi_fn_method_remotesession_send_clipboard(
-                        self.uniffiCloneHandle(),FfiConverterString.lower(text)
+                        self.uniffiCloneHandle(),FfiConverterString.lower(text),FfiConverterBool.lower(automatic)
                 )
             },
             pollFunc: ffi_rfb_ffi_rust_future_poll_void,
@@ -1085,6 +1087,22 @@ open func serverName() -> String  {
             self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
+}
+    
+open func setClipboardSharing(enabled: Bool)async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_rfb_ffi_fn_method_remotesession_set_clipboard_sharing(
+                        self.uniffiCloneHandle(),FfiConverterBool.lower(enabled)
+                )
+            },
+            pollFunc: ffi_rfb_ffi_rust_future_poll_void,
+            completeFunc: ffi_rfb_ffi_rust_future_complete_void,
+            freeFunc: ffi_rfb_ffi_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeSessionFailure_lift
+        )
 }
     
     /**
@@ -3144,7 +3162,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_rfb_ffi_checksum_method_remotesession_select_display() != 55335) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_rfb_ffi_checksum_method_remotesession_send_clipboard() != 53268) {
+    if (uniffi_rfb_ffi_checksum_method_remotesession_send_clipboard() != 39415) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_rfb_ffi_checksum_method_remotesession_send_key() != 45868) {
@@ -3157,6 +3175,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_rfb_ffi_checksum_method_remotesession_server_name() != 53654) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_rfb_ffi_checksum_method_remotesession_set_clipboard_sharing() != 23849) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_rfb_ffi_checksum_method_remotesession_set_viewport() != 37258) {

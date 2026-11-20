@@ -94,7 +94,8 @@ private struct LoginTransport: RemoteSessionProtocol {
     func disconnect() async { stream.finish() }
     func sendPointer(_ event: PointerEvent) async {}
     func sendKey(_ event: RemoteKeyEvent) async {}
-    func sendClipboard(_ text: String) async {}
-    func requestClipboard() async {}
+    func setClipboardSharing(_ enabled: Bool) async {}
+    func sendClipboard(_ text: String, automatic: Bool) async {}
+    func requestClipboard() async -> Bool { false }
     func setObserveMode(_ observing: Bool) async {}
 }

@@ -49,7 +49,6 @@ private enum InputCommand: Sendable {
     case pointer(mask: UInt8, x: UInt16, y: UInt16)
     case scroll(x: UInt16, y: UInt16, stepsX: Int32, stepsY: Int32)
     case key(down: Bool, keysym: UInt32)
-    case clipboard(String)
 }
 
 /// A regular file described for the Apple drag-and-drop upload protocol.
@@ -87,10 +86,6 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
     private var observing = false
     private var finished = false
     private var sharedClipboard = true
-    /// Guards against echoing the remote clipboard straight back to the server.
-    private var lastRemoteClipboard: String?
-    private var lastSentClipboard: String?
-
     /// Callers waiting for the 0x20 drag info that answers a 0x0E drag-out.
     private var dragOutWaiters: [UInt32: CheckedContinuation<[OpenScreensUI.RemoteFile], Never>] = [:]
     private var dragOutTimeouts: [UInt32: Task<Void, Never>] = [:]
@@ -238,6 +233,8 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
                 session = try await OpenScreensCore.RemoteSession.connect(config: config)
             }
             guard !finished, !Task.isCancelled else { throw CancellationError() }
+            try await session.setClipboardSharing(enabled: sharedClipboard && !observing)
+            guard !finished, !Task.isCancelled else { throw CancellationError() }
             self.session = session
             continuation.yield(.curtainModeSupport(session.supportsCurtainMode()))
             updateSize(session.size())
@@ -329,42 +326,29 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
         }
     }
 
-    public func sendClipboard(_ text: String) async {
-        guard !observing, !text.isEmpty else { return }
-        lastSentClipboard = text
-        inputContinuation.yield(.clipboard(text))
+    public func setClipboardSharing(_ enabled: Bool) async throws {
+        sharedClipboard = enabled
+        try await session?.setClipboardSharing(enabled: enabled && !observing)
     }
 
-    public func requestClipboard() async {}
-
-    /// Answers Apple message 0x14 subtype 2. The engine deduplicates the wire
-    /// payload; reading the platform pasteboard is gated by the per-connection
-    /// shared clipboard setting.
-    private func handleClipboardRequest() {
-        guard sharedClipboard, !observing, session != nil, !finished else { return }
-        Task { @MainActor [weak self] in
-            guard let self, let text = PlatformClipboard.string, !text.isEmpty else { return }
-            await self.respondToClipboardRequest(text)
-        }
+    public func sendClipboard(_ text: String, automatic: Bool) async throws {
+        guard let session, !finished, !observing else { throw RemoteTransferError.notConnected }
+        guard !automatic || sharedClipboard else { return }
+        try await session.sendClipboard(text: text, automatic: automatic)
     }
 
-    private func respondToClipboardRequest(_ text: String) async {
-        guard let session, !finished, sharedClipboard, !observing else { return }
-        guard text != lastRemoteClipboard, text != lastSentClipboard else { return }
-        do {
-            try await session.sendClipboard(text: text)
-            lastSentClipboard = text
-        } catch {
-            logger.error("clipboard reply failed: \(error.localizedDescription, privacy: .public)")
-        }
+    public func requestClipboard() async throws -> Bool {
+        guard let session, !finished else { throw RemoteTransferError.notConnected }
+        return try await session.requestClipboard()
     }
 
     public func setObserveMode(_ observing: Bool) async {
         self.observing = observing
+        try? await session?.setClipboardSharing(enabled: sharedClipboard && !observing)
     }
 
     public func requestCurtainMode(_ enabled: Bool) async {
-        guard let session, !finished else { return }
+        guard let session, !observing, !finished else { return }
         do {
             try await session.requestCurtainMode(enabled: enabled)
         } catch {
@@ -469,7 +453,7 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
     /// Announces dropped files to the server. The upload itself starts when
     /// the server answers with an `.uploadRequest` carrying the destination.
     public func uploadFiles(_ urls: [URL]) async {
-        guard let session, !finished else { return }
+        guard let session, !observing, !finished else { return }
         let files = urls.filter(Self.isUploadable)
         guard !files.isEmpty else {
             continuation.yield(.failure(NSLocalizedString(
@@ -969,11 +953,11 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
             }))
 
         case .clipboard(let text):
-            lastRemoteClipboard = text
             continuation.yield(.clipboard(text))
 
         case .clipboardRequest:
-            handleClipboardRequest()
+            guard sharedClipboard, !observing else { return }
+            continuation.yield(.clipboardRequest)
 
         case .bell:
             continuation.yield(.bell)
@@ -1078,8 +1062,6 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
                         try await session.sendScroll(x: x, y: y, stepsX: stepsX, stepsY: stepsY)
                     case .key(let down, let keysym):
                         try await session.sendKey(down: down, keysym: keysym)
-                    case .clipboard(let text):
-                        try await session.sendClipboard(text: text)
                     }
                 } catch {
                     return

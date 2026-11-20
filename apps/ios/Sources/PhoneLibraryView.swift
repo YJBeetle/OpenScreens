@@ -411,7 +411,7 @@ struct PhoneLibraryView: View {
     private func connectPendingLink() {
         guard let url = pendingQuickConnect else { return }
         pendingQuickConnect = nil
-        guard let profile = store.resolveLink(url) else { return }
+        guard let profile = store.resolveLink(url, sharedClipboard: settings.settings.sharedClipboard) else { return }
         openSession(profile)
     }
 

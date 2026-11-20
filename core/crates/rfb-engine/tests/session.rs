@@ -458,7 +458,7 @@ async fn session_round_trip() {
     assert!(!session.request_clipboard().await.unwrap());
     session.send_pointer(1, 10, 20).await.unwrap();
     session.send_key(true, 0x61).await.unwrap();
-    session.send_clipboard("hey").await.unwrap();
+    session.send_clipboard("hey", false).await.unwrap();
 
     let mut events = Vec::new();
     for _ in 0..5 {
@@ -733,7 +733,10 @@ async fn apple_clipboard_request_upload_and_replay() {
     let mut client_init = [0u8; 1];
     server.read_exact(&mut client_init).await.unwrap();
     assert_eq!(client_init[0], 0xc1);
-    server.write_all(&apple_server_init(1 << 32)).await.unwrap();
+    server
+        .write_all(&apple_server_init((1 << 32) | (1 << 41)))
+        .await
+        .unwrap();
     let mut apple = [0u8; 66];
     server.read_exact(&mut apple).await.unwrap();
     let _ = read_setup(&mut server).await;
@@ -777,13 +780,16 @@ async fn apple_clipboard_request_upload_and_replay() {
     assert_eq!(event, Event::ClipboardRequest);
 
     let text = "Hello, 世界";
-    session.send_clipboard(text).await.unwrap();
+    session.set_clipboard_sharing(true).await.unwrap();
+    server.read_exact(&mut request).await.unwrap();
+    assert_eq!(request, [0x15, 0, 0, 1, 0, 0, 0, 0]);
+    session.send_clipboard(text, false).await.unwrap();
     let message = read_pasteboard_message(&mut server).await;
     let pasteboard = rfb_engine::apple_input::parse_server_pasteboard(&message).unwrap();
     assert_eq!(pasteboard.text.as_deref(), Some(text));
 
     // The same clipboard is not sent twice (echo-loop guard).
-    session.send_clipboard(text).await.unwrap();
+    session.send_clipboard(text, true).await.unwrap();
     let mut byte = [0u8; 1];
     assert!(
         timeout(Duration::from_millis(200), server.read_exact(&mut byte))
@@ -798,6 +804,33 @@ async fn apple_clipboard_request_upload_and_replay() {
         .unwrap();
     let replay = read_pasteboard_message(&mut server).await;
     assert_eq!(replay, message);
+
+    // The host replaced its clipboard. Suppress its echo but permit the user
+    // to copy a previously sent value again.
+    server.write_all(&reply).await.unwrap();
+    assert!(matches!(
+        session.next_event().await.unwrap(),
+        Event::Clipboard { .. }
+    ));
+    session.send_clipboard("fresh text", true).await.unwrap();
+    session.send_clipboard(text, true).await.unwrap();
+    assert_eq!(read_pasteboard_message(&mut server).await, message);
+
+    session.set_clipboard_sharing(false).await.unwrap();
+    server.read_exact(&mut request).await.unwrap();
+    assert_eq!(request, [0x15, 0, 0, 2, 0, 0, 0, 0]);
+    session.send_clipboard(text, false).await.unwrap();
+    assert_eq!(read_pasteboard_message(&mut server).await, message);
+    session.send_clipboard("private", true).await.unwrap();
+    server
+        .write_all(&[0x14, 0, 4, 0, 4, 0, 1, 3])
+        .await
+        .unwrap();
+    assert!(
+        timeout(Duration::from_millis(100), server.read_exact(&mut byte))
+            .await
+            .is_err()
+    );
 }
 
 #[tokio::test]

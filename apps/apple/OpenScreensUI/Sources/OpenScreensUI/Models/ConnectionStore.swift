@@ -198,7 +198,7 @@ public final class ConnectionStore {
     }
 
     /// Reconciles the transient Nearby section with the current Bonjour results.
-    public func syncDiscovered(_ computers: [DiscoveredComputer]) {
+    public func syncDiscovered(_ computers: [DiscoveredComputer], sharedClipboard: Bool = true) {
         advertisedEndpoints = Set(computers.map { Self.endpointKey(host: $0.host, port: $0.port) })
         let savedKeys = Set(
             connections
@@ -232,7 +232,8 @@ public final class ConnectionStore {
                         port: computer.port,
                         section: .nearby,
                         authentication: .vncPassword,
-                        isDiscovered: true
+                        isDiscovered: true,
+                        controls: ControlPreferences(sharedClipboard: sharedClipboard)
                     )
                 )
             }

@@ -36,7 +36,12 @@ interface RemoteSession {
 
     fun sendKey(keysym: Int, pressed: Boolean)
 
-    fun sendClipboard(text: String)
+    suspend fun sendClipboard(text: String, automatic: Boolean = false)
+
+    suspend fun setClipboardSharing(enabled: Boolean)
+
+    /** False for push-only servers. A fresh reply arrives as RemoteClipboard. */
+    suspend fun requestClipboard(): Boolean
 
     suspend fun copyRegion(x: Int, y: Int, width: Int, height: Int): ByteArray
 
@@ -152,6 +157,7 @@ sealed interface SessionEvent {
 
     /** Text copied on the remote machine, to mirror into the local clipboard. */
     data class RemoteClipboard(val text: String) : SessionEvent
+    data object ClipboardRequest : SessionEvent
 
     data class DownloadProgress(
         val handle: Int,

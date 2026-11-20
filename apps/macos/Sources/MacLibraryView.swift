@@ -63,7 +63,7 @@ struct MacLibraryView: View {
                     .frame(width: 720, height: 620)
             case .quickConnect:
                 QuickConnectView { url in
-                    guard let profile = store.resolveLink(url) else { return }
+                    guard let profile = store.resolveLink(url, sharedClipboard: settings.settings.sharedClipboard) else { return }
                     connect(profile)
                 }
                 .environment(store)
@@ -73,7 +73,7 @@ struct MacLibraryView: View {
         }
         .onAppear(perform: autoConnectForTesting)
         .onOpenURL { url in
-            guard let profile = store.resolveLink(url) else { return }
+            guard let profile = store.resolveLink(url, sharedClipboard: settings.settings.sharedClipboard) else { return }
             connect(profile)
         }
     }

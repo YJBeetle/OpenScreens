@@ -76,12 +76,14 @@ class UniFfiRemoteSession(
     private val _events = MutableSharedFlow<SessionEvent>(
         replay = 1,
         extraBufferCapacity = 8,
+        // Preserve clipboard and lifecycle events even when the canvas is busy.
     )
     override val events: Flow<SessionEvent> = _events.asSharedFlow()
 
     @Volatile
     private var session: NativeSession? = null
 
+    @Volatile private var clipboardSharing = connection.sharedClipboard
     private val closed = AtomicBoolean(false)
     private val disposed = AtomicBoolean(false)
     private val openMutex = Mutex()
@@ -223,6 +225,14 @@ class UniFfiRemoteSession(
         }
         viewportEmitted = true
 
+        try {
+            connected.setClipboardSharing(clipboardSharing && !inputMode.observing)
+        } catch (error: Exception) {
+            connected.close()
+            if (error is CancellationException) throw error
+            _events.emit(SessionEvent.Failed(describe(error)))
+            return
+        }
         session = connected
         _events.emit(SessionEvent.Connected(width, height, connected.supportsCurtainMode()))
         Log.i(
@@ -272,6 +282,9 @@ class UniFfiRemoteSession(
         if (inputMode.observing == enabled) return
         inputMode = InputMode(enabled)
         val current = session ?: return
+        inputQueue.trySend {
+            if (session === current) sendInput { current.setClipboardSharing(clipboardSharing && !inputMode.observing) }
+        }
         if (!enabled) return
 
         // Drop old queued input, then release any buttons and keys already sent.
@@ -310,8 +323,10 @@ class UniFfiRemoteSession(
         }
     }
 
-    override fun sendClipboard(text: String) {
-        enqueueInput { current -> current.sendClipboard(text) }
+    override suspend fun sendClipboard(text: String, automatic: Boolean) {
+        check(!inputMode.observing)
+        if (automatic && !clipboardSharing) return
+        checkNotNull(session).sendClipboard(text, automatic)
     }
 
     private fun enqueueInput(send: suspend (NativeSession) -> Unit) {
@@ -342,6 +357,13 @@ class UniFfiRemoteSession(
             Log.w(TAG, "remote input failed", error)
         }
     }
+
+    override suspend fun setClipboardSharing(enabled: Boolean) {
+        clipboardSharing = enabled
+        session?.setClipboardSharing(enabled && !inputMode.observing)
+    }
+
+    override suspend fun requestClipboard(): Boolean = checkNotNull(session).requestClipboard()
 
     override fun nextTransferHandle(): Int =
         session?.nextTransferHandle()?.toInt() ?: 0
@@ -425,6 +447,7 @@ class UniFfiRemoteSession(
     }
 
     override suspend fun requestCurtainMode(enabled: Boolean) {
+        check(!inputMode.observing)
         session?.requestCurtainMode(enabled)
     }
 
@@ -559,8 +582,7 @@ class UniFfiRemoteSession(
                             ),
                         )
                     }
-                    is NativeEvent.Clipboard ->
-                        _events.emit(SessionEvent.RemoteClipboard(event.text))
+                    is NativeEvent.Clipboard -> _events.emit(SessionEvent.RemoteClipboard(event.text))
                     NativeEvent.Bell -> Log.d(TAG, "remote bell")
                     is NativeEvent.Cursor -> renderCursor(event)
                     is NativeEvent.PointerPosition -> Unit
@@ -568,7 +590,9 @@ class UniFfiRemoteSession(
                         _events.emit(
                             SessionEvent.UploadRequest(event.handle.toInt(), event.path),
                         )
-                    NativeEvent.ClipboardRequest -> Unit
+                    NativeEvent.ClipboardRequest -> if (clipboardSharing) {
+                        _events.emit(SessionEvent.ClipboardRequest)
+                    }
                     is NativeEvent.DragOutInfo -> Unit
                     is NativeEvent.FileTransfer -> handleFileTransfer(event)
                     is NativeEvent.DownloadProgress ->

@@ -105,6 +105,9 @@ public struct SessionScreen: View {
             isDropTargeted = targeted
         }
         #endif
+        .task(id: scenePhase == .active && model.sharedClipboard && model.state.isConnected && !model.isObserving) {
+            if scenePhase == .active { await model.watchLocalClipboard() }
+        }
         .onAppear {
             if !appliedChromeDefault {
                 appliedChromeDefault = true
@@ -807,7 +810,7 @@ public struct SessionScreen: View {
 
     #if os(macOS)
     private func handleDrop(providers: [NSItemProvider]) -> Bool {
-        guard model.state.isConnected else { return false }
+        guard model.state.isConnected, !model.isObserving else { return false }
         let fileProviders = providers.filter {
             $0.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier)
         }
@@ -849,7 +852,7 @@ public struct SessionScreen: View {
     }
     #else
     private func handleDrop(urls: [URL]) -> Bool {
-        guard model.state.isConnected, !urls.isEmpty else { return false }
+        guard model.state.isConnected, !model.isObserving, !urls.isEmpty else { return false }
         model.uploadFiles(urls)
         return true
     }

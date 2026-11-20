@@ -728,7 +728,7 @@ public struct ConnectionEditorView: View {
         } header: {
             Text("Session")
         } footer: {
-            Text("Observe mode shows the screen without sending input. Shared clipboard enables manual send and fetch while connected.")
+            Text("Observe mode disables remote input. Shared Clipboard automatically exchanges text. You can also send or get text manually.")
         }
     }
 

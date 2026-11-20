@@ -383,6 +383,13 @@ impl From<rfb_io::SshError> for SessionError {
     }
 }
 
+#[derive(Default)]
+struct ClipboardState {
+    sharing: bool,
+    last_received: Option<String>,
+    last_sent: Option<Vec<u8>>,
+}
+
 /// A connected RFB session.
 pub struct Session {
     commands: mpsc::Sender<Vec<u8>>,
@@ -396,13 +403,12 @@ pub struct Session {
     /// clipboard text is sent as Apple message `0x1F` instead of ClientCutText.
     apple_pasteboard: bool,
     supports_curtain_mode: bool,
+    apple_clipboard_integration: bool,
     apple_client_version_sent: AtomicBool,
     input_clock: std::time::Instant,
     last_input_us: AtomicU64,
     transfer_handle: AtomicU32,
-    /// Last clipboard message sent, replayed when the server asks again
-    /// (Apple message `0x14` subtype 3) and used to suppress echo loops.
-    last_clipboard: Arc<Mutex<Option<Vec<u8>>>>,
+    clipboard: Arc<Mutex<ClipboardState>>,
     downloads: Arc<Mutex<HashMap<u32, DownloadTransfer>>>,
     name: String,
     reader: JoinHandle<()>,
@@ -519,7 +525,7 @@ impl Session {
         let viewport = Arc::new(Mutex::new(None));
         let displays = Arc::new(Mutex::new(AppleDisplayState::default()));
         let downloads = Arc::new(Mutex::new(HashMap::new()));
-        let last_clipboard = Arc::new(Mutex::new(None));
+        let clipboard = Arc::new(Mutex::new(ClipboardState::default()));
 
         let (read_half, write_half) = tokio::io::split(stream);
         let bytes_read = Arc::new(AtomicU64::new(0));
@@ -567,7 +573,7 @@ impl Session {
             config.adaptive_dct && apple_session,
             bytes_read.clone(),
             downloads.clone(),
-            last_clipboard.clone(),
+            clipboard.clone(),
         ));
 
         let session = Self {
@@ -584,11 +590,15 @@ impl Session {
                     .server_init
                     .apple_features
                     .is_some_and(|features| features.feature_bits & (1 << 51) != 0),
+            apple_clipboard_integration: handshake
+                .server_init
+                .apple_features
+                .is_some_and(|features| features.has_clipboard_integration()),
             apple_client_version_sent: AtomicBool::new(apple_session),
             input_clock: std::time::Instant::now(),
             last_input_us: AtomicU64::new(0),
             transfer_handle: AtomicU32::new(1),
-            last_clipboard,
+            clipboard,
             downloads,
             name,
             reader,
@@ -706,6 +716,23 @@ impl Session {
         self.send(message.to_vec()).await
     }
 
+    /// Turning off automatic sharing also revokes the Apple host's ability to
+    /// replay previously sent text (0x14 subtype 3).
+    pub async fn set_clipboard_sharing(&self, enabled: bool) -> Result<(), SessionError> {
+        {
+            let mut clipboard = self.clipboard.lock().expect("clipboard lock");
+            clipboard.sharing = enabled;
+            clipboard.last_received = None;
+            clipboard.last_sent = None;
+        }
+        if self.apple_clipboard_integration {
+            // VNCKit configureAutomaticPasteboardEnabled: (1 = on, 2 = off).
+            self.send(vec![0x15, 0, 0, if enabled { 1 } else { 2 }, 0, 0, 0, 0])
+                .await?;
+        }
+        Ok(())
+    }
+
     /// Requests a fresh pasteboard on Apple RFB 3.889. Standard RFB only pushes
     /// ServerCutText. VNCKit's requestPasteboardContent sends message 11 with
     /// whole seconds since Apple's 2001 reference date in native little endian.
@@ -728,20 +755,26 @@ impl Session {
     /// `serverCanReceivePasteboard` receive message `0x1F` with a pasteboard
     /// archive (matching VNCKit); other servers get a standard ClientCutText.
     ///
-    /// Re-sending an identical clipboard is suppressed so a frontend that
-    /// answers every `ClipboardRequest` cannot create an echo loop with the
-    /// server's own clipboard notifications.
-    pub async fn send_clipboard(&self, text: &str) -> Result<(), SessionError> {
+    /// Explicit sends always reach the host, including when sharing is off.
+    pub async fn send_clipboard(&self, text: &str, automatic: bool) -> Result<(), SessionError> {
         let message = if self.apple_pasteboard {
             apple_input::client_pasteboard_message(text)
         } else {
             client_cut_text(text.as_bytes())
         };
-        if let Ok(mut last) = self.last_clipboard.lock() {
-            if last.as_deref() == Some(message.as_slice()) {
+        {
+            let mut clipboard = self.clipboard.lock().expect("clipboard lock");
+            if automatic
+                && (!clipboard.sharing
+                    || clipboard.last_received.as_deref() == Some(text)
+                    || clipboard.last_sent.as_ref() == Some(&message))
+            {
                 return Ok(());
             }
-            *last = Some(message.clone());
+            if clipboard.sharing {
+                clipboard.last_received = None;
+                clipboard.last_sent = Some(message.clone());
+            }
         }
         self.send(message).await
     }
@@ -1016,7 +1049,7 @@ struct ReaderState {
     refresh_on_first_layout: bool,
     downloads: Arc<Mutex<HashMap<u32, DownloadTransfer>>>,
     commands: mpsc::Sender<Vec<u8>>,
-    last_clipboard: Arc<Mutex<Option<Vec<u8>>>>,
+    clipboard: Arc<Mutex<ClipboardState>>,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1037,7 +1070,7 @@ async fn reader_task<R>(
     adaptive_dct: bool,
     bytes_read: Arc<AtomicU64>,
     downloads: Arc<Mutex<HashMap<u32, DownloadTransfer>>>,
-    last_clipboard: Arc<Mutex<Option<Vec<u8>>>>,
+    clipboard: Arc<Mutex<ClipboardState>>,
 ) where
     R: AsyncRead + Unpin,
 {
@@ -1066,7 +1099,7 @@ async fn reader_task<R>(
         refresh_on_first_layout: apple_session,
         downloads,
         commands: commands.clone(),
-        last_clipboard,
+        clipboard,
     };
     let mut sequence = 0u64;
     let mut last_request: Option<std::time::Instant> = None;
@@ -1162,6 +1195,14 @@ async fn reader_task<R>(
 }
 
 impl ReaderState {
+    fn received_clipboard(&self, text: &str) {
+        let mut clipboard = self.clipboard.lock().expect("clipboard lock");
+        if clipboard.sharing {
+            clipboard.last_sent = None;
+            clipboard.last_received = Some(text.to_owned());
+        }
+    }
+
     fn size(&self) -> Option<(u16, u16)> {
         let framebuffer = self.framebuffer.lock().ok()?;
         Some((framebuffer.width(), framebuffer.height()))
@@ -1210,10 +1251,10 @@ where
                     // replays its `savedPasteboard` and clears it).
                     3 => {
                         let replay = state
-                            .last_clipboard
+                            .clipboard
                             .lock()
                             .ok()
-                            .and_then(|message| message.clone());
+                            .and_then(|clipboard| clipboard.last_sent.clone());
                         if let Some(message) = replay {
                             state
                                 .commands
@@ -1251,6 +1292,7 @@ where
                 && let Some(text) = pasteboard.text
                 && !text.is_empty()
             {
+                state.received_clipboard(&text);
                 events
                     .send(Event::Clipboard { text })
                     .await
@@ -1957,6 +1999,7 @@ where
     fill_buffer(read, &mut state.buffer, length).await?;
     let text = String::from_utf8_lossy(&state.buffer[..length]).into_owned();
     state.buffer.advance(length);
+    state.received_clipboard(&text);
     events
         .send(Event::Clipboard { text })
         .await

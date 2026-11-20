@@ -188,6 +188,7 @@ class ConnectionStore(
                 .put("vncPassword", connection.vncPassword)
                 .put("quality", connection.quality.name)
                 .put("zoomEnabled", connection.zoomEnabled)
+                .put("sharedClipboard", connection.sharedClipboard)
                 .put("startInObserveMode", connection.startInObserveMode)
                 .put("platform", connection.platform.name)
                 .put("rememberSelectedDisplay", connection.rememberSelectedDisplay)
@@ -271,6 +272,8 @@ class ConnectionStore(
                         startInObserveMode = item.optBoolean("startInObserveMode", false),
                         rememberSelectedDisplay = item.optBoolean("rememberSelectedDisplay", true),
                         preferredDisplayId = item.opt("preferredDisplayId") as? Int,
+                        // Legacy connections never granted automatic reads of local text.
+                        sharedClipboard = item.optBoolean("sharedClipboard", false),
                         ssh = ssh,
                         lastConnectedAt = if (item.has("lastConnectedAt") && !item.isNull("lastConnectedAt")) {
                             item.getLong("lastConnectedAt")

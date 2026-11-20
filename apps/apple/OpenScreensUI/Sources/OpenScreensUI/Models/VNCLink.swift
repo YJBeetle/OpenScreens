@@ -59,7 +59,7 @@ extension ConnectionStore {
     /// Resolves a `vnc://` link to a library entry, adding one when the
     /// endpoint is new so the connection is available next time too.
     @discardableResult
-    public func resolveLink(_ url: URL) -> ConnectionProfile? {
+    public func resolveLink(_ url: URL, sharedClipboard: Bool = true) -> ConnectionProfile? {
         guard let link = VNCLink.parse(url) else { return nil }
         if let existing = connections.first(where: {
             Self.endpointKey(host: $0.host, port: $0.port) == Self.endpointKey(host: link.host, port: link.port)
@@ -72,7 +72,8 @@ extension ConnectionStore {
             host: link.host,
             port: link.port,
             authentication: link.username.isEmpty ? .vncPassword : .macOSAccount,
-            username: link.username
+            username: link.username,
+            controls: ControlPreferences(sharedClipboard: sharedClipboard)
         )
         profile = profile.normalized()
         add(profile)

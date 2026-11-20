@@ -33,6 +33,11 @@ class ConnectionStore(
     private val loaded = if (initial == null) load() else null
     private val _connections = MutableStateFlow(initial ?: loaded?.connections ?: sampleConnections())
     val connections: StateFlow<List<Connection>> = _connections.asStateFlow()
+    internal val previews = ConnectionPreviewStore(
+        File(context.applicationContext.noBackupFilesDir, "connection-previews"),
+        initiallyEnabled = SettingsStore(context).load().showSessionPreviews,
+        isSaved = { find(it) != null },
+    )
 
     private val _groups = MutableStateFlow(loaded?.groups.orEmpty())
     val groups: StateFlow<List<ConnectionGroup>> = _groups.asStateFlow()
@@ -60,6 +65,17 @@ class ConnectionStore(
             }
         }
         persist()
+    }
+
+    @Synchronized
+    fun deleteConnection(id: String): Boolean {
+        val current = _connections.value
+        val next = current.filterNot { it.id == id }
+        if (next.size == current.size) return true
+        if (!persist(next)) return false
+        _connections.value = next
+        previews.delete(id)
+        return true
     }
 
     @Synchronized

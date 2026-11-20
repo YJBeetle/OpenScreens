@@ -1,6 +1,8 @@
 package com.openscreens.app.ui.library
 
+import android.graphics.BitmapFactory
 import androidx.annotation.StringRes
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -13,6 +15,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -73,6 +76,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -83,8 +87,11 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
@@ -96,9 +103,11 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.openscreens.app.R
 import com.openscreens.app.data.Connection
 import com.openscreens.app.data.ConnectionGroup
+import com.openscreens.app.data.ConnectionPreviewStore
 import com.openscreens.app.data.LibrarySortOrder
 import com.openscreens.app.data.NearbyServer
 import com.openscreens.app.data.sortedForLibrary
@@ -106,6 +115,8 @@ import com.openscreens.app.ui.theme.ThemedSystemBarIcons
 import com.openscreens.app.ui.theme.autoAccent
 import com.openscreens.app.ui.theme.gradient
 import java.net.URI
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 private enum class LibraryView(@StringRes val labelRes: Int) {
     Grid(R.string.library_view_grid),
@@ -133,8 +144,10 @@ private sealed interface GroupDialog {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun LibraryScreen(
+internal fun LibraryScreen(
     connections: List<Connection>,
+    previews: ConnectionPreviewStore,
+    onDeleteConnection: (String) -> Boolean,
     groups: List<ConnectionGroup>,
     nearby: List<NearbyServer>,
     discoverNearby: Boolean,
@@ -154,12 +167,19 @@ fun LibraryScreen(
     onOpenNearby: (NearbyServer) -> Unit,
 ) {
     ThemedSystemBarIcons()
+    val previewState by previews.state.collectAsStateWithLifecycle()
     var tab by rememberSaveable { mutableStateOf(LibraryTab.Library) }
     var searchActive by rememberSaveable { mutableStateOf(false) }
     var query by rememberSaveable { mutableStateOf("") }
     var selectedGroupId by rememberSaveable { mutableStateOf<String?>(null) }
     var groupDialog by remember { mutableStateOf<GroupDialog?>(null) }
     var deleteGroup by remember { mutableStateOf<ConnectionGroup?>(null) }
+    var deleteConnection by remember { mutableStateOf<Connection?>(null) }
+    var deleteConnectionFailed by remember { mutableStateOf(false) }
+    val requestDelete: (Connection) -> Unit = {
+        deleteConnectionFailed = false
+        deleteConnection = it
+    }
     var view by rememberSaveable { mutableStateOf(LibraryView.Grid) }
     var viewMenuExpanded by remember { mutableStateOf(false) }
     var moreMenuExpanded by remember { mutableStateOf(false) }
@@ -437,9 +457,12 @@ fun LibraryScreen(
                                 val manual = sort == LibrarySortOrder.Manual
                                 ConnectionCard(
                                     connection = connection,
+                                    previews = previews,
+                                    previewVersion = previewState.version(connection.id),
                                     onClick = { onOpenConnection(connection) },
                                     onObserve = { onObserveConnection(connection) },
                                     onEdit = { onEditConnection(connection) },
+                                    onDelete = { requestDelete(connection) },
                                     onOpenInNewWindow = { onOpenInNewWindow(connection) },
                                     onMoveUp = if (manual && index > 0) {
                                         ({ onMoveConnection(connection.id, -1, visibleIds) })
@@ -472,6 +495,7 @@ fun LibraryScreen(
                                     onClick = { onOpenConnection(connection) },
                                     onObserve = { onObserveConnection(connection) },
                                     onEdit = { onEditConnection(connection) },
+                                    onDelete = { requestDelete(connection) },
                                     onOpenInNewWindow = { onOpenInNewWindow(connection) },
                                     onMoveUp = if (manual && index > 0) {
                                         ({ onMoveConnection(connection.id, -1, visibleIds) })
@@ -548,6 +572,38 @@ fun LibraryScreen(
             },
             dismissButton = {
                 TextButton(onClick = { deleteGroup = null }) {
+                    Text(stringResource(R.string.library_cancel))
+                }
+            },
+        )
+    }
+
+    deleteConnection?.let { connection ->
+        AlertDialog(
+            onDismissRequest = { deleteConnection = null },
+            title = { Text(stringResource(R.string.library_delete_connection_title)) },
+            text = {
+                Text(
+                    if (deleteConnectionFailed) {
+                        stringResource(R.string.library_delete_connection_failed)
+                    } else {
+                        stringResource(R.string.library_delete_connection_body, connection.name)
+                    },
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    if (onDeleteConnection(connection.id)) {
+                        deleteConnection = null
+                    } else {
+                        deleteConnectionFailed = true
+                    }
+                }) {
+                    Text(stringResource(R.string.library_delete_group_action), color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { deleteConnection = null }) {
                     Text(stringResource(R.string.library_cancel))
                 }
             },
@@ -843,13 +899,30 @@ private fun QuickConnectDialog(
 @Composable
 private fun ConnectionCard(
     connection: Connection,
+    previews: ConnectionPreviewStore,
+    previewVersion: ConnectionPreviewStore.Version?,
     onClick: () -> Unit,
     onEdit: () -> Unit,
+    onDelete: () -> Unit,
     onObserve: () -> Unit,
     onOpenInNewWindow: () -> Unit,
     onMoveUp: (() -> Unit)? = null,
     onMoveDown: (() -> Unit)? = null,
 ) {
+    val preview = if (previewVersion != null) {
+        val loaded by produceState<ImageBitmap?>(null, connection.id, previewVersion) {
+            value = withContext(Dispatchers.IO) {
+                runCatching {
+                    previews.read(connection.id, previewVersion)?.let { bytes ->
+                        BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
+                    }
+                }.getOrNull()
+            }
+        }
+        loaded
+    } else {
+        null
+    }
     val gradient = (connection.accent ?: autoAccent(connection.name)).gradient
     val editDescription = stringResource(R.string.library_edit_connection)
     var menuExpanded by remember { mutableStateOf(false) }
@@ -868,24 +941,33 @@ private fun ConnectionCard(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(92.dp)
+                    .aspectRatio(16f / 9f)
                     .background(Brush.linearGradient(listOf(gradient.start, gradient.end))),
             ) {
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.BottomStart)
-                        .padding(10.dp)
-                        .size(30.dp)
-                        .clip(RoundedCornerShape(9.dp))
-                        .background(Color.Black.copy(alpha = 0.18f)),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.Monitor,
+                if (preview != null) {
+                    Image(
+                        bitmap = preview,
                         contentDescription = null,
-                        tint = Color.White,
-                        modifier = Modifier.size(17.dp),
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.matchParentSize(),
                     )
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.BottomStart)
+                            .padding(10.dp)
+                            .size(30.dp)
+                            .clip(RoundedCornerShape(9.dp))
+                            .background(Color.Black.copy(alpha = 0.18f)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Monitor,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(17.dp),
+                        )
+                    }
                 }
                 FilledTonalIconButton(
                     onClick = onEdit,
@@ -946,6 +1028,15 @@ private fun ConnectionCard(
             onMoveDown = onMoveDown,
             onDismiss = { menuExpanded = false },
         )
+        HorizontalDivider(Modifier.padding(vertical = 4.dp))
+        DropdownMenuItem(
+            text = { Text(stringResource(R.string.library_delete_connection_title)) },
+            leadingIcon = { Icon(Icons.Outlined.Delete, contentDescription = null) },
+            onClick = {
+                menuExpanded = false
+                onDelete()
+            },
+        )
     }
     }
 }
@@ -955,6 +1046,7 @@ private fun ConnectionRow(
     connection: Connection,
     onClick: () -> Unit,
     onEdit: () -> Unit,
+    onDelete: () -> Unit,
     onObserve: () -> Unit,
     onOpenInNewWindow: () -> Unit,
     onMoveUp: (() -> Unit)? = null,
@@ -1062,6 +1154,15 @@ private fun ConnectionRow(
             onMoveUp = onMoveUp,
             onMoveDown = onMoveDown,
             onDismiss = { menuExpanded = false },
+        )
+        HorizontalDivider(Modifier.padding(vertical = 4.dp))
+        DropdownMenuItem(
+            text = { Text(stringResource(R.string.library_delete_connection_title)) },
+            leadingIcon = { Icon(Icons.Outlined.Delete, contentDescription = null) },
+            onClick = {
+                menuExpanded = false
+                onDelete()
+            },
         )
     }
     }

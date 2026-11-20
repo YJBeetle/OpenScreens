@@ -18,6 +18,7 @@ class SettingsStore(context: Context) {
             LibrarySortOrder.Az,
         ),
         discoverNearby = preferences.getBoolean("discoverNearby", true),
+        showSessionPreviews = preferences.getBoolean("showSessionPreviews", true),
     )
 
     fun save(settings: AppSettings) {
@@ -26,6 +27,7 @@ class SettingsStore(context: Context) {
             .putString("updateChannel", settings.updateChannel.name)
             .putString("librarySort", settings.librarySort.name)
             .putBoolean("discoverNearby", settings.discoverNearby)
+            .putBoolean("showSessionPreviews", settings.showSessionPreviews)
             .apply()
     }
 

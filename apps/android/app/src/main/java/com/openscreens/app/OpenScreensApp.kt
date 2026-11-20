@@ -53,6 +53,8 @@ fun OpenScreensApp(viewModel: MainViewModel = viewModel()) {
                 Route.Library -> libraryState.SaveableStateProvider("library") {
                     LibraryScreen(
                         connections = connections,
+                        previews = viewModel.previews,
+                        onDeleteConnection = viewModel::deleteConnection,
                         groups = groups,
                         nearby = nearby,
                         discoverNearby = settings.discoverNearby,
@@ -93,6 +95,7 @@ fun OpenScreensApp(viewModel: MainViewModel = viewModel()) {
                     sshKeyCount = sshKeys.size,
                     onThemeModeChange = viewModel::setThemeMode,
                     onDiscoverNearbyChange = viewModel::setDiscoverNearby,
+                    onShowSessionPreviewsChange = viewModel::setShowSessionPreviews,
                     updateChannel = settings.updateChannel,
                     onUpdateChannelChange = viewModel::setUpdateChannel,
                     onManageSshKeys = { viewModel.navigate(Route.SshKeys) },

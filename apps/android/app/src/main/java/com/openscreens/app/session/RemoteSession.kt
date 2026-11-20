@@ -3,6 +3,7 @@ package com.openscreens.app.session
 import android.content.Context
 import android.graphics.Bitmap
 import com.openscreens.app.data.Connection
+import com.openscreens.app.data.ConnectionStore
 import com.openscreens.app.data.QualityPreset
 import com.openscreens.app.data.SshKey
 import kotlinx.coroutines.flow.Flow
@@ -28,6 +29,9 @@ interface RemoteSession {
     suspend fun reconnect()
 
     suspend fun disconnect()
+
+    /** Saves the latest complete remote desktop before the app leaves the foreground. */
+    suspend fun checkpointPreview()
 
     /** Releases the transport for good; the instance is not reusable afterwards. */
     fun close()
@@ -207,6 +211,11 @@ object SessionProvider {
         sshKey: SshKey? = null,
         startInObserveMode: Boolean = connection.startInObserveMode,
     ): RemoteSession = UniFfiRemoteSession(
-        context.applicationContext, connection, quality, sshKey, startInObserveMode,
+        context.applicationContext,
+        connection,
+        quality,
+        sshKey,
+        startInObserveMode,
+        previews = ConnectionStore.shared(context).previews,
     )
 }

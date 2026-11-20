@@ -19,6 +19,9 @@
     <string name="library_group_create">Create</string>
     <string name="library_group_rename">Rename</string>
     <string name="library_rename_group">Rename Group</string>
+    <string name="library_delete_connection_title">Delete connection</string>
+    <string name="library_delete_connection_body">Remove %1$s and its last session preview?</string>
+    <string name="library_delete_connection_failed">The connection could not be deleted.</string>
     <string name="library_delete_group_title">Delete Group</string>
     <string name="library_delete_group_body">%1$s will be deleted. Its connections stay in your library.</string>
     <string name="library_delete_group_action">Delete</string>
@@ -260,6 +263,8 @@
     <string name="settings_back">Back</string>
 
     <string name="settings_security">Security</string>
+    <string name="settings_show_session_previews">Show last session preview</string>
+    <string name="settings_show_session_previews_hint">Previews are saved only on this device.</string>
     <string name="settings_library">Library</string>
     <string name="settings_discover_nearby">Discover nearby computers</string>
     <string name="settings_discover_nearby_hint">Use Bonjour to find computers sharing their screen on your local network.</string>

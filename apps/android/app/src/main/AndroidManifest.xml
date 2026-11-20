@@ -42,6 +42,15 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/update_paths" />
         </provider>
+        <provider
+            android:name=".session.TransferFileProvider"
+            android:authorities="${applicationId}.transfers"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/transfer_paths" />
+        </provider>
     </application>
 
 </manifest>

@@ -119,7 +119,14 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
     private static let transferProgressSubtype: UInt16 = 0x00C8
     private static let transferAckSubtype: UInt16 = 0x012C
 
+    private let downloadDirectory: URL?
+
     public init() {
+        self.init(downloadDirectory: nil)
+    }
+
+    init(downloadDirectory: URL?) {
+        self.downloadDirectory = downloadDirectory
         let (stream, continuation) = AsyncStream.makeStream(
             of: OpenScreensUI.RemoteSessionEvent.self,
             bufferingPolicy: .unbounded
@@ -272,8 +279,11 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
         }
         await inputTask?.value
         drainDeadline.cancel()
-        finish(reason: reason)
+        // Stop observing transport events while the reader shuts down, then
+        // discard incomplete downloads after the transport stops writing.
+        eventTask?.cancel()
         await native.disconnect()
+        finish(reason: reason)
     }
 
     public func sendPointer(_ event: PointerEvent) async {
@@ -651,7 +661,7 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
             yieldDownloadFailure(NSLocalizedString("The session is not connected.", comment: "Download error"))
             return
         }
-        guard let directory = downloadRootDirectory() else {
+        guard let directory = downloadDirectory ?? downloadRootDirectory() else {
             yieldDownloadFailure(NSLocalizedString("No local folder is available for downloads.", comment: "Download error"))
             return
         }
@@ -1048,6 +1058,7 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
             }
             guard let root = downloadRoots.removeValue(forKey: handle) else { return }
             if let error {
+                try? FileManager.default.removeItem(atPath: root)
                 logger.error("download \(handle) failed: \(error, privacy: .public)")
                 continuation.yield(.failure(String(
                     format: NSLocalizedString("Download failed: %@", comment: "Download error"),
@@ -1107,6 +1118,9 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
         announceViewport = false
         pendingUploads.removeAll()
         uploadFileNames.removeAll()
+        for root in downloadRoots.values {
+            try? FileManager.default.removeItem(atPath: root)
+        }
         downloadRoots.removeAll()
         for task in dragOutTimeouts.values {
             task.cancel()

@@ -560,6 +560,10 @@ impl RemoteSession {
             .map(|(width, height)| SessionSize { width, height })
     }
 
+    pub async fn disconnect(&self) {
+        self.session.disconnect().await;
+    }
+
     pub async fn next_event(&self) -> Option<SessionEvent> {
         self.session.next_event().await.map(SessionEvent::from)
     }

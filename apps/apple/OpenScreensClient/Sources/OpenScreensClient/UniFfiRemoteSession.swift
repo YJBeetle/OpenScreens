@@ -258,10 +258,22 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
     }
 
     public func disconnect() async {
-        // Flush accepted input, including button/key releases, before dropping the transport.
+        let reason = NSLocalizedString("Connection closed", comment: "Session disconnect reason")
+        guard let native = session else {
+            finish(reason: reason)
+            return
+        }
+        // Drain accepted button/key releases. If the peer has stopped reading,
+        // close the native writer to unblock a send waiting for queue capacity.
         inputContinuation.finish()
+        let drainDeadline = Task {
+            try await Task.sleep(for: .seconds(1))
+            await native.disconnect()
+        }
         await inputTask?.value
-        finish(reason: NSLocalizedString("Connection closed", comment: "Session disconnect reason"))
+        drainDeadline.cancel()
+        finish(reason: reason)
+        await native.disconnect()
     }
 
     public func sendPointer(_ event: PointerEvent) async {
@@ -830,10 +842,11 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
 
     private func startEventPump(_ session: OpenScreensCore.RemoteSession) {
         eventTask = Task { [weak self] in
-            while let event = await session.nextEvent() {
-                await self?.handle(event, session: session)
+            while !Task.isCancelled, let event = await session.nextEvent() {
+                guard !Task.isCancelled, let self else { return }
+                await self.handle(event, session: session)
             }
-            await self?.finish(reason: nil)
+            if !Task.isCancelled { await self?.finish(reason: nil) }
         }
     }
 

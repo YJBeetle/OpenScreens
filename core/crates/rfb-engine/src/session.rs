@@ -392,9 +392,14 @@ struct ClipboardState {
     last_sent: Option<Vec<u8>>,
 }
 
+enum WriteCommand {
+    Bytes(Vec<u8>),
+    Close,
+}
+
 /// A connected RFB session.
 pub struct Session {
-    commands: mpsc::Sender<Vec<u8>>,
+    commands: mpsc::Sender<WriteCommand>,
     events: AsyncMutex<mpsc::Receiver<Event>>,
     framebuffer: Arc<Mutex<Framebuffer>>,
     viewport: Arc<Mutex<Option<Rect>>>,
@@ -551,7 +556,7 @@ impl Session {
         )));
         initial.extend_from_slice(&framebuffer_update_request(false, 0, 0, width, height));
         command_tx
-            .send(initial)
+            .send(WriteCommand::Bytes(initial))
             .await
             .map_err(|_| SessionError::Closed)?;
 
@@ -640,6 +645,22 @@ impl Session {
     pub fn copy_region_scaled(&self, rect: Rect, scale: u16) -> Option<Vec<u8>> {
         let framebuffer = self.framebuffer.lock().ok()?;
         copy_region_scaled_from(&framebuffer, rect, scale)
+    }
+
+    /// Wake pending event consumers and finish the writer after accepted input.
+    /// A stalled TCP peer must not keep the transport alive indefinitely.
+    pub async fn disconnect(&self) {
+        self.reader.abort();
+        let drain = async {
+            let _ = self.commands.send(WriteCommand::Close).await;
+            self.commands.closed().await;
+        };
+        if tokio::time::timeout(std::time::Duration::from_secs(1), drain)
+            .await
+            .is_err()
+        {
+            self.writer.abort();
+        }
     }
 
     pub async fn next_event(&self) -> Option<Event> {
@@ -991,7 +1012,7 @@ impl Session {
 
     async fn send(&self, bytes: Vec<u8>) -> Result<(), SessionError> {
         self.commands
-            .send(bytes)
+            .send(WriteCommand::Bytes(bytes))
             .await
             .map_err(|_| SessionError::Closed)
     }
@@ -1004,11 +1025,11 @@ impl Drop for Session {
     }
 }
 
-async fn writer_task<W>(mut write: W, mut commands: mpsc::Receiver<Vec<u8>>)
+async fn writer_task<W>(mut write: W, mut commands: mpsc::Receiver<WriteCommand>)
 where
     W: AsyncWrite + Unpin,
 {
-    while let Some(bytes) = commands.recv().await {
+    while let Some(WriteCommand::Bytes(bytes)) = commands.recv().await {
         if write.write_all(&bytes).await.is_err() {
             break;
         }
@@ -1050,14 +1071,14 @@ struct ReaderState {
     full_refresh: bool,
     refresh_on_first_layout: bool,
     downloads: Arc<Mutex<HashMap<u32, DownloadTransfer>>>,
-    commands: mpsc::Sender<Vec<u8>>,
+    commands: mpsc::Sender<WriteCommand>,
     clipboard: Arc<Mutex<ClipboardState>>,
 }
 
 #[allow(clippy::too_many_arguments)]
 async fn reader_task<R>(
     mut read: R,
-    commands: mpsc::Sender<Vec<u8>>,
+    commands: mpsc::Sender<WriteCommand>,
     framebuffer: Arc<Mutex<Framebuffer>>,
     events: mpsc::Sender<Event>,
     width: u16,
@@ -1116,12 +1137,12 @@ async fn reader_task<R>(
                     if state.dct_failed {
                         state.dct_failed = false;
                         if commands
-                            .send(set_encodings(&encodings(
+                            .send(WriteCommand::Bytes(set_encodings(&encodings(
                                 local_cursor,
                                 level,
                                 apple_session,
                                 false,
-                            )))
+                            ))))
                             .await
                             .is_err()
                         {
@@ -1135,12 +1156,12 @@ async fn reader_task<R>(
                     if let Some(observed) = adaptive.observe(now, update_bytes) {
                         level = observed;
                         if commands
-                            .send(set_encodings(&encodings(
+                            .send(WriteCommand::Bytes(set_encodings(&encodings(
                                 local_cursor,
                                 level,
                                 apple_session,
                                 state.dct_active,
-                            )))
+                            ))))
                             .await
                             .is_err()
                         {
@@ -1167,7 +1188,11 @@ async fn reader_task<R>(
                         };
                     let incremental = !std::mem::take(&mut state.full_refresh);
                     let request = framebuffer_update_request(incremental, x, y, width, height);
-                    if commands.send(request.to_vec()).await.is_err() {
+                    if commands
+                        .send(WriteCommand::Bytes(request.to_vec()))
+                        .await
+                        .is_err()
+                    {
                         break;
                     }
                     last_request = Some(std::time::Instant::now());
@@ -1260,7 +1285,7 @@ where
                         if let Some(message) = replay {
                             state
                                 .commands
-                                .send(message)
+                                .send(WriteCommand::Bytes(message))
                                 .await
                                 .map_err(|_| SessionError::Closed)?;
                         }

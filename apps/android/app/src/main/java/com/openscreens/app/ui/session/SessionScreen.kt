@@ -59,6 +59,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.ContentPaste
+import androidx.compose.material.icons.outlined.SwapVert
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.Fullscreen
 import androidx.compose.material.icons.outlined.FullscreenExit
@@ -173,6 +174,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
+import java.util.UUID
 import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.floor
@@ -247,28 +249,51 @@ fun SessionScreen(
     val currentConnection by rememberUpdatedState(connection)
     val displaySwitch = remember(session) { Mutex() }
     var showDownloadDialog by remember { mutableStateOf(false) }
-    var downloadRoot by remember { mutableStateOf<String?>(null) }
+    var pendingDownload by remember { mutableStateOf<PendingDownload?>(null) }
+    var downloadLabel by remember { mutableStateOf<String?>(null) }
+    var showFileTransfers by remember { mutableStateOf(false) }
+    var confirmTransferDisconnect by remember { mutableStateOf(false) }
+    var sentFiles by remember { mutableStateOf<List<SessionTransferItem>>(emptyList()) }
+    var receivedFiles by remember { mutableStateOf<List<SessionTransferItem>>(emptyList()) }
     var trackpadPointer by remember { mutableStateOf<IntOffset?>(null) }
     var pendingUpload by remember { mutableStateOf<PendingUpload?>(null) }
-    var transferLabel by remember { mutableStateOf<String?>(null) }
+    var uploadJob by remember { mutableStateOf<Job?>(null) }
+    var uploadLabel by remember { mutableStateOf<String?>(null) }
+
+    fun resetTransferProgress() {
+        uploadJob?.cancel()
+        uploadJob = null
+        pendingUpload = null
+        pendingDownload = null
+        uploadLabel = null
+        downloadLabel = null
+    }
 
     val sendFilePicker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenMultipleDocuments(),
     ) { uris ->
-        if (observing || uris.isEmpty()) return@rememberLauncherForActivityResult
+        if (observing || uris.isEmpty() || pendingUpload != null || status != SessionStatus.Connected) {
+            return@rememberLauncherForActivityResult
+        }
+        val handle = session.nextTransferHandle()
+        pendingUpload = PendingUpload(handle, uris)
+        uploadLabel = context.getString(R.string.session_upload_preparing)
         scope.launch {
-            val handle = session.nextTransferHandle()
-            pendingUpload = PendingUpload(handle, uris)
-            runCatching {
+            try {
                 session.announceUpload(
                     handle,
                     uris.indices.map { index -> "file:///android/$index" },
                 )
-            }.onFailure { error ->
-                pendingUpload = null
-                snackbarHostState.showSnackbar(
-                    context.getString(R.string.session_upload_failed, error.message ?: ""),
-                )
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                if (pendingUpload?.handle == handle) {
+                    pendingUpload = null
+                    uploadLabel = null
+                    snackbarHostState.showSnackbar(
+                        context.getString(R.string.session_upload_failed, error.message ?: ""),
+                    )
+                }
             }
         }
     }
@@ -347,6 +372,7 @@ fun SessionScreen(
     val exitSession: () -> Unit = {
         if (!isExiting) {
             isExiting = true
+            resetTransferProgress()
             scope.launch {
                 session.disconnect()
                 onExit()
@@ -354,7 +380,14 @@ fun SessionScreen(
         }
     }
 
-    BackHandler { exitSession() }
+    val requestExit: () -> Unit = {
+        if (pendingUpload != null || pendingDownload != null) {
+            confirmTransferDisconnect = true
+        } else {
+            exitSession()
+        }
+    }
+    BackHandler { requestExit() }
     // When the soft keyboard is up, Back should close it before it disconnects.
     BackHandler(enabled = keyboardActive) { keyboardActive = false }
 
@@ -407,6 +440,7 @@ fun SessionScreen(
                 SessionEvent.Connecting -> {
                     supportsCurtainMode = false
                     status = SessionStatus.Connecting
+                    resetTransferProgress()
                     cursor = null
                     cursorPosition = null
                     desktopScreens = emptyList()
@@ -476,43 +510,42 @@ fun SessionScreen(
                 is SessionEvent.Cursor -> cursor = event
                 is SessionEvent.UploadRequest -> {
                     val pending = pendingUpload?.takeIf { it.handle == event.handle }
-                    pendingUpload = null
-                    if (pending != null) {
-                        scope.launch {
-                            transferLabel = context.getString(R.string.session_upload_preparing)
-                            try {
-                                uploadPickedFiles(
+                    if (pending != null && uploadJob == null) {
+                        uploadJob = scope.launch {
+                            val message = try {
+                                val names = uploadPickedFiles(
                                     session = session,
                                     handle = event.handle,
                                     destination = event.path,
                                     uris = pending.uris,
                                     resolver = context.contentResolver,
                                     cacheDir = context.cacheDir,
-                                ) { name -> transferLabel = if (name.isEmpty()) null else name }
-                                snackbarHostState.showSnackbar(
-                                    context.getString(
-                                        R.string.session_upload_done,
-                                        pending.uris.size,
-                                    ),
-                                )
+                                ) { name -> uploadLabel = name }
+                                sentFiles = names.map { SessionTransferItem(it, event.path) } + sentFiles
+                                context.getString(R.string.session_upload_done, names.size)
+                            } catch (error: CancellationException) {
+                                throw error
                             } catch (error: Exception) {
                                 runCatching { session.cancelTransfer(event.handle) }
-                                snackbarHostState.showSnackbar(
-                                    context.getString(
-                                        R.string.session_upload_failed,
-                                        error.message ?: error.javaClass.simpleName,
-                                    ),
+                                context.getString(
+                                    R.string.session_upload_failed,
+                                    error.message ?: error.javaClass.simpleName,
                                 )
                             } finally {
-                                transferLabel = null
+                                if (pendingUpload?.handle == event.handle) {
+                                    pendingUpload = null
+                                    uploadLabel = null
+                                    uploadJob = null
+                                }
                             }
+                            snackbarHostState.showSnackbar(message)
                         }
                     }
                 }
                 is SessionEvent.TransferProgress -> {
-                    event.name?.let { transferLabel = it }
+                    if (pendingUpload?.handle == event.handle) event.name?.let { uploadLabel = it }
                 }
-                is SessionEvent.TransferComplete -> transferLabel = null
+                is SessionEvent.TransferComplete -> Unit
                 is SessionEvent.RemoteClipboard -> {
                     context.getSystemService(ClipboardManager::class.java)
                         ?.setPrimaryClip(
@@ -527,30 +560,50 @@ fun SessionScreen(
                     )
                 }
                 is SessionEvent.DownloadProgress -> {
-                    transferLabel = buildString {
-                        append(
-                            event.name
-                                ?: context.getString(R.string.session_download_progress_fallback),
-                        )
-                        if (event.total > 0) {
-                            append(' ')
-                            append(event.bytes * 100 / event.total)
-                            append('%')
+                    if (pendingDownload?.handle == event.handle) {
+                        downloadLabel = buildString {
+                            append(
+                                event.name
+                                    ?: context.getString(R.string.session_download_progress_fallback),
+                            )
+                            if (event.total > 0) {
+                                append(' ')
+                                append((event.bytes.toDouble() / event.total * 100).toInt().coerceIn(0, 100))
+                                append('%')
+                            }
                         }
                     }
                 }
                 is SessionEvent.DownloadComplete -> {
-                    transferLabel = null
-                    val root = downloadRoot
-                    scope.launch {
-                        if (event.error == null && root != null) {
-                            snackbarHostState.showSnackbar(
-                                context.getString(R.string.session_download_saved, root),
-                            )
-                        } else if (event.error != null) {
-                            snackbarHostState.showSnackbar(
-                                context.getString(R.string.session_download_failed, event.error),
-                            )
+                    val download = pendingDownload?.takeIf { it.handle == event.handle }
+                    if (download != null) {
+                        pendingDownload = null
+                        downloadLabel = null
+                        scope.launch {
+                            val items = withContext(Dispatchers.IO) {
+                                val saved = if (event.error == null) {
+                                    download.root.listFiles().orEmpty().sortedBy { it.name }
+                                } else {
+                                    emptyList()
+                                }
+                                if (saved.isEmpty()) download.root.delete()
+                                saved
+                            }
+                            if (items.isNotEmpty()) {
+                                receivedFiles = items.map {
+                                    SessionTransferItem(it.name, download.root.absolutePath, it)
+                                } + receivedFiles
+                                snackbarHostState.showSnackbar(
+                                    context.getString(R.string.session_transfer_download_complete),
+                                )
+                            } else {
+                                snackbarHostState.showSnackbar(
+                                    context.getString(
+                                        R.string.session_download_failed,
+                                        event.error ?: context.getString(R.string.session_transfer_no_downloaded_items),
+                                    ),
+                                )
+                            }
                         }
                     }
                 }
@@ -559,10 +612,12 @@ fun SessionScreen(
                 -> Unit
                 is SessionEvent.Disconnected -> {
                     status = SessionStatus.Disconnected
+                    resetTransferProgress()
                     recovery.failed(event.message ?: context.getString(R.string.session_status_disconnected), retryable = true)
                 }
                 is SessionEvent.Failed -> {
                     status = SessionStatus.Failed
+                    resetTransferProgress()
                     login.failed(event.challenge)
                     if (event.challenge == null) recovery.failed(event.reason, event.retryable)
                 }
@@ -1570,7 +1625,8 @@ fun SessionScreen(
             )
         }
 
-        transferLabel?.let { label ->
+        val transferLabels = listOfNotNull(uploadLabel, downloadLabel)
+        if (transferLabels.isNotEmpty()) {
             Surface(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
@@ -1580,7 +1636,7 @@ fun SessionScreen(
                 color = MaterialTheme.colorScheme.surfaceContainerHigh,
             ) {
                 Text(
-                    text = label,
+                    text = transferLabels.joinToString("\n"),
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                     style = MaterialTheme.typography.bodySmall,
                 )
@@ -1639,12 +1695,15 @@ fun SessionScreen(
                 onClipboard = { showClipboardDialog = true },
                 onUpload = { sendFilePicker.launch(arrayOf("*/*")) },
                 onDownload = { showDownloadDialog = true },
+                canUpload = status == SessionStatus.Connected && pendingUpload == null,
+                canDownload = status == SessionStatus.Connected && pendingDownload == null,
+                onShowFileTransfers = { showFileTransfers = true },
                 onScreenshot = {
                     captureScreenshot(context, frame?.bitmap, scope, snackbarHostState)
                 },
                 onToggleFullscreen = { isFullscreen = !isFullscreen },
                 onHideChrome = { chromeVisible = false },
-                onDisconnect = exitSession,
+                onDisconnect = requestExit,
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .windowInsetsPadding(WindowInsets.safeDrawing),
@@ -1686,27 +1745,74 @@ fun SessionScreen(
         )
     }
 
+    if (confirmTransferDisconnect) {
+        AlertDialog(
+            onDismissRequest = { confirmTransferDisconnect = false },
+            title = { Text(stringResource(R.string.session_transfer_in_progress)) },
+            text = { Text(stringResource(R.string.session_transfer_disconnect_warning)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmTransferDisconnect = false
+                    exitSession()
+                }) {
+                    Text(stringResource(R.string.session_disconnect))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmTransferDisconnect = false }) {
+                    Text(stringResource(R.string.library_cancel))
+                }
+            },
+        )
+    }
+
+    if (showFileTransfers) {
+        SessionFileTransfers(
+            receivedFiles = receivedFiles,
+            sentFiles = sentFiles,
+            onDismiss = { showFileTransfers = false },
+        )
+    }
+
     if (showDownloadDialog) {
         DownloadDialog(
             onDismiss = { showDownloadDialog = false },
             onDownload = { path ->
-                val root = context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
-                    ?: File(context.filesDir, "downloads")
-                root.mkdirs()
-                downloadRoot = root.absolutePath
-                transferLabel = context.getString(R.string.session_download_preparing)
                 showDownloadDialog = false
-                scope.launch {
-                    runCatching {
-                        session.startDownload(session.nextTransferHandle(), path, root.absolutePath)
-                    }.onFailure { error ->
-                        transferLabel = null
-                        snackbarHostState.showSnackbar(
-                            context.getString(
-                                R.string.session_download_failed,
-                                error.message ?: error.javaClass.simpleName,
-                            ),
-                        )
+                if (pendingDownload == null && status == SessionStatus.Connected) {
+                    val folder = context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
+                        ?: File(context.filesDir, "downloads")
+                    val root = File(folder, "transfers/${UUID.randomUUID()}")
+                    val handle = session.nextTransferHandle()
+                    pendingDownload = PendingDownload(handle, root)
+                    downloadLabel = context.getString(R.string.session_download_preparing)
+                    scope.launch {
+                        try {
+                            withContext(Dispatchers.IO) {
+                                check(root.mkdirs()) {
+                                    context.getString(R.string.session_transfer_create_folder_failed)
+                                }
+                            }
+                            if (pendingDownload?.handle != handle) {
+                                withContext(Dispatchers.IO) { root.delete() }
+                                return@launch
+                            }
+                            session.startDownload(handle, path, root.absolutePath)
+                        } catch (error: CancellationException) {
+                            throw error
+                        } catch (error: Exception) {
+                            if (pendingDownload?.handle == handle) {
+                                pendingDownload = null
+                                downloadLabel = null
+                                withContext(Dispatchers.IO) { root.delete() }
+                                snackbarHostState.showSnackbar(
+                                    context.getString(
+                                        R.string.session_download_failed,
+                                        error.message ?: error.javaClass.simpleName,
+                                    ),
+                                )
+                            }
+                        }
                     }
                 }
             },
@@ -1938,6 +2044,9 @@ private fun SessionToolbar(
     onClipboard: () -> Unit,
     onUpload: () -> Unit,
     onDownload: () -> Unit,
+    canUpload: Boolean,
+    canDownload: Boolean,
+    onShowFileTransfers: () -> Unit,
     onScreenshot: () -> Unit,
     onToggleFullscreen: () -> Unit,
     onHideChrome: () -> Unit,
@@ -2049,17 +2158,43 @@ private fun SessionToolbar(
                     label = stringResource(R.string.session_clipboard),
                     onClick = onClipboard,
                 )
-                ToolbarButton(
-                    icon = Icons.Outlined.UploadFile,
-                    label = stringResource(R.string.session_send_file),
-                    onClick = onUpload,
-                )
             }
-            ToolbarButton(
-                icon = Icons.Outlined.Download,
-                label = stringResource(R.string.session_download),
-                onClick = onDownload,
-            )
+            Box {
+                var expanded by remember { mutableStateOf(false) }
+                ToolbarButton(
+                    icon = Icons.Outlined.SwapVert,
+                    label = stringResource(R.string.session_file_transfers),
+                    onClick = { expanded = true },
+                )
+                DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.session_send_file)) },
+                        leadingIcon = { Icon(Icons.Outlined.UploadFile, contentDescription = null) },
+                        enabled = canUpload && !observing,
+                        onClick = {
+                            expanded = false
+                            onUpload()
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.session_download)) },
+                        leadingIcon = { Icon(Icons.Outlined.Download, contentDescription = null) },
+                        enabled = canDownload,
+                        onClick = {
+                            expanded = false
+                            onDownload()
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.session_file_transfers)) },
+                        leadingIcon = { Icon(Icons.Outlined.SwapVert, contentDescription = null) },
+                        onClick = {
+                            expanded = false
+                            onShowFileTransfers()
+                        },
+                    )
+                }
+            }
             Box {
                 ToolbarButton(
                     icon = Icons.Outlined.Tune,
@@ -2402,6 +2537,8 @@ private const val MODIFIER_META = 1 shl 3
 
 private const val KEYBOARD_SENTINEL_CHAR = '\u200B'
 private const val KEYBOARD_SENTINEL = "\u200B"
+
+private data class PendingDownload(val handle: Int, val root: File)
 
 private data class PendingUpload(val handle: Int, val uris: List<Uri>)
 

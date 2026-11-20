@@ -3,6 +3,8 @@ package com.openscreens.app.session
 import android.content.ContentResolver
 import android.net.Uri
 import android.provider.OpenableColumns
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.IOException
 
@@ -25,15 +27,18 @@ suspend fun uploadPickedFiles(
     resolver: ContentResolver,
     cacheDir: File,
     onProgress: (String) -> Unit,
-) {
-    val files = uris.mapNotNull { uri -> describe(resolver, uri, cacheDir) }
-    if (files.isEmpty()) return
+): List<String> = withContext(Dispatchers.IO) {
+    val files = mutableListOf<PickedFile>()
     try {
+        for (uri in uris) {
+            files += describe(resolver, uri, cacheDir)
+        }
+        if (files.isEmpty()) throw IOException("Unable to read the selected files")
         session.uploadDestination(handle, destination)
         session.uploadSummary(handle, files.sumOf { it.size }, files.size, 0)
         val stamp = ((System.currentTimeMillis() / 1000) + EPOCH_1904_OFFSET) and 0xFFFFFFFFL
         for (file in files) {
-            onProgress(file.name)
+            withContext(Dispatchers.Main.immediate) { onProgress(file.name) }
             session.uploadEntry(
                 handle,
                 TransferEntry(
@@ -51,7 +56,7 @@ suspend fun uploadPickedFiles(
                     linkTarget = null,
                 ),
             )
-            val input = resolver.openInputStream(file.uri)
+            val input = file.temp?.inputStream() ?: resolver.openInputStream(file.uri)
                 ?: throw IOException("cannot open ${file.name}")
             input.use { stream ->
                 val buffer = ByteArray(CHUNK_SIZE)
@@ -64,13 +69,13 @@ suspend fun uploadPickedFiles(
             }
         }
         session.uploadComplete(handle)
+        files.map { it.name }
     } finally {
         files.forEach { file -> file.temp?.delete() }
     }
-    onProgress("")
 }
 
-private fun describe(resolver: ContentResolver, uri: Uri, cacheDir: File): PickedFile? {
+private fun describe(resolver: ContentResolver, uri: Uri, cacheDir: File): PickedFile {
     var name = "file"
     var size = -1L
     resolver.query(
@@ -97,14 +102,9 @@ private fun describe(resolver: ContentResolver, uri: Uri, cacheDir: File): Picke
     // the entry description carry the exact byte count.
     val temp = File.createTempFile("openscreens-upload-", null, cacheDir)
     try {
-        val output = temp.outputStream()
-        resolver.openInputStream(uri)?.use { input -> input.copyTo(output) } ?: run {
-            output.close()
-            temp.delete()
-            return null
-        }
-        output.close()
-    } catch (error: IOException) {
+        val input = resolver.openInputStream(uri) ?: throw IOException("cannot open $name")
+        input.use { source -> temp.outputStream().use { output -> source.copyTo(output) } }
+    } catch (error: Exception) {
         temp.delete()
         throw error
     }

@@ -20,7 +20,6 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.cancelAndJoin
-import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -73,10 +72,10 @@ class UniFfiRemoteSession(
 
     private class InputMode(val observing: Boolean)
 
+    // Transfer requests and completion events must survive bursts of frame updates.
     private val _events = MutableSharedFlow<SessionEvent>(
         replay = 1,
         extraBufferCapacity = 8,
-        onBufferOverflow = BufferOverflow.DROP_OLDEST,
     )
     override val events: Flow<SessionEvent> = _events.asSharedFlow()
 
@@ -344,11 +343,11 @@ class UniFfiRemoteSession(
         session?.nextTransferHandle()?.toInt() ?: 0
 
     override suspend fun announceUpload(handle: Int, fileUrls: List<String>) {
-        uploadSession()?.announceUpload(handle.toUInt(), fileUrls)
+        uploadSession().announceUpload(handle.toUInt(), fileUrls)
     }
 
     override suspend fun uploadDestination(handle: Int, folder: String) {
-        uploadSession()?.uploadDestination(handle.toUInt(), folder)
+        uploadSession().uploadDestination(handle.toUInt(), folder)
     }
 
     override suspend fun uploadSummary(
@@ -357,7 +356,7 @@ class UniFfiRemoteSession(
         files: Int,
         directories: Int,
     ) {
-        uploadSession()?.uploadSummary(
+        uploadSession().uploadSummary(
             handle.toUInt(),
             totalBytes.toULong(),
             files.toUInt(),
@@ -366,7 +365,7 @@ class UniFfiRemoteSession(
     }
 
     override suspend fun uploadEntry(handle: Int, entry: TransferEntry) {
-        val current = uploadSession() ?: return
+        val current = uploadSession()
         val kind = when (entry.kind) {
             TransferEntryKind.File -> NativeKind.FILE
             TransferEntryKind.Directory -> NativeKind.DIRECTORY
@@ -392,16 +391,16 @@ class UniFfiRemoteSession(
     }
 
     override suspend fun uploadData(handle: Int, chunk: ByteArray) {
-        uploadSession()?.uploadData(handle.toUInt(), chunk)
+        uploadSession().uploadData(handle.toUInt(), chunk)
     }
 
     override suspend fun uploadComplete(handle: Int) {
-        uploadSession()?.uploadComplete(handle.toUInt())
+        uploadSession().uploadComplete(handle.toUInt())
     }
 
-    private fun uploadSession(): NativeSession? {
+    private fun uploadSession(): NativeSession {
         check(!inputMode.observing) { context.getString(R.string.session_observe_mode) }
-        return session
+        return checkNotNull(session)
     }
 
     override suspend fun cancelTransfer(handle: Int) {
@@ -418,8 +417,7 @@ class UniFfiRemoteSession(
 
     override suspend fun startDownload(handle: Int, path: String, root: String) {
         Log.i(TAG, "startDownload handle=$handle path=$path root=$root")
-        runCatching { session?.startDownload(handle.toUInt(), path, root) }
-            .onFailure { error -> Log.w(TAG, "startDownload failed", error) }
+        checkNotNull(session).startDownload(handle.toUInt(), path, root)
     }
 
     override suspend fun requestCurtainMode(enabled: Boolean) {

@@ -21,6 +21,7 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculateCentroid
 import androidx.compose.foundation.gestures.calculatePan
 import androidx.compose.foundation.gestures.calculateZoom
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -70,6 +71,7 @@ import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.material.icons.outlined.TouchApp
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.outlined.Visibility
+import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
@@ -77,6 +79,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.IconToggleButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SnackbarHost
@@ -179,6 +182,7 @@ fun SessionScreen(
     onQualityChange: (QualityPreset) -> Unit,
     onConnected: () -> Unit,
     onExit: () -> Unit,
+    observeOnly: Boolean = false,
 ) {
     val context = LocalContext.current
     val view = LocalView.current
@@ -186,8 +190,11 @@ fun SessionScreen(
     val focusManager = LocalFocusManager.current
     val snackbarHostState = remember { SnackbarHostState() }
 
-    val session: RemoteSession = remember(connection.id) {
-        SessionProvider.create(context, connection, quality, sshKey)
+    var observing by rememberSaveable(connection.id, observeOnly) {
+        mutableStateOf(observeOnly || connection.startInObserveMode)
+    }
+    val session: RemoteSession = remember(connection.id, observeOnly) {
+        SessionProvider.create(context, connection, quality, sshKey, startInObserveMode = observing)
     }
 
     var status by remember { mutableStateOf(SessionStatus.Connecting) }
@@ -221,7 +228,7 @@ fun SessionScreen(
     val sendFilePicker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenMultipleDocuments(),
     ) { uris ->
-        if (uris.isEmpty()) return@rememberLauncherForActivityResult
+        if (observing || uris.isEmpty()) return@rememberLauncherForActivityResult
         scope.launch {
             val handle = session.nextTransferHandle()
             pendingUpload = PendingUpload(handle, uris)
@@ -246,6 +253,24 @@ fun SessionScreen(
     val trackPointer: (Int, Int) -> Unit = { x, y ->
         cursorPosition = IntOffset(x, y)
         pointerMemory.remember(x, y)
+    }
+
+    val toggleObserveMode: (Boolean) -> Unit = { enabled ->
+        session.setObserveMode(enabled)
+        observing = enabled
+        if (enabled) {
+            keyboardActive = false
+            modifiers = 0
+            showClipboardDialog = false
+            pressIndicator = null
+            lastAction = null
+            taps.cancel()
+            val pending = pendingUpload
+            pendingUpload = null
+            if (pending != null) {
+                scope.launch { runCatching { session.cancelTransfer(pending.handle) } }
+            }
+        }
     }
 
     val togglePointerMode: () -> Unit = {
@@ -622,13 +647,15 @@ fun SessionScreen(
             )
         }
 
-        HiddenKeyboardField(
-            focusRequester = focusRequester,
-            onChar = { char -> sendKeysym(if (char == '\n') KEY_RETURN else x11Keysym(char)) },
-            onBackspace = { sendKeysym(KEY_BACKSPACE) },
-            onFocusChange = { focused -> if (!focused) keyboardActive = false },
-            modifier = Modifier.align(Alignment.TopStart),
-        )
+        if (!observing) {
+            HiddenKeyboardField(
+                focusRequester = focusRequester,
+                onChar = { char -> sendKeysym(if (char == '\n') KEY_RETURN else x11Keysym(char)) },
+                onBackspace = { sendKeysym(KEY_BACKSPACE) },
+                onFocusChange = { focused -> if (!focused) keyboardActive = false },
+                modifier = Modifier.align(Alignment.TopStart),
+            )
+        }
 
         val zoomed = zoom > ZOOM_ACTIVE_EPSILON
         val zoomEnabled = connection.zoomEnabled
@@ -640,7 +667,25 @@ fun SessionScreen(
                 // Gestures use screen coordinates: the band below is scaled by a
                 // graphicsLayer, and pointer deltas read inside that layer would
                 // feed the new zoom back into the next delta.
-                .pointerInput(session, remoteWidth, remoteHeight, trackpadMode, zoomEnabled) {
+                .pointerInput(session, remoteWidth, remoteHeight, trackpadMode, zoomEnabled, observing) {
+                    if (observing) {
+                        if (zoomEnabled && remoteWidth > 1 && remoteHeight > 1) {
+                            val center = Offset(size.width / 2f, size.height / 2f)
+                            detectTransformGestures { centroid, delta, scale, _ ->
+                                val newZoom = (zoom * scale).coerceIn(1f, MAX_ZOOM)
+                                pan = clampPan(
+                                    pan + (centroid + delta - center) / newZoom -
+                                        (centroid - center) / zoom,
+                                    newZoom,
+                                    bandSizePx,
+                                    screenSizePx,
+                                )
+                                zoom = newZoom
+                            }
+                        }
+                        return@pointerInput
+                    }
+
                     // No framebuffer yet: pointer math would divide by zero and
                     // round NaN coordinates.
                     if (remoteWidth <= 1 || remoteHeight <= 1) return@pointerInput
@@ -668,15 +713,9 @@ fun SessionScreen(
                         recordPointer(x, y)
                     }
 
-                    fun cancelPendingTap() {
-                        taps.job?.cancel()
-                        taps.job = null
-                        taps.pending = null
-                    }
-
                     fun flushPendingTap() {
                         val pending = taps.pending ?: return
-                        cancelPendingTap()
+                        taps.cancel()
                         sendPointerClick(pending.x, pending.y)
                     }
 
@@ -732,7 +771,7 @@ fun SessionScreen(
                             down.uptimeMillis - previousTap.time <= doubleTapTimeout &&
                             (down.position - previousTap.position).getDistance() <= doubleTapSlop
                         if (previousTap != null) {
-                            if (isDoubleTap) cancelPendingTap() else flushPendingTap()
+                            if (isDoubleTap) taps.cancel() else flushPendingTap()
                         }
 
                         var mode = GestureMode.Pending
@@ -1392,7 +1431,11 @@ fun SessionScreen(
         if (chromeVisible) {
             SessionTopBar(
                 serverName = connection.name,
-                statusText = statusText,
+                statusText = if (observing) {
+                    stringResource(R.string.session_status_observing, statusText)
+                } else {
+                    statusText
+                },
                 statusColor = statusColor(status),
                 modifier = Modifier
                     .align(Alignment.TopCenter)
@@ -1432,6 +1475,8 @@ fun SessionScreen(
             )
         } else if (chromeVisible) {
             SessionToolbar(
+                observing = observing,
+                onObserveModeChange = toggleObserveMode,
                 quality = quality,
                 qualityMenuExpanded = qualityMenuExpanded,
                 onQualityMenuChange = { qualityMenuExpanded = it },
@@ -1536,7 +1581,7 @@ fun SessionScreen(
         )
     }
 
-    if (showClipboardDialog) {
+    if (!observing && showClipboardDialog) {
         ClipboardDialog(
             onDismiss = { showClipboardDialog = false },
             onSend = { text ->
@@ -1744,6 +1789,8 @@ private fun SessionTopBar(
 
 @Composable
 private fun SessionToolbar(
+    observing: Boolean,
+    onObserveModeChange: (Boolean) -> Unit,
     trackpadMode: Boolean,
     onTogglePointerMode: () -> Unit,
     displays: List<DisplayScreen>,
@@ -1783,17 +1830,33 @@ private fun SessionToolbar(
                 .padding(horizontal = 6.dp, vertical = 2.dp),
             horizontalArrangement = Arrangement.spacedBy(2.dp),
         ) {
-            ToolbarButton(
-                icon = if (trackpadMode) Icons.Outlined.Mouse else Icons.Outlined.TouchApp,
-                label = stringResource(
-                    if (trackpadMode) {
-                        R.string.session_pointer_trackpad
-                    } else {
-                        R.string.session_pointer_direct
-                    },
+            IconToggleButton(
+                checked = observing,
+                onCheckedChange = onObserveModeChange,
+                colors = IconButtonDefaults.iconToggleButtonColors(
+                    contentColor = Color.White,
+                    checkedContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    checkedContainerColor = MaterialTheme.colorScheme.primaryContainer,
                 ),
-                onClick = onTogglePointerMode,
-            )
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Visibility,
+                    contentDescription = stringResource(R.string.session_observe_mode),
+                )
+            }
+            if (!observing) {
+                ToolbarButton(
+                    icon = if (trackpadMode) Icons.Outlined.Mouse else Icons.Outlined.TouchApp,
+                    label = stringResource(
+                        if (trackpadMode) {
+                            R.string.session_pointer_trackpad
+                        } else {
+                            R.string.session_pointer_direct
+                        },
+                    ),
+                    onClick = onTogglePointerMode,
+                )
+            }
             if (displays.isNotEmpty()) {
                 Box {
                     ToolbarButton(
@@ -1826,21 +1889,23 @@ private fun SessionToolbar(
                     }
                 }
             }
-            ToolbarButton(
-                icon = Icons.Outlined.Keyboard,
-                label = stringResource(R.string.session_keyboard),
-                onClick = onKeyboard,
-            )
-            ToolbarButton(
-                icon = Icons.Outlined.ContentPaste,
-                label = stringResource(R.string.session_clipboard),
-                onClick = onClipboard,
-            )
-            ToolbarButton(
-                icon = Icons.Outlined.UploadFile,
-                label = stringResource(R.string.session_send_file),
-                onClick = onUpload,
-            )
+            if (!observing) {
+                ToolbarButton(
+                    icon = Icons.Outlined.Keyboard,
+                    label = stringResource(R.string.session_keyboard),
+                    onClick = onKeyboard,
+                )
+                ToolbarButton(
+                    icon = Icons.Outlined.ContentPaste,
+                    label = stringResource(R.string.session_clipboard),
+                    onClick = onClipboard,
+                )
+                ToolbarButton(
+                    icon = Icons.Outlined.UploadFile,
+                    label = stringResource(R.string.session_send_file),
+                    onClick = onUpload,
+                )
+            }
             ToolbarButton(
                 icon = Icons.Outlined.Download,
                 label = stringResource(R.string.session_download),
@@ -2285,6 +2350,12 @@ private fun pressIndicatorColor(button: Int): Color = when (button) {
 private class DeferredTapController {
     var pending: PendingTap? = null
     var job: Job? = null
+
+    fun cancel() {
+        job?.cancel()
+        job = null
+        pending = null
+    }
 }
 
 /** Remembers the last remote pointer position so wheel events land where the user left it. */

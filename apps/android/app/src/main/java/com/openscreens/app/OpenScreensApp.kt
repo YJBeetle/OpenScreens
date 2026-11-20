@@ -57,6 +57,9 @@ fun OpenScreensApp(viewModel: MainViewModel = viewModel()) {
                     onDeleteGroup = viewModel::deleteGroup,
                     onMoveConnection = viewModel::moveConnection,
                     onOpenConnection = { viewModel.navigate(Route.Session(it.id)) },
+                    onObserveConnection = {
+                        viewModel.navigate(Route.Session(it.id, observeOnly = true))
+                    },
                     onOpenInNewWindow = { connection ->
                         val intent = Intent(context, SessionWindowActivity::class.java)
                             .putExtra(SessionWindowActivity.EXTRA_CONNECTION_ID, connection.id)
@@ -141,6 +144,7 @@ fun OpenScreensApp(viewModel: MainViewModel = viewModel()) {
                             connection = connection,
                             sshKey = viewModel.sshKey(connection.ssh?.keyId),
                             quality = connection.quality,
+                            observeOnly = current.observeOnly,
                             onQualityChange = { viewModel.setConnectionQuality(connection.id, it) },
                             onConnected = { viewModel.markConnected(connection.id) },
                             onExit = viewModel::back,

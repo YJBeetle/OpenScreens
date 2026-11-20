@@ -29,6 +29,7 @@
     <string name="library_empty_title">连接库为空</string>
     <string name="library_empty_body">保存一个 VNC 服务器，下次即可一键打开。</string>
     <string name="library_empty_action">添加第一个连接</string>
+    <string name="library_connect_in_observe_mode">以观察模式连接</string>
     <string name="library_edit_connection">编辑连接</string>
     <string name="library_connection_thumbnail">服务器缩略图</string>
     <string name="library_quick_connect">快速连接</string>
@@ -80,7 +81,9 @@
     <string name="accent_sky">天蓝</string>
     <string name="editor_show_password">显示密码</string>
     <string name="editor_hide_password">隐藏密码</string>
+    <string name="editor_start_in_observe_mode">以观察模式启动</string>
     <string name="editor_zoom_toggle">允许捏合缩放</string>
+    <string name="editor_observe_description">查看远程桌面，禁用远程输入。</string>
     <string name="editor_zoom_description">捏合可放大远程屏幕；关闭后双指手势只用于滚动。</string>
     <string name="editor_ssh_toggle">通过 SSH 隧道连接</string>
     <string name="editor_ssh_description">通过 SSH 跳板机转发 VNC 流量，VNC 地址从跳板机侧解析。</string>
@@ -147,6 +150,8 @@
     <string name="session_scroll_left">向左滚动</string>
     <string name="session_scroll_right">向右滚动</string>
     <string name="session_clipboard">剪贴板</string>
+    <string name="session_observe_mode">观察模式</string>
+    <string name="session_status_observing">%1$s · 观察模式</string>
     <string name="session_pointer_direct">直接触摸</string>
     <string name="session_displays">显示器</string>
     <string name="session_all_displays">所有显示器</string>

@@ -17,7 +17,6 @@ extension ConnectionProfile {
 public enum LibrarySection: String, Codable, CaseIterable, Identifiable, Sendable {
     case nearby
     case links
-    case connect
     case custom
 
     public var id: String { rawValue }
@@ -26,7 +25,6 @@ public enum LibrarySection: String, Codable, CaseIterable, Identifiable, Sendabl
         switch self {
         case .nearby: NSLocalizedString("Nearby", comment: "Library section")
         case .links: NSLocalizedString("Links", comment: "Library section")
-        case .connect: NSLocalizedString("Connect", comment: "Library section")
         case .custom: NSLocalizedString("Custom", comment: "Library section")
         }
     }
@@ -41,21 +39,23 @@ public enum LibrarySection: String, Codable, CaseIterable, Identifiable, Sendabl
         switch self {
         case .nearby: "dot.radiowaves.left.and.right"
         case .links: "link"
-        case .connect: "cloud"
         case .custom: "square.grid.2x2"
         }
     }
 
-    /// Service-backed sections are informational in this build; selecting one
-    /// explains how to connect without an account.
-    public var isService: Bool {
-        self == .connect
-    }
-
-    public var serviceStatus: String? {
-        switch self {
-        case .connect: NSLocalizedString("Not configured", comment: "Service status")
-        default: nil
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        let value = try container.decode(String.self)
+        // Older libraries could contain records from the retired Connect section.
+        if value == "connect" {
+            self = .custom
+        } else if let section = Self(rawValue: value) {
+            self = section
+        } else {
+            throw DecodingError.dataCorruptedError(
+                in: container,
+                debugDescription: "Unknown library section: \(value)"
+            )
         }
     }
 
@@ -195,6 +195,13 @@ public struct ConnectionProfile: Identifiable, Codable, Hashable, Sendable {
         self.createdAt = createdAt
         self.lastConnectedAt = lastConnectedAt
         self.connectionCount = connectionCount
+    }
+
+    /// Applies the launch choice to a session copy of the saved profile.
+    public func forSession(observeOnly: Bool) -> Self {
+        var profile = self
+        profile.controls.startInObserveMode = observeOnly || controls.startInObserveMode
+        return profile
     }
 
     // MARK: - Derived values

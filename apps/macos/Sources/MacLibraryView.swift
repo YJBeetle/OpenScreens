@@ -130,9 +130,12 @@ struct MacLibraryView: View {
         }
     }
 
-    private func connect(_ profile: ConnectionProfile) {
+    private func connect(_ profile: ConnectionProfile, observeOnly: Bool = false) {
         store.markConnected(id: profile.id)
-        openWindow(id: MacSceneID.session, value: SessionRoute(profileID: profile.id))
+        openWindow(
+            id: MacSceneID.session,
+            value: SessionRoute(profileID: profile.id, observeRequestID: observeOnly ? UUID() : nil)
+        )
     }
 
     private func autoConnectForTesting() {

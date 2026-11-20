@@ -46,8 +46,7 @@ public final class ConnectionStore {
     }
 
     public func count(in section: LibrarySection) -> Int {
-        guard !section.isService else { return 0 }
-        return connections.count { $0.section == section }
+        connections.count { $0.section == section }
     }
 
     public func count(in groupID: UUID) -> Int {
@@ -64,7 +63,6 @@ public final class ConnectionStore {
         matching query: String = "",
         sort: LibrarySortOrder = .name
     ) -> [ConnectionProfile] {
-        guard !section.isService else { return [] }
         let needle = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let filtered = connections.filter { profile in
             guard profile.section == section else { return false }
@@ -81,7 +79,7 @@ public final class ConnectionStore {
     public func search(_ query: String) -> [ConnectionProfile] {
         let needle = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         return connections
-            .filter { !$0.section.isService && (needle.isEmpty || $0.searchIndex.contains(needle)) }
+            .filter { needle.isEmpty || $0.searchIndex.contains(needle) }
             .sorted { Self.libraryOrder($0, $1, sort: .name) }
     }
 

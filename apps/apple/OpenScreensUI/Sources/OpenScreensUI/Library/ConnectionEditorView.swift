@@ -744,7 +744,12 @@ public struct ConnectionEditorView: View {
                 )
             )
             Toggle("Reconnect Automatically", isOn: $draft.controls.autoReconnect)
+            #if os(macOS)
+            Toggle("Keep Mac Awake", isOn: $draft.controls.keepScreenAwake)
+                .help("Prevent idle sleep during a session. The display can still sleep.")
+            #else
             Toggle("Keep Screen Awake", isOn: $draft.controls.keepScreenAwake)
+            #endif
         } header: {
             Text("Display")
         } footer: {

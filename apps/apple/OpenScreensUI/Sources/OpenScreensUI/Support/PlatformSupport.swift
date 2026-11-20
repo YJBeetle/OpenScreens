@@ -4,6 +4,8 @@ import SwiftUI
 
 #if os(macOS)
 import AppKit
+import IOKit.pwr_mgt
+import os
 #else
 import Photos
 import UIKit
@@ -73,12 +75,45 @@ public enum PlatformScreenshot {
     #endif
 }
 
-/// Idle-timer control for full-screen sessions.
+/// Keeps the local device awake while any participating session needs it.
 @MainActor
-public enum PlatformScreen {
-    public static func setIdleTimerDisabled(_ disabled: Bool) {
-        #if os(iOS)
-        UIApplication.shared.isIdleTimerDisabled = disabled
+enum PlatformScreen {
+    private static var awakeSessions: Set<UUID> = []
+
+    #if os(macOS)
+    private static var assertion: IOPMAssertionID?
+    private static let logger = Logger(subsystem: "app.openscreens", category: "PlatformScreen")
+    #endif
+
+    static func setIdleTimerDisabled(_ disabled: Bool, for sessionID: UUID) {
+        if disabled {
+            awakeSessions.insert(sessionID)
+        } else {
+            awakeSessions.remove(sessionID)
+        }
+
+        #if os(macOS)
+        if awakeSessions.isEmpty {
+            if let assertion {
+                IOPMAssertionRelease(assertion)
+                self.assertion = nil
+            }
+        } else if assertion == nil {
+            var newAssertion = IOPMAssertionID()
+            let result = IOPMAssertionCreateWithName(
+                kIOPMAssertionTypePreventUserIdleSystemSleep as CFString,
+                IOPMAssertionLevel(kIOPMAssertionLevelOn),
+                "OpenScreens session" as CFString,
+                &newAssertion
+            )
+            if result == kIOReturnSuccess {
+                assertion = newAssertion
+            } else {
+                logger.error("Could not prevent idle sleep: \(result)")
+            }
+        }
+        #else
+        UIApplication.shared.isIdleTimerDisabled = !awakeSessions.isEmpty
         #endif
     }
 }

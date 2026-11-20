@@ -309,7 +309,8 @@ final class ConnectionStoreTests: XCTestCase {
             DiscoveredComputer(name: "Studio", host: "Studio.local", port: 5900),
             DiscoveredComputer(name: "Studio Duplicate", host: "studio.local", port: 5900),
             DiscoveredComputer(name: "Lab", host: "lab.local", port: 5901),
-        ])
+        ], sharedClipboard: false)
+        XCTAssertTrue(store.profiles(in: .nearby).allSatisfy { !$0.controls.sharedClipboard })
         XCTAssertEqual(store.count(in: .nearby), 2)
         XCTAssertEqual(store.profiles(in: .nearby, sort: .name).map(\.name), ["Lab", "Studio"])
 
@@ -453,7 +454,8 @@ final class ConnectionStoreTests: XCTestCase {
         defer { removeStore(at: url) }
         let store = ConnectionStore(fileURL: url, seedDemoData: false)
 
-        let first = store.resolveLink(URL(string: "vnc://studio.local")!)
+        let first = store.resolveLink(URL(string: "vnc://studio.local")!, sharedClipboard: false)
+        XCTAssertEqual(first?.controls.sharedClipboard, false)
         XCTAssertEqual(first?.host, "studio.local")
         XCTAssertEqual(first?.port, 5900)
         XCTAssertEqual(first?.section, .custom)
@@ -462,6 +464,7 @@ final class ConnectionStoreTests: XCTestCase {
 
         let again = store.resolveLink(URL(string: "vnc://STUDIO.local:5900")!)
         XCTAssertEqual(again?.id, first?.id)
+        XCTAssertEqual(again?.controls.sharedClipboard, false)
         XCTAssertEqual(store.connections.count, 1)
 
         let account = store.resolveLink(URL(string: "vnc://designer@build.local:5901")!)

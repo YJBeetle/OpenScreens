@@ -144,6 +144,7 @@ class ConnectionStore(
                 .put("vncPassword", connection.vncPassword)
                 .put("quality", connection.quality.name)
                 .put("zoomEnabled", connection.zoomEnabled)
+                .put("sharedClipboard", connection.sharedClipboard)
             connection.accent?.let { item.put("accent", it.name) }
             connection.wireGuardConfig?.let { item.put("wireGuardConfig", it) }
             connection.openVpnConfig?.let { item.put("openVpnConfig", it) }
@@ -217,6 +218,8 @@ class ConnectionStore(
                             )
                         }.getOrDefault(QualityPreset.Balanced),
                         zoomEnabled = item.optBoolean("zoomEnabled", true),
+                        // Legacy connections never granted automatic reads of local text.
+                        sharedClipboard = item.optBoolean("sharedClipboard", false),
                         ssh = ssh,
                         lastConnectedAt = if (item.has("lastConnectedAt") && !item.isNull("lastConnectedAt")) {
                             item.getLong("lastConnectedAt")

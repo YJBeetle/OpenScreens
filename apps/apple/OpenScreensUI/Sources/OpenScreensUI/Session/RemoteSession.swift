@@ -205,6 +205,7 @@ public enum RemoteSessionEvent: Sendable {
     /// Pointer position reported by the server, normalized to 0...1.
     case pointerPosition(x: Double, y: Double)
     case clipboard(String)
+    case clipboardRequest
     case bell
     /// Upload status for files dropped onto the remote screen. `name` is the
     /// remote file currently being received; `fraction` is 0...1 when known.
@@ -319,8 +320,10 @@ public protocol RemoteSessionProtocol: Sendable {
     /// the remote content down; positive X scrolls it right.
     func sendScroll(at point: CGPoint, stepsX: Int32, stepsY: Int32) async
     func sendKey(_ event: RemoteKeyEvent) async
-    func sendClipboard(_ text: String) async
-    func requestClipboard() async
+    func sendClipboard(_ text: String, automatic: Bool) async throws
+    func setClipboardSharing(_ enabled: Bool) async throws
+    /// True when a request was sent. Push-only sessions return false.
+    func requestClipboard() async throws -> Bool
     func setObserveMode(_ observing: Bool) async
     /// Switches the host to one display, or shows every display when `id` is
     /// `nil`.

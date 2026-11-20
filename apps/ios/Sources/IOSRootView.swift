@@ -4,6 +4,7 @@ import SwiftUI
 
 struct IOSRootView: View {
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(SettingsStore.self) private var settings
     @Environment(ConnectionStore.self) private var store
     @Environment(\.openWindow) private var openWindow
 
@@ -24,7 +25,7 @@ struct IOSRootView: View {
     }
 
     private func openLink(_ url: URL) {
-        guard let profile = store.resolveLink(url) else { return }
+        guard let profile = store.resolveLink(url, sharedClipboard: settings.settings.sharedClipboard) else { return }
         store.markConnected(id: profile.id)
         if horizontalSizeClass == .regular {
             openWindow(id: IOSSessionScene.id, value: profile.id)

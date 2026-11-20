@@ -22,6 +22,7 @@ import androidx.compose.foundation.gestures.calculateCentroid
 import androidx.compose.foundation.gestures.calculatePan
 import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -81,6 +82,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -120,6 +122,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -142,6 +145,7 @@ import com.openscreens.app.R
 import com.openscreens.app.data.Connection
 import com.openscreens.app.data.QualityPreset
 import com.openscreens.app.data.SshKey
+import com.openscreens.app.session.SessionClipboard
 import com.openscreens.app.session.RemoteSession
 import com.openscreens.app.session.DisplayScreen
 import com.openscreens.app.session.SessionEvent
@@ -150,6 +154,7 @@ import com.openscreens.app.session.SessionProvider
 import com.openscreens.app.ui.common.label
 import com.openscreens.app.ui.theme.SystemBarIconAppearance
 import com.openscreens.app.ui.theme.findActivity
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -186,9 +191,23 @@ fun SessionScreen(
     val focusManager = LocalFocusManager.current
     val snackbarHostState = remember { SnackbarHostState() }
 
+    var clipboardSharing by rememberSaveable(connection.id) { mutableStateOf(connection.sharedClipboard) }
     val session: RemoteSession = remember(connection.id) {
-        SessionProvider.create(context, connection, quality, sshKey)
+        SessionProvider.create(context, connection.copy(sharedClipboard = clipboardSharing), quality, sshKey)
     }
+
+    val manager = remember(context) { context.getSystemService(ClipboardManager::class.java) }
+    val clipboard = remember(session) {
+        SessionClipboard(
+            shared = clipboardSharing,
+            read = {
+                // Only read inline text. Coercing a URI could open a content provider.
+                manager?.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.text?.toString()
+            },
+            write = { manager?.setPrimaryClip(ClipData.newPlainText(context.getString(R.string.app_name), it)) },
+        )
+    }
+    var clipboardFetch by remember(session) { mutableStateOf<Job?>(null) }
 
     var status by remember { mutableStateOf(SessionStatus.Connecting) }
     var remoteWidth by remember { mutableIntStateOf(0) }
@@ -198,7 +217,7 @@ fun SessionScreen(
     var zoom by remember { mutableFloatStateOf(1f) }
     var pan by remember { mutableStateOf(Offset.Zero) }
     var pressIndicator by remember { mutableStateOf<PressIndicator?>(null) }
-    var showClipboardDialog by rememberSaveable { mutableStateOf(false) }
+    var showClipboardDialog by remember(session) { mutableStateOf(false) }
     var qualityMenuExpanded by remember { mutableStateOf(false) }
     var isFullscreen by rememberSaveable { mutableStateOf(true) }
     var isExiting by remember { mutableStateOf(false) }
@@ -326,10 +345,25 @@ fun SessionScreen(
     // The canvas stays dark in both app themes, so system bar icons stay light.
     SystemBarIconAppearance(darkIcons = false)
 
+    fun shareLocalText() {
+        val text = clipboard.reply(view.hasWindowFocus()) ?: return
+        scope.launch {
+            try {
+                session.sendClipboard(text, automatic = true)
+            } catch (error: Exception) {
+                if (error is CancellationException) throw error
+                lastAction = context.getString(R.string.session_clipboard_send_failed)
+            }
+        }
+    }
+
     LaunchedEffect(session) {
         session.events.collect { event ->
             when (event) {
                 SessionEvent.Connecting -> {
+                    clipboard.reset()
+                    clipboardFetch?.cancel()
+                    showClipboardDialog = false
                     status = SessionStatus.Connecting
                     cursor = null
                     cursorPosition = null
@@ -414,18 +448,14 @@ fun SessionScreen(
                 }
                 is SessionEvent.TransferComplete -> transferLabel = null
                 is SessionEvent.RemoteClipboard -> {
-                    context.getSystemService(ClipboardManager::class.java)
-                        ?.setPrimaryClip(
-                            ClipData.newPlainText(
-                                context.getString(R.string.app_name),
-                                event.text,
-                            ),
-                        )
-                    lastAction = context.getString(
-                        R.string.session_action_prefix,
-                        context.getString(R.string.session_clipboard_received),
-                    )
+                    val requested = clipboardFetch?.isActive == true
+                    clipboardFetch?.cancel()
+                    clipboard.receive(event.text, view.hasWindowFocus(), requested)
+                    if (requested || (clipboard.shared && view.hasWindowFocus())) {
+                        lastAction = context.getString(R.string.session_clipboard_received)
+                    }
                 }
+                SessionEvent.ClipboardRequest -> shareLocalText()
                 is SessionEvent.DownloadProgress -> {
                     transferLabel = buildString {
                         append(
@@ -458,6 +488,9 @@ fun SessionScreen(
                 is SessionEvent.FileTransfer,
                 -> Unit
                 is SessionEvent.Disconnected -> {
+                    clipboard.reset()
+                    clipboardFetch?.cancel()
+                    showClipboardDialog = false
                     status = SessionStatus.Disconnected
                     if (!isExiting) {
                         scope.launch {
@@ -469,11 +502,21 @@ fun SessionScreen(
                     }
                 }
                 is SessionEvent.Failed -> {
+                    clipboard.reset()
+                    clipboardFetch?.cancel()
+                    showClipboardDialog = false
                     status = SessionStatus.Failed
                     scope.launch { snackbarHostState.showSnackbar(event.reason) }
                 }
             }
         }
+    }
+
+    DisposableEffect(session, clipboardSharing, status, view) {
+        val listener = ClipboardManager.OnPrimaryClipChangedListener { shareLocalText() }
+        val listen = clipboardSharing && status == SessionStatus.Connected
+        if (listen) manager?.addPrimaryClipChangedListener(listener)
+        onDispose { if (listen) manager?.removePrimaryClipChangedListener(listener) }
     }
 
     LaunchedEffect(session) {
@@ -1454,6 +1497,7 @@ fun SessionScreen(
                     }
                 },
                 onKeyboard = { keyboardActive = true },
+                clipboardEnabled = status == SessionStatus.Connected,
                 onClipboard = { showClipboardDialog = true },
                 onUpload = { sendFilePicker.launch(arrayOf("*/*")) },
                 onDownload = { showDownloadDialog = true },
@@ -1536,20 +1580,61 @@ fun SessionScreen(
         )
     }
 
-    if (showClipboardDialog) {
+    if (showClipboardDialog && status == SessionStatus.Connected) {
         ClipboardDialog(
+            sharing = clipboardSharing,
+            onSharingChange = { enabled ->
+                clipboard.shared = enabled
+                clipboardSharing = enabled
+                scope.launch {
+                    try {
+                        session.setClipboardSharing(enabled)
+                    } catch (error: Exception) {
+                        if (error is CancellationException) throw error
+                        lastAction = context.getString(R.string.session_clipboard_settings_failed)
+                    }
+                }
+            },
             onDismiss = { showClipboardDialog = false },
-            onSend = { text ->
-                session.sendClipboard(text)
-                lastAction = context.getString(
-                    R.string.session_action_prefix,
-                    context.resources.getQuantityString(
-                        R.plurals.session_clipboard_sent,
-                        text.length,
-                        text.length,
-                    ),
-                )
+            onSend = { typed ->
+                val text = typed ?: clipboard.localText()
                 showClipboardDialog = false
+                if (text == null) {
+                    lastAction = context.getString(R.string.session_clipboard_empty)
+                } else {
+                    scope.launch {
+                        try {
+                            session.sendClipboard(text)
+                            lastAction = context.resources.getQuantityString(
+                                R.plurals.session_clipboard_sent, text.length, text.length,
+                            )
+                        } catch (error: Exception) {
+                            if (error is CancellationException) throw error
+                            lastAction = context.getString(R.string.session_clipboard_send_failed)
+                        }
+                    }
+                }
+            },
+            onFetch = {
+                showClipboardDialog = false
+                clipboardFetch?.cancel()
+                lastAction = context.getString(R.string.session_clipboard_requesting)
+                clipboardFetch = scope.launch {
+                    try {
+                        if (session.requestClipboard()) {
+                            delay(5_000)
+                            lastAction = context.getString(R.string.session_clipboard_no_reply)
+                        } else {
+                            lastAction = context.getString(
+                                if (clipboard.copyLatest()) R.string.session_clipboard_copied_latest
+                                else R.string.session_clipboard_copy_first,
+                            )
+                        }
+                    } catch (error: Exception) {
+                        if (error is CancellationException) throw error
+                        lastAction = context.getString(R.string.session_clipboard_fetch_failed)
+                    }
+                }
             },
         )
     }
@@ -1756,6 +1841,7 @@ private fun SessionToolbar(
     onQualitySelected: (QualityPreset) -> Unit,
     isFullscreen: Boolean,
     onKeyboard: () -> Unit,
+    clipboardEnabled: Boolean,
     onClipboard: () -> Unit,
     onUpload: () -> Unit,
     onDownload: () -> Unit,
@@ -1835,6 +1921,7 @@ private fun SessionToolbar(
                 icon = Icons.Outlined.ContentPaste,
                 label = stringResource(R.string.session_clipboard),
                 onClick = onClipboard,
+                enabled = clipboardEnabled,
             )
             ToolbarButton(
                 icon = Icons.Outlined.UploadFile,
@@ -1907,8 +1994,10 @@ private fun ToolbarButton(
     icon: ImageVector,
     label: String,
     onClick: () -> Unit,
+    enabled: Boolean = true,
 ) {
     IconButton(
+        enabled = enabled,
         onClick = onClick,
         colors = IconButtonDefaults.iconButtonColors(contentColor = Color.White),
     ) {
@@ -2180,22 +2269,42 @@ private fun DownloadDialog(
 
 @Composable
 private fun ClipboardDialog(
+    sharing: Boolean,
+    onSharingChange: (Boolean) -> Unit,
     onDismiss: () -> Unit,
-    onSend: (String) -> Unit,
+    onSend: (String?) -> Unit,
+    onFetch: () -> Unit,
 ) {
-    var text by rememberSaveable { mutableStateOf("") }
+    var text by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.session_clipboard)) },
         text = {
-            OutlinedTextField(
-                value = text,
-                onValueChange = { text = it },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text(stringResource(R.string.session_clipboard_hint)) },
-                minLines = 3,
-                maxLines = 5,
-            )
+            Column {
+                Row(
+                    Modifier.fillMaxWidth().toggleable(
+                        value = sharing, role = Role.Switch, onValueChange = onSharingChange,
+                    ),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(stringResource(R.string.editor_shared_clipboard), modifier = Modifier.weight(1f))
+                    Switch(checked = sharing, onCheckedChange = null)
+                }
+                TextButton(onClick = { onSend(null) }) {
+                    Text(stringResource(R.string.session_clipboard_send_local))
+                }
+                TextButton(onClick = onFetch) {
+                    Text(stringResource(R.string.session_clipboard_copy_remote))
+                }
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text(stringResource(R.string.session_clipboard_hint)) },
+                    minLines = 3,
+                    maxLines = 5,
+                )
+            }
         },
         confirmButton = {
             TextButton(

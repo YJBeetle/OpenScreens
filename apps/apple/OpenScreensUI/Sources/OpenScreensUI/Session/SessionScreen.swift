@@ -110,6 +110,9 @@ public struct SessionScreen: View {
             isDropTargeted = targeted
         }
         #endif
+        .task(id: scenePhase == .active && model.sharedClipboard && model.state.isConnected && !model.isObserving) {
+            if scenePhase == .active { await model.watchLocalClipboard() }
+        }
         .onAppear {
             if !appliedChromeDefault {
                 appliedChromeDefault = true

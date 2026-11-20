@@ -77,6 +77,7 @@ public final class SessionViewModel {
     }
 
     public var cursorMode: CursorMode
+    public private(set) var sharedClipboard: Bool
     public var isObserving: Bool
     public var scaling: RemoteContentMode
     public var showsChrome = true
@@ -106,6 +107,11 @@ public final class SessionViewModel {
     /// On-screen translation of the zoomed image, in points.
     public private(set) var pan: CGSize = .zero
 
+    @ObservationIgnored private let readClipboard: @MainActor () -> String?
+    @ObservationIgnored private let writeClipboard: @MainActor (String) -> Void
+    @ObservationIgnored private var latestRemoteText: String?
+    @ObservationIgnored private var clipboardChangeCount: Int?
+    @ObservationIgnored private var fetchTask: Task<Void, Never>?
     @ObservationIgnored private let service: any RemoteSessionService
     @ObservationIgnored private var session: (any RemoteSessionProtocol)?
     @ObservationIgnored private var eventTask: Task<Void, Never>?
@@ -117,6 +123,7 @@ public final class SessionViewModel {
     @ObservationIgnored private var isStopping = false
     @ObservationIgnored private var reconnectAttempts = 0
     @ObservationIgnored private var lastHoverPixel: CGPoint?
+    @ObservationIgnored private var sceneIsActive = true
     @ObservationIgnored private var backgroundedAt: Date?
     @ObservationIgnored private var scrollRemainder = CGSize.zero
     @ObservationIgnored private var viewportTask: Task<Void, Never>?
@@ -129,10 +136,15 @@ public final class SessionViewModel {
 
     public init(
         profile: ConnectionProfile,
-        service: any RemoteSessionService = MockSessionService()
+        service: any RemoteSessionService = MockSessionService(),
+        readClipboard: @escaping @MainActor () -> String? = { PlatformClipboard.string },
+        writeClipboard: @escaping @MainActor (String) -> Void = { PlatformClipboard.setString($0) }
     ) {
         self.profile = profile
         self.service = service
+        self.readClipboard = readClipboard
+        self.writeClipboard = writeClipboard
+        self.sharedClipboard = profile.controls.sharedClipboard
         self.cursorMode = profile.controls.cursorMode
         self.isObserving = profile.controls.startInObserveMode
         self.scaling = profile.controls.scaling
@@ -177,6 +189,7 @@ public final class SessionViewModel {
     /// Scene phase hook. A suspended app can return with a socket that never
     /// reports an error, which would leave the last frame on screen forever.
     public func handleScenePhase(_ phase: ScenePhase) {
+        sceneIsActive = phase == .active
         #if os(iOS)
         switch phase {
         case .background:
@@ -226,12 +239,13 @@ public final class SessionViewModel {
 
         eventTask = Task { [weak self, session] in
             for await event in session.events {
-                guard let self else { return }
+                guard let self, !Task.isCancelled else { return }
                 self.handle(event)
             }
         }
 
-        let profile = profile
+        var profile = profile
+        profile.controls.sharedClipboard = sharedClipboard
         connectTask = Task { [weak self, session, profile] in
             do {
                 try await session.connect(profile: profile)
@@ -244,6 +258,7 @@ public final class SessionViewModel {
     }
 
     private func endTransport() {
+        resetClipboard()
         let active = session
         session = nil
         connectTask?.cancel()
@@ -272,6 +287,7 @@ public final class SessionViewModel {
                 failureMessage = nil
             }
             if case .disconnected(let reason, let kind) = newState {
+                resetClipboard()
                 clearUploadState()
                 clearDownloadState()
                 handleRemoteClose(reason: reason, kind: kind)
@@ -322,8 +338,17 @@ public final class SessionViewModel {
             )
 
         case .clipboard(let text):
-            PlatformClipboard.setString(text)
+            guard state.isConnected else { return }
+            latestRemoteText = text
+            guard (sharedClipboard && sceneIsActive) || fetchTask != nil else { return }
+            fetchTask?.cancel()
+            fetchTask = nil
+            writeClipboard(text)
+            if sharedClipboard { clipboardChangeCount = PlatformClipboard.changeCount }
             showMessage(NSLocalizedString("Remote clipboard copied.", comment: "Clipboard toast"))
+
+        case .clipboardRequest:
+            shareLocalClipboardIfNeeded()
 
         case .bell:
             PlatformFeedback.selection()
@@ -785,22 +810,87 @@ public final class SessionViewModel {
 
     // MARK: - Clipboard
 
+    private func resetClipboard() {
+        fetchTask?.cancel()
+        fetchTask = nil
+        latestRemoteText = nil
+        clipboardChangeCount = nil
+    }
+
+    public func setClipboardSharing(_ enabled: Bool) {
+        sharedClipboard = enabled
+        clipboardChangeCount = enabled ? PlatformClipboard.changeCount : nil
+        guard let session else { return }
+        Task {
+            do {
+                try await session.setClipboardSharing(enabled)
+            } catch {
+                showMessage(NSLocalizedString("Could not update clipboard sharing.", comment: "Clipboard toast"))
+            }
+        }
+    }
+
+    private func shareLocalClipboardIfNeeded() {
+        guard sharedClipboard, sceneIsActive, state.isConnected, !isObserving, let session,
+              let text = readClipboard(), !text.isEmpty else { return }
+        Task { try? await session.sendClipboard(text, automatic: true) }
+    }
+
+    /// Poll the change counter only while the session scene is active. Starting
+    /// a new session skips existing text. Resuming detects changes since it was active.
+    func watchLocalClipboard() async {
+        guard state.isConnected, sharedClipboard, !isObserving else { return }
+        while !Task.isCancelled {
+            let current = PlatformClipboard.changeCount
+            if let previous = clipboardChangeCount, current != previous {
+                shareLocalClipboardIfNeeded()
+            }
+            clipboardChangeCount = current
+            do { try await Task.sleep(for: .milliseconds(750)) } catch { return }
+        }
+    }
+
     public func sendLocalClipboard() {
-        guard state.isConnected, !isObserving else { return }
-        guard let text = PlatformClipboard.string, !text.isEmpty else {
+        guard state.isConnected, !isObserving, let session else { return }
+        guard let text = readClipboard(), !text.isEmpty else {
             showMessage(NSLocalizedString("Local clipboard is empty.", comment: "Clipboard toast"))
             return
         }
-        guard let session else { return }
         Task {
-            await session.sendClipboard(text)
-            self.showMessage(NSLocalizedString("Sent local clipboard.", comment: "Clipboard toast"))
+            do {
+                try await session.sendClipboard(text, automatic: false)
+                showMessage(NSLocalizedString("Sent local clipboard.", comment: "Clipboard toast"))
+            } catch {
+                showMessage(NSLocalizedString("Could not send clipboard text.", comment: "Clipboard toast"))
+            }
         }
     }
 
     public func fetchRemoteClipboard() {
-        guard state.isConnected, !isObserving, let session else { return }
-        Task { await session.requestClipboard() }
+        guard state.isConnected, let session else { return }
+        fetchTask?.cancel()
+        showMessage(NSLocalizedString("Requesting remote clipboard…", comment: "Clipboard toast"))
+        fetchTask = Task {
+            defer { if !Task.isCancelled { fetchTask = nil } }
+            do {
+                let requested = try await session.requestClipboard()
+                try Task.checkCancellation()
+                if requested {
+                    // The clipboard event cancels this timeout, including a reply
+                    // that arrived while the native call was still returning.
+                    try await Task.sleep(for: .seconds(5))
+                    showMessage(NSLocalizedString("No clipboard text received.", comment: "Clipboard toast"))
+                } else if let latestRemoteText {
+                    writeClipboard(latestRemoteText)
+                    showMessage(NSLocalizedString("Copied the last text received from this server.", comment: "Clipboard toast"))
+                } else {
+                    showMessage(NSLocalizedString("Copy text on the remote computer first.", comment: "Clipboard toast"))
+                }
+            } catch {
+                guard !Task.isCancelled else { return }
+                showMessage(NSLocalizedString("Could not request remote clipboard.", comment: "Clipboard toast"))
+            }
+        }
     }
 
     // MARK: - File transfer

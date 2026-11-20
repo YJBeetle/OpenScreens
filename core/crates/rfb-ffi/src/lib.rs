@@ -570,8 +570,22 @@ impl RemoteSession {
         self.session.request_clipboard().await.map_err(to_failure)
     }
 
-    pub async fn send_clipboard(&self, text: String) -> Result<(), SessionFailure> {
-        self.session.send_clipboard(&text).await.map_err(to_failure)
+    pub async fn set_clipboard_sharing(&self, enabled: bool) -> Result<(), SessionFailure> {
+        self.session
+            .set_clipboard_sharing(enabled)
+            .await
+            .map_err(to_failure)
+    }
+
+    pub async fn send_clipboard(
+        &self,
+        text: String,
+        automatic: bool,
+    ) -> Result<(), SessionFailure> {
+        self.session
+            .send_clipboard(&text, automatic)
+            .await
+            .map_err(to_failure)
     }
 
     pub fn next_transfer_handle(&self) -> u32 {

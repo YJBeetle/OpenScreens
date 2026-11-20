@@ -20,7 +20,6 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.cancelAndJoin
-import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -65,13 +64,14 @@ class UniFfiRemoteSession(
     private val _events = MutableSharedFlow<SessionEvent>(
         replay = 1,
         extraBufferCapacity = 8,
-        onBufferOverflow = BufferOverflow.DROP_OLDEST,
+        // Preserve clipboard and lifecycle events even when the canvas is busy.
     )
     override val events: Flow<SessionEvent> = _events.asSharedFlow()
 
     @Volatile
     private var session: NativeSession? = null
 
+    @Volatile private var clipboardSharing = connection.sharedClipboard
     private val closed = AtomicBoolean(false)
     private val disposed = AtomicBoolean(false)
     private val openMutex = Mutex()
@@ -196,6 +196,14 @@ class UniFfiRemoteSession(
         }
         viewportEmitted = true
 
+        try {
+            connected.setClipboardSharing(clipboardSharing)
+        } catch (error: Exception) {
+            connected.close()
+            if (error is CancellationException) throw error
+            _events.emit(SessionEvent.Failed(describe(error)))
+            return
+        }
         session = connected
         _events.emit(SessionEvent.Connected(width, height))
         Log.i(
@@ -263,13 +271,17 @@ class UniFfiRemoteSession(
         }
     }
 
-    override fun sendClipboard(text: String) {
-        val current = session ?: return
-        scope.launch(inputDispatcher) {
-            runCatching { current.sendClipboard(text) }
-                .onFailure { error -> Log.w(TAG, "sendClipboard failed", error) }
-        }
+    override suspend fun sendClipboard(text: String, automatic: Boolean) {
+        if (automatic && !clipboardSharing) return
+        checkNotNull(session).sendClipboard(text, automatic)
     }
+
+    override suspend fun setClipboardSharing(enabled: Boolean) {
+        clipboardSharing = enabled
+        session?.setClipboardSharing(enabled)
+    }
+
+    override suspend fun requestClipboard(): Boolean = checkNotNull(session).requestClipboard()
 
     override fun nextTransferHandle(): Int =
         session?.nextTransferHandle()?.toInt() ?: 0
@@ -477,8 +489,7 @@ class UniFfiRemoteSession(
                             ),
                         )
                     }
-                    is NativeEvent.Clipboard ->
-                        _events.emit(SessionEvent.RemoteClipboard(event.text))
+                    is NativeEvent.Clipboard -> _events.emit(SessionEvent.RemoteClipboard(event.text))
                     NativeEvent.Bell -> Log.d(TAG, "remote bell")
                     is NativeEvent.Cursor -> renderCursor(event)
                     is NativeEvent.PointerPosition -> Unit
@@ -486,7 +497,9 @@ class UniFfiRemoteSession(
                         _events.emit(
                             SessionEvent.UploadRequest(event.handle.toInt(), event.path),
                         )
-                    NativeEvent.ClipboardRequest -> Unit
+                    NativeEvent.ClipboardRequest -> if (clipboardSharing) {
+                        _events.emit(SessionEvent.ClipboardRequest)
+                    }
                     is NativeEvent.DragOutInfo -> Unit
                     is NativeEvent.FileTransfer -> handleFileTransfer(event)
                     is NativeEvent.DownloadProgress ->

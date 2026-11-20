@@ -408,3 +408,16 @@
 "Open a session by entering its vnc:// address." = "输入 vnc:// 地址以打开会话。";
 "Enter a valid vnc:// address." = "请输入有效的 vnc:// 地址。";
 "Port defaults to 5900." = "端口默认为 5900。";
+"Remote Commands" = "远端命令";
+"Mission Control" = "调度中心";
+"Application Windows" = "应用程序窗口";
+"Move Left a Space" = "移至左侧空间";
+"Move Right a Space" = "移至右侧空间";
+"Show Desktop" = "显示桌面";
+"Switch Applications" = "切换应用程序";
+"Spotlight" = "聚焦搜索";
+"Force Quit…" = "强制退出…";
+"Lock Screen" = "锁定屏幕";
+"Ctrl-Alt-Delete" = "Ctrl-Alt-Delete";
+"Task Manager" = "任务管理器";
+"Insert" = "插入键";

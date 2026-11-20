@@ -2,6 +2,7 @@ import OpenScreensUI
 import SwiftUI
 
 struct SessionCommands {
+    let model: SessionViewModel
     let reconnect: @MainActor () -> Void
     let disconnect: @MainActor () -> Void
     let takeScreenshot: @MainActor () -> Void
@@ -64,6 +65,10 @@ struct SessionMenuCommands: Commands {
             ))
             .keyboardShortcut("o", modifiers: [.command, .option])
             .disabled(session == nil)
+
+            if let session {
+                RemoteCommandMenu(model: session.model)
+            }
 
             Menu("Cursor Mode") {
                 ForEach(CursorMode.allCases) { mode in

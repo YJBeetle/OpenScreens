@@ -12,7 +12,10 @@ import UIKit
 final class RemoteCanvasMetalView: MTKView {
     private weak var renderer: RemoteCanvasRenderer?
 
-    init(renderer: RemoteCanvasRenderer) {
+    private let asMirror: Bool
+
+    init(renderer: RemoteCanvasRenderer, asMirror: Bool = false) {
+        self.asMirror = asMirror
         self.renderer = renderer
         super.init(frame: .zero, device: renderer.metalDevice)
 
@@ -31,7 +34,7 @@ final class RemoteCanvasMetalView: MTKView {
         isOpaque = true
         isMultipleTouchEnabled = false
         #endif
-        renderer.attach(self)
+        renderer.attach(self, asMirror: asMirror)
     }
 
     func requestRedraw() {
@@ -61,11 +64,11 @@ final class RemoteCanvasMetalView: MTKView {
 
     #if os(macOS)
     override func draw(_ dirtyRect: NSRect) {
-        renderer?.draw(in: self)
+        renderer?.draw(in: self, asMirror: asMirror)
     }
     #else
     override func draw(_ rect: CGRect) {
-        renderer?.draw(in: self)
+        renderer?.draw(in: self, asMirror: asMirror)
     }
     #endif
 }
@@ -122,5 +125,20 @@ public struct RemoteCanvasView: UIViewRepresentable {
         renderer.imageRect = imageRect
         renderer.containerSize = containerSize
     }
+}
+
+/// A second drawable for the same texture, independent of the controller's zoom and pan.
+public struct RemoteCanvasMirror: UIViewRepresentable {
+    public let renderer: RemoteCanvasRenderer
+
+    public init(renderer: RemoteCanvasRenderer) {
+        self.renderer = renderer
+    }
+
+    public func makeUIView(context: Context) -> UIView {
+        RemoteCanvasMetalView(renderer: renderer, asMirror: true)
+    }
+
+    public func updateUIView(_ uiView: UIView, context: Context) {}
 }
 #endif

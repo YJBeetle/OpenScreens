@@ -791,6 +791,16 @@ public final class SessionViewModel {
         scheduleCurrentViewport()
     }
 
+    // While a projector is showing the full desktop, keep a single full-frame
+    // subscription. The iPad still applies its own zoom and pan when drawing.
+    @ObservationIgnored private var externalDisplayPixelWidth: Int?
+
+    func setExternalDisplayPixelWidth(_ width: Int?) {
+        guard externalDisplayPixelWidth != width else { return }
+        externalDisplayPixelWidth = width
+        scheduleCurrentViewport()
+    }
+
     private func scheduleCurrentViewport() {
         guard state.isConnected, serverSize != nil, canvasSize.width > 0, canvasSize.height > 0 else { return }
         viewportTask?.cancel()
@@ -812,17 +822,18 @@ public final class SessionViewModel {
         guard !visible.isNull, visible.width >= 1, visible.height >= 1 else { return }
 
         let unit = CGRect(x: 0, y: 0, width: 1, height: 1)
-        let normalized = CGRect(
+        let normalized = externalDisplayPixelWidth != nil ? unit : CGRect(
             x: (visible.minX - displayed.minX) / displayed.width,
             y: (visible.minY - displayed.minY) / displayed.height,
             width: visible.width / displayed.width,
             height: visible.height / displayed.height
         ).intersection(unit)
         guard normalized.width > 0, normalized.height > 0 else { return }
-        guard normalized != lastViewportRect || canvasPixelWidth != lastViewportPixelWidth else { return }
+        let pixelWidth = max(canvasPixelWidth, externalDisplayPixelWidth ?? 0)
+        guard normalized != lastViewportRect || pixelWidth != lastViewportPixelWidth else { return }
         lastViewportRect = normalized
-        lastViewportPixelWidth = canvasPixelWidth
-        await session.setViewport(normalized, screenPixelWidth: canvasPixelWidth)
+        lastViewportPixelWidth = pixelWidth
+        await session.setViewport(normalized, screenPixelWidth: pixelWidth)
     }
 
     private func clampedPan(_ value: CGSize, in size: CGSize) -> CGSize {

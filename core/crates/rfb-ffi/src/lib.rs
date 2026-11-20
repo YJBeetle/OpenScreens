@@ -429,6 +429,7 @@ impl From<rfb_engine::session::FailureKind> for SessionFailureKind {
     fn from(kind: rfb_engine::session::FailureKind) -> Self {
         use rfb_engine::session::FailureKind as Kind;
         match kind {
+            Kind::InvalidInput => Self::InvalidInput,
             Kind::MacSessionChoiceRequired => Self::MacSessionChoiceRequired,
             Kind::Unknown => Self::Unknown,
             Kind::Network => Self::Network,

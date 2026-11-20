@@ -212,6 +212,7 @@
     <string name="session_clipboard_copied_latest">已复制本次连接最近收到的文本。</string>
     <string name="session_clipboard_copy_first">请先在远程电脑上复制文本。</string>
     <string name="session_clipboard_fetch_failed">无法请求远程剪贴板。</string>
+    <string name="session_clipboard_latin1_only">此服务器的剪贴板仅支持 Latin-1 字符。</string>
     <string name="session_clipboard_send_failed">无法发送剪贴板文本。</string>
     <string name="session_clipboard_hint">要发送到远程剪贴板的文本</string>
     <string name="session_clipboard_action">发送文本</string>

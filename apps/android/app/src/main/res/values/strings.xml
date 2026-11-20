@@ -212,6 +212,7 @@
     <string name="session_clipboard_copied_latest">Copied the last text received from this server.</string>
     <string name="session_clipboard_copy_first">Copy text on the remote computer first.</string>
     <string name="session_clipboard_fetch_failed">Could not request remote clipboard.</string>
+    <string name="session_clipboard_latin1_only">This server’s clipboard supports only Latin-1 text.</string>
     <string name="session_clipboard_send_failed">Could not send clipboard text.</string>
     <string name="session_clipboard_hint">Text to send to the remote clipboard</string>
     <string name="session_clipboard_action">Send text</string>

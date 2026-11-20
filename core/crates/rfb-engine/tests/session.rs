@@ -414,6 +414,41 @@ async fn paces_incremental_requests() {
 }
 
 #[tokio::test]
+async fn standard_clipboard_latin1_multiline() {
+    let (client, mut server) = duplex(64 * 1024);
+    let task = tokio::spawn(async move {
+        Session::connect_stream(client, SessionConfig::new("mock", 5900))
+            .await
+            .unwrap()
+    });
+    perform_handshake(&mut server).await;
+    read_setup(&mut server).await;
+    let session = task.await.unwrap();
+    let _ = session.next_event().await;
+    session.set_clipboard_sharing(true).await.unwrap();
+    session.send_clipboard("Café\r\n£\rÿ", false).await.unwrap();
+    let mut message = [0; 16];
+    server.read_exact(&mut message).await.unwrap();
+    assert_eq!(&message, b"\x06\0\0\0\0\0\0\x08Caf\xe9\n\xa3\n\xff");
+
+    message[0] = 3;
+    server.write_all(&message).await.unwrap();
+    assert_eq!(
+        session.next_event().await.unwrap(),
+        Event::Clipboard {
+            text: "Café\n£\nÿ".into()
+        }
+    );
+    session.send_clipboard("Café\r\n£\rÿ", true).await.unwrap();
+    assert!(session.send_clipboard("中文🙂", false).await.is_err());
+    // Neither a reflected clipboard nor an unrepresentable one reached the wire.
+    session.send_clipboard("ok", false).await.unwrap();
+    let mut next = [0; 10];
+    server.read_exact(&mut next).await.unwrap();
+    assert_eq!(&next, b"\x06\0\0\0\0\0\0\x02ok");
+}
+
+#[tokio::test]
 async fn session_round_trip() {
     let (client, mut server) = duplex(64 * 1024);
 
@@ -779,7 +814,7 @@ async fn apple_clipboard_request_upload_and_replay() {
         .unwrap();
     assert_eq!(event, Event::ClipboardRequest);
 
-    let text = "Hello, 世界";
+    let text = "Hello, 世界\nZażółć 🙂 e\u{301}";
     session.set_clipboard_sharing(true).await.unwrap();
     server.read_exact(&mut request).await.unwrap();
     assert_eq!(request, [0x15, 0, 0, 1, 0, 0, 0, 0]);

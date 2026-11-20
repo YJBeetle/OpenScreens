@@ -158,6 +158,7 @@ import com.openscreens.app.R
 import com.openscreens.app.data.Connection
 import com.openscreens.app.data.QualityPreset
 import com.openscreens.app.data.SshKey
+import com.openscreens.app.session.ClipboardEncodingException
 import com.openscreens.app.session.SessionClipboard
 import com.openscreens.app.session.MacSessionChoice
 import com.openscreens.app.session.RemoteSession
@@ -462,7 +463,10 @@ fun SessionScreen(
                 session.sendClipboard(text, automatic = true)
             } catch (error: Exception) {
                 if (error is CancellationException) throw error
-                lastAction = context.getString(R.string.session_clipboard_send_failed)
+                lastAction = context.getString(
+                    if (error is ClipboardEncodingException) R.string.session_clipboard_latin1_only
+                    else R.string.session_clipboard_send_failed,
+                )
             }
         }
     }
@@ -1928,7 +1932,10 @@ fun SessionScreen(
                             )
                         } catch (error: Exception) {
                             if (error is CancellationException) throw error
-                            lastAction = context.getString(R.string.session_clipboard_send_failed)
+                            lastAction = context.getString(
+                                if (error is ClipboardEncodingException) R.string.session_clipboard_latin1_only
+                                else R.string.session_clipboard_send_failed,
+                            )
                         }
                     }
                 }

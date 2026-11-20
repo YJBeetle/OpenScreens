@@ -352,7 +352,11 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
     public func sendClipboard(_ text: String, automatic: Bool) async throws {
         guard let session, !finished, !observing else { throw RemoteTransferError.notConnected }
         guard !automatic || sharedClipboard else { return }
-        try await session.sendClipboard(text: text, automatic: automatic)
+        do {
+            try await session.sendClipboard(text: text, automatic: automatic)
+        } catch OpenScreensCore.SessionFailure.Session(let kind, let reason) {
+            throw RemoteSessionFailure(kind: kind.remoteKind, reason: reason)
+        }
     }
 
     public func requestClipboard() async throws -> Bool {

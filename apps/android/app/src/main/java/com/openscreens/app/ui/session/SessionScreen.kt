@@ -878,6 +878,7 @@ fun SessionScreen(
 
         if (!observing) {
             HiddenKeyboardField(
+                enabled = keyboardActive,
                 focusRequester = focusRequester,
                 onChar = { char -> sendKeysym(if (char == '\n') KEY_RETURN else x11Keysym(char)) },
                 onBackspace = { sendKeysym(KEY_BACKSPACE) },
@@ -2395,6 +2396,7 @@ private fun ToolbarButton(
  */
 @Composable
 private fun HiddenKeyboardField(
+    enabled: Boolean,
     focusRequester: FocusRequester,
     onChar: (Char) -> Unit,
     onBackspace: () -> Unit,
@@ -2407,6 +2409,8 @@ private fun HiddenKeyboardField(
     var committed by remember { mutableStateOf(KEYBOARD_SENTINEL) }
 
     BasicTextField(
+        // Dialog dismissal must not move IME focus into the remote session.
+        enabled = enabled,
         value = value,
         onValueChange = { next ->
             if (next.composition != null) {

@@ -50,12 +50,9 @@ struct MacSessionWindow: View {
             model: model,
             reconnect: { model.reconnect() },
             disconnect: {
-                if model.hasActiveTransfers {
-                    model.confirmsTransferInterruption = true
-                } else {
-                    model.disconnect()
-                    dismissWindow()
-                }
+                guard !model.confirmTransferInterruptionIfNeeded() else { return }
+                model.disconnect()
+                dismissWindow()
             },
             takeScreenshot: { model.grabScreenshot() },
             saveScreenshotAs: { model.saveScreenshotAs() },

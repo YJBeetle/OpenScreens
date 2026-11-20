@@ -209,6 +209,12 @@ public final class SessionViewModel {
         PlatformScreen.setIdleTimerDisabled(false, for: idleTimerOwner)
     }
 
+    public func confirmTransferInterruptionIfNeeded() -> Bool {
+        guard hasActiveTransfers else { return false }
+        confirmsTransferInterruption = true
+        return true
+    }
+
     public func disconnect() {
         isStopping = true
         clearCredentials()

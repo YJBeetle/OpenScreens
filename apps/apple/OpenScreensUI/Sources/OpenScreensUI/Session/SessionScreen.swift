@@ -888,9 +888,8 @@ public struct SessionScreen: View {
     // MARK: - Actions
 
     private func requestClose() {
-        if model.hasActiveTransfers {
-            model.confirmsTransferInterruption = true
-        } else if settings.settings.confirmDisconnect, model.state.isConnected {
+        guard !model.confirmTransferInterruptionIfNeeded() else { return }
+        if settings.settings.confirmDisconnect, model.state.isConnected {
             confirmingDisconnect = true
         } else {
             closeSession()

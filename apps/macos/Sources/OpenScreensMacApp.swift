@@ -26,7 +26,6 @@ struct OpenScreensMacApp: App {
         .defaultSize(width: 1080, height: 700)
         .commands {
             SidebarCommands()
-            SessionMenuCommands()
             LibraryMenuCommands()
             CommandGroup(after: .appInfo) {
                 Button("Check for Updates…") {
@@ -55,6 +54,7 @@ struct OpenScreensMacApp: App {
             .tint(Theme.Colors.accent)
         }
         .defaultSize(width: 1120, height: 760)
+        .commands { SessionMenuCommands() }
 
         MenuBarExtra("OpenScreens", systemImage: "display") {
             MacMenuBarContent(updater: updater)

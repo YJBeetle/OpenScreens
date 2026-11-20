@@ -769,6 +769,13 @@ public final class SessionViewModel {
         Task { await session.sendKey(event) }
     }
 
+    /// A menu command has an exact chord, independent of the accessory row's sticky modifiers.
+    func sendCommand(_ command: RemoteDesktopCommand) {
+        guard state.isConnected, !isObserving, let session else { return }
+        let event = command.event
+        Task { await session.sendKey(event) }
+    }
+
     public func toggleStickyModifier(_ modifier: RemoteModifiers) {
         if keyboardModifiers.contains(modifier) {
             keyboardModifiers.remove(modifier)

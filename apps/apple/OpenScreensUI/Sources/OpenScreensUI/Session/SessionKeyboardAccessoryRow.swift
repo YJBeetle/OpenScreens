@@ -53,6 +53,10 @@ struct SessionKeyboardAccessoryRow: View {
             Divider()
                 .frame(height: 24)
 
+            RemoteCommandMenu(model: model)
+                .labelStyle(.iconOnly)
+                .frame(minWidth: 34, minHeight: 34)
+
             keycap(systemImage: "keyboard.chevron.compact.down", label: "Hide Keyboard") {
                 model.setKeyboardActive(false)
             }

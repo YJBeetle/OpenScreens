@@ -67,6 +67,7 @@ struct SessionToolbar: View {
             ) {
                 model.toggleKeyboard()
             }
+            .contextMenu { RemoteCommandMenu(model: model) }
             #endif
         case .clipboard:
             clipboardMenu

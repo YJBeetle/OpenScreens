@@ -45,6 +45,7 @@ struct MacSessionWindow: View {
 
     private func commands(for model: SessionViewModel) -> SessionCommands {
         SessionCommands(
+            model: model,
             reconnect: { model.reconnect() },
             disconnect: {
                 model.disconnect()

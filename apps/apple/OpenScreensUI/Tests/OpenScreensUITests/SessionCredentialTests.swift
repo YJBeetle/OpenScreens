@@ -5,7 +5,7 @@ import XCTest
 
 @MainActor
 final class SessionCredentialTests: XCTestCase {
-    func testRejectedAttemptCanBeCorrectedAndReconnectedWithoutSaving() async throws {
+    func testCredentialRetryAndMacSessionChoiceSurviveReconnectWithoutSaving() async throws {
         let service = LoginService()
         let profile = ConnectionProfile(name: "Test", host: "localhost")
         let model = SessionViewModel(profile: profile, service: service)
@@ -21,6 +21,10 @@ final class SessionCredentialTests: XCTestCase {
         XCTAssertEqual(model.loginUsername, "guest")
 
         model.submitCredentials(username: "user", password: " test ", remember: false)
+        try await wait { model.needsMacSessionChoice }
+        model.reconnect()
+        XCTAssertTrue(model.needsMacSessionChoice)
+        model.chooseMacSession(.personal)
         try await wait { model.state.isConnected }
         try await wait { model.receivedFrames == 2 }
         #if DEBUG
@@ -97,6 +101,9 @@ private struct LoginTransport: RemoteSessionProtocol {
         guard !profile.username.isEmpty else { throw RemoteSessionFailure(kind: .missingUsername, reason: "") }
         guard profile.username == "user", password == " test " else {
             throw RemoteSessionFailure(kind: .authenticationFailed, reason: "")
+        }
+        guard macSessionChoice == .personal else {
+            throw RemoteSessionFailure(kind: .macSessionChoiceRequired, reason: "")
         }
         await log.connected(stream)
         stream.yield(.displays([RemoteDisplay(id: 0, name: "Fixture", width: 2, height: 2)]))

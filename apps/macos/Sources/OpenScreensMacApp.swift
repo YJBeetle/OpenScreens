@@ -6,11 +6,17 @@ import SwiftUI
 struct OpenScreensMacApp: App {
     @NSApplicationDelegateAdaptor(MacAppDelegate.self) private var appDelegate
 
-    @State private var connections = ConnectionStore()
-    @State private var settings = SettingsStore()
+    @State private var connections: ConnectionStore
+    @State private var settings: SettingsStore
     @State private var sshKeys = SSHKeyVault()
     @State private var updater = AppUpdater()
     @State private var nearby = NearbyDiscovery()
+
+    init() {
+        let settings = SettingsStore()
+        _settings = State(initialValue: settings)
+        _connections = State(initialValue: ConnectionStore(settings: settings))
+    }
 
     var body: some Scene {
         Window("OpenScreens", id: MacSceneID.library) {

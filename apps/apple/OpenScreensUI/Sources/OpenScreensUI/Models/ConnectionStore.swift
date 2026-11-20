@@ -19,8 +19,11 @@ public final class ConnectionStore {
     private var advertisedEndpoints: Set<String> = []
     @ObservationIgnored private var dismissedDiscovered: Set<String> = []
 
-    public init(fileURL: URL? = nil, seedDemoData: Bool = true) {
+    let previews: ConnectionPreviews
+
+    public init(fileURL: URL? = nil, seedDemoData: Bool = true, settings: SettingsStore? = nil) {
         self.fileURL = fileURL ?? Self.defaultFileURL()
+        self.previews = ConnectionPreviews(libraryURL: self.fileURL, settings: settings)
         self.encoder = Self.makeEncoder()
         self.decoder = Self.makeDecoder()
 
@@ -155,6 +158,7 @@ public final class ConnectionStore {
     public func delete(id: UUID) {
         guard let profile = connections.first(where: { $0.id == id }) else { return }
         connections.removeAll { $0.id == id }
+        previews.remove(id)
         OpenScreensCredentials.deletePassword(for: id)
         OpenScreensCredentials.deleteSecret(kind: "ssh-password", for: id)
         OpenScreensCredentials.deleteSecret(kind: "ssh-passphrase", for: id)

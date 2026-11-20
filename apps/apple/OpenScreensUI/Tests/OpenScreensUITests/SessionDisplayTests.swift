@@ -126,13 +126,13 @@ final class SessionDisplayTests: XCTestCase {
     }
 }
 
-private struct DisplayTestService: RemoteSessionService {
+struct DisplayTestService: RemoteSessionService {
     let transport: DisplayTestTransport
 
     func makeSession() -> any RemoteSessionProtocol { transport }
 }
 
-private actor DisplayTestTransport: RemoteSessionProtocol {
+actor DisplayTestTransport: RemoteSessionProtocol {
     let events: AsyncStream<RemoteSessionEvent>
     private let continuation: AsyncStream<RemoteSessionEvent>.Continuation
     private(set) var selections: [Int?] = []

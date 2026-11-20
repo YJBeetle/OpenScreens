@@ -2,6 +2,7 @@ import CoreGraphics
 import Foundation
 import Metal
 import MetalKit
+import MetalPerformanceShaders
 import Observation
 import os
 
@@ -39,6 +40,7 @@ public final class RemoteCanvasRenderer {
     private let commandQueue: (any MTLCommandQueue)?
     private let pipeline: (any MTLRenderPipelineState)?
     private var texture: (any MTLTexture)?
+    public private(set) var frameRevision: UInt64 = 0
     private(set) var frameWidth = 0
     private(set) var frameHeight = 0
 
@@ -176,6 +178,7 @@ public final class RemoteCanvasRenderer {
     }
 
     private func didUpload() {
+        frameRevision &+= 1
         #if DEBUG
         if let presentation, presentation.stage == .waiting { presentation.stage = .uploaded }
         #endif
@@ -200,6 +203,44 @@ public final class RemoteCanvasRenderer {
     public func snapshot() -> CGImage? {
         guard let texture, frameWidth > 0, frameHeight > 0 else { return nil }
 
+        return Self.image(from: texture, opaque: false)
+    }
+
+    /// Read back only card-sized pixels, without copying the desktop to a full-sized CPU image.
+    public func thumbnail(maxDimension: Int) -> CGImage? {
+        guard let texture, let device, let commandQueue, maxDimension > 0 else { return nil }
+        let longest = max(frameWidth, frameHeight)
+        if longest <= maxDimension { return Self.image(from: texture, opaque: true) }
+        let width = max(1, frameWidth * maxDimension / longest)
+        let height = max(1, frameHeight * maxDimension / longest)
+        let descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .bgra8Unorm,
+                                                                  width: width, height: height, mipmapped: false)
+        descriptor.usage = [.shaderWrite, .shaderRead]
+        #if os(macOS)
+        descriptor.storageMode = device.hasUnifiedMemory ? .shared : .managed
+        #else
+        descriptor.storageMode = .shared
+        #endif
+        guard let scaled = device.makeTexture(descriptor: descriptor),
+              let command = commandQueue.makeCommandBuffer() else { return nil }
+        MPSImageBilinearScale(device: device).encode(commandBuffer: command, sourceTexture: texture,
+                                                    destinationTexture: scaled)
+        #if os(macOS)
+        if scaled.storageMode == .managed {
+            guard let blit = command.makeBlitCommandEncoder() else { return nil }
+            blit.synchronize(resource: scaled)
+            blit.endEncoding()
+        }
+        #endif
+        command.commit()
+        command.waitUntilCompleted()
+        guard command.status == .completed else { return nil }
+        return Self.image(from: scaled, opaque: true)
+    }
+
+    private static func image(from texture: any MTLTexture, opaque: Bool) -> CGImage? {
+        let frameWidth = texture.width
+        let frameHeight = texture.height
         let bytesPerRow = frameWidth * 4
         var pixels = Data(count: bytesPerRow * frameHeight)
         let copied = pixels.withUnsafeMutableBytes { buffer -> Bool in
@@ -214,7 +255,7 @@ public final class RemoteCanvasRenderer {
         }
         guard copied, let provider = CGDataProvider(data: pixels as CFData) else { return nil }
 
-        let bitmapInfo = CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedFirst.rawValue)
+        let bitmapInfo = CGBitmapInfo(rawValue: (opaque ? CGImageAlphaInfo.noneSkipFirst : .premultipliedFirst).rawValue)
             .union(.byteOrder32Little)
         return CGImage(
             width: frameWidth,

@@ -139,6 +139,7 @@ public enum ToolbarDock: String, Codable, CaseIterable, Identifiable, Sendable {
 
 public struct AppSettings: Codable, Hashable, Sendable {
     public var appearance: AppAppearance
+    public var showSessionPreviews: Bool
     public var tileDensity: TileDensity
     public var librarySort: LibrarySortOrder
     public var libraryLayout: LibraryLayout
@@ -157,6 +158,7 @@ public struct AppSettings: Codable, Hashable, Sendable {
 
     public init(
         appearance: AppAppearance = .system,
+        showSessionPreviews: Bool = true,
         tileDensity: TileDensity = .comfortable,
         librarySort: LibrarySortOrder = .name,
         libraryLayout: LibraryLayout = .grid,
@@ -172,6 +174,7 @@ public struct AppSettings: Codable, Hashable, Sendable {
         requireBiometrics: Bool = false
     ) {
         self.appearance = appearance
+        self.showSessionPreviews = showSessionPreviews
         self.tileDensity = tileDensity
         self.librarySort = librarySort
         self.libraryLayout = libraryLayout
@@ -190,12 +193,13 @@ public struct AppSettings: Codable, Hashable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case appearance, tileDensity, librarySort, libraryLayout, defaultCursorMode, sharedClipboard
         case autoReconnect, confirmDisconnect, updateChannel, showToolbarOnLaunch, toolbarItems
-        case toolbarDock, discoverNearby, requireBiometrics
+        case toolbarDock, discoverNearby, requireBiometrics, showSessionPreviews
     }
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         appearance = try container.decode(AppAppearance.self, forKey: .appearance)
+        showSessionPreviews = try container.decodeIfPresent(Bool.self, forKey: .showSessionPreviews) ?? true
         tileDensity = try container.decode(TileDensity.self, forKey: .tileDensity)
         librarySort = try container.decodeIfPresent(LibrarySortOrder.self, forKey: .librarySort) ?? .name
         libraryLayout = try container.decodeIfPresent(LibraryLayout.self, forKey: .libraryLayout) ?? .grid
@@ -263,8 +267,13 @@ public final class SettingsStore {
     private static let logger = Logger(subsystem: "app.openscreens", category: "SettingsStore")
 
     public var settings: AppSettings {
-        didSet { persist() }
+        didSet {
+            if oldValue.showSessionPreviews != settings.showSessionPreviews { previewPolicyRevision += 1 }
+            persist()
+        }
     }
+
+    private(set) var previewPolicyRevision = 0
 
     @ObservationIgnored private let fileURL: URL
 

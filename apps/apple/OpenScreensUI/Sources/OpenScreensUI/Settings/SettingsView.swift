@@ -76,6 +76,8 @@ public struct SettingsView: View {
                     }
                 }
 
+                Toggle("Show Last Session Preview", isOn: $settings.settings.showSessionPreviews)
+
                 Picker("Sort Connections", selection: $settings.settings.librarySort) {
                     ForEach(LibrarySortOrder.allCases) { order in
                         Text(order.title).tag(order)

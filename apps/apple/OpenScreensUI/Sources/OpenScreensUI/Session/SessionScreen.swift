@@ -29,7 +29,6 @@ public struct SessionScreen: View {
 
     #if os(macOS)
     @FocusState private var keyboardFocused: Bool
-    @State private var hidesSystemCursor = false
     #endif
 
     public init(
@@ -46,7 +45,9 @@ public struct SessionScreen: View {
                 .ignoresSafeArea()
 
             remoteCanvas
+                #if os(iOS)
                 .ignoresSafeArea()
+                #endif
                 .accessibilityHidden(true)
                 .alert(
                     "Download Complete",
@@ -120,14 +121,6 @@ public struct SessionScreen: View {
         }
         .onDisappear {
             model.stop()
-            #if os(macOS)
-            showSystemCursor()
-            #endif
-        }
-        .onChange(of: model.state.isConnected) { _, connected in
-            #if os(macOS)
-            if !connected { showSystemCursor() }
-            #endif
         }
         .onChange(of: scenePhase) { _, phase in
             model.handleScenePhase(phase)
@@ -241,12 +234,7 @@ public struct SessionScreen: View {
     private var pointerSurface: some View {
         GeometryReader { proxy in
             #if os(macOS)
-            Color.clear
-                .contentShape(Rectangle())
-                .gesture(dragGesture(in: proxy.size))
-                .onContinuousHover { phase in
-                    handleHover(phase, in: proxy.size)
-                }
+            RemoteMouseSurface(model: model, size: proxy.size, focusKeyboard: focusHardwareKeyboard)
             #else
             RemoteTouchSurface(
                 onTap: { model.tap(at: $0, in: proxy.size) },
@@ -321,7 +309,11 @@ public struct SessionScreen: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Remote screen for \(model.profile.name)")
         .accessibilityValue(accessibilityStatus)
+        #if os(macOS)
+        .accessibilityHint("Click and drag to control the remote desktop")
+        #else
         .accessibilityHint("Tap to click, drag to move the pointer")
+        #endif
         .accessibilityAction(named: "Disconnect") {
             requestClose()
         }
@@ -337,40 +329,6 @@ public struct SessionScreen: View {
         case .middle: Color(red: 0.20, green: 0.78, blue: 0.35)
         }
     }
-
-    private func dragGesture(in size: CGSize) -> some Gesture {
-        DragGesture(minimumDistance: 0)
-            .onChanged { value in
-                let dx = value.translation.width
-                let dy = value.translation.height
-                if (dx * dx + dy * dy).squareRoot() > 3 {
-                    model.drag(to: value.location, in: size)
-                }
-            }
-            .onEnded { value in
-                let dx = value.translation.width
-                let dy = value.translation.height
-                if (dx * dx + dy * dy).squareRoot() <= 6 {
-                    model.tap(at: value.location, in: size)
-                }
-                model.endDrag()
-                focusHardwareKeyboard()
-            }
-    }
-
-    #if os(macOS)
-    private func handleHover(_ phase: HoverPhase, in size: CGSize) {
-        switch phase {
-        case .active(let location):
-            model.hover(at: location, in: size)
-            hideSystemCursorIfNeeded()
-        case .ended:
-            showSystemCursor()
-        @unknown default:
-            break
-        }
-    }
-    #endif
 
     @ViewBuilder
     private var hardwareKeyboardLayer: some View {
@@ -888,20 +846,6 @@ public struct SessionScreen: View {
         }
         #endif
     }
-
-    #if os(macOS)
-    private func hideSystemCursorIfNeeded() {
-        guard model.remoteCursorImage != nil, !hidesSystemCursor else { return }
-        NSCursor.hide()
-        hidesSystemCursor = true
-    }
-
-    private func showSystemCursor() {
-        guard hidesSystemCursor else { return }
-        NSCursor.unhide()
-        hidesSystemCursor = false
-    }
-    #endif
 
     // MARK: - Hardware keyboard (macOS)
 

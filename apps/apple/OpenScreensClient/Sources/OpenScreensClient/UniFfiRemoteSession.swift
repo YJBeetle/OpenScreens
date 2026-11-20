@@ -256,6 +256,9 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
     }
 
     public func disconnect() async {
+        // Flush accepted input, including button/key releases, before dropping the transport.
+        inputContinuation.finish()
+        await inputTask?.value
         finish(reason: NSLocalizedString("Connection closed", comment: "Session disconnect reason"))
     }
 
@@ -290,7 +293,18 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
         guard !observing, width > 0, height > 0, stepsX != 0 || stepsY != 0 else { return }
         let x = UInt16(clamping: min(Int(point.x * Double(width)), Int(width) - 1))
         let y = UInt16(clamping: min(Int(point.y * Double(height)), Int(height) - 1))
-        inputContinuation.yield(.scroll(x: x, y: y, stepsX: stepsX, stepsY: stepsY))
+        if buttonMask == 0 {
+            inputContinuation.yield(.scroll(x: x, y: y, stepsX: stepsX, stepsY: stepsY))
+        } else {
+            // The plain wheel helper releases to mask zero. During a drag each
+            // wheel pulse must instead restore all physically held buttons.
+            for (steps, negative, positive): (Int32, UInt8, UInt8) in [(stepsY, 8, 16), (stepsX, 32, 64)] {
+                for _ in 0..<min(steps.magnitude, 32) {
+                    inputContinuation.yield(.pointer(mask: buttonMask | (steps < 0 ? negative : positive), x: x, y: y))
+                    inputContinuation.yield(.pointer(mask: buttonMask, x: x, y: y))
+                }
+            }
+        }
     }
 
     public func sendKey(_ event: RemoteKeyEvent) async {

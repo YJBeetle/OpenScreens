@@ -108,6 +108,10 @@ public final class SessionViewModel {
 
     @ObservationIgnored private let service: any RemoteSessionService
     @ObservationIgnored private var session: (any RemoteSessionProtocol)?
+    @ObservationIgnored private var inputQueue: SessionInputQueue?
+    #if os(macOS)
+    @ObservationIgnored lazy var mouseInput = RemoteMouseInput(model: self)
+    #endif
     @ObservationIgnored private var eventTask: Task<Void, Never>?
     @ObservationIgnored private var connectTask: Task<Void, Never>?
     @ObservationIgnored private var reconnectTask: Task<Void, Never>?
@@ -217,6 +221,8 @@ public final class SessionViewModel {
         guard !isStopping else { return }
         let session = service.makeSession()
         self.session = session
+        inputQueue?.events.finish()
+        inputQueue = SessionInputQueue(session: session)
         lastViewportRect = nil
         viewport = nil
         state = isReconnect ? .reconnecting(attempt: reconnectAttempts) : .connecting
@@ -226,12 +232,13 @@ public final class SessionViewModel {
 
         eventTask = Task { [weak self, session] in
             for await event in session.events {
-                guard let self else { return }
+                guard !Task.isCancelled, let self else { return }
                 self.handle(event)
             }
         }
 
-        let profile = profile
+        var profile = profile
+        profile.controls.startInObserveMode = isObserving
         connectTask = Task { [weak self, session, profile] in
             do {
                 try await session.connect(profile: profile)
@@ -244,7 +251,9 @@ public final class SessionViewModel {
     }
 
     private func endTransport() {
-        let active = session
+        releasePointerInput()
+        inputQueue?.events.finish()
+        inputQueue = nil
         session = nil
         connectTask?.cancel()
         connectTask = nil
@@ -256,9 +265,6 @@ public final class SessionViewModel {
         viewport = nil
         clearUploadState()
         clearDownloadState()
-        if let active {
-            Task { await active.disconnect() }
-        }
     }
 
     // MARK: - Events
@@ -361,6 +367,7 @@ public final class SessionViewModel {
 
     private func handleRemoteClose(reason: String?, kind: RemoteFailureKind) {
         guard !isStopping else { return }
+        releasePointerInput()
         eventTask = nil
         connectTask = nil
         if let reason, !reason.isEmpty {
@@ -532,7 +539,7 @@ public final class SessionViewModel {
     /// Translates two-finger travel into wheel clicks. Callers pass natural
     /// deltas: dragging fingers down scrolls the remote content down.
     public func scroll(by delta: CGSize) {
-        guard state.isConnected, !isObserving, let session,
+        guard state.isConnected, !isObserving,
               delta.width != 0 || delta.height != 0
         else { return }
         scrollRemainder.width += delta.width
@@ -542,8 +549,7 @@ public final class SessionViewModel {
         guard stepsX != 0 || stepsY != 0 else { return }
         scrollRemainder.width -= CGFloat(stepsX) * Self.scrollStepPoints
         scrollRemainder.height -= CGFloat(stepsY) * Self.scrollStepPoints
-        let point = remoteCursor
-        Task { await session.sendScroll(at: point, stepsX: Int32(stepsX), stepsY: Int32(stepsY)) }
+        inputQueue?.events.yield(.scroll(remoteCursor, Int32(stepsX), Int32(stepsY)))
     }
 
     /// Moves the zoomed image while two fingers drag it.
@@ -643,12 +649,29 @@ public final class SessionViewModel {
     }
 
     private func queuePointer(_ events: [PointerEvent]) {
-        guard let session else { return }
-        Task {
-            for event in events {
-                await session.sendPointer(event)
-            }
-        }
+        for event in events { inputQueue?.events.yield(.pointer(event)) }
+    }
+
+    #if os(macOS)
+    func sendMousePointer(_ action: PointerAction, button: PointerButton, to point: CGPoint) {
+        remoteCursor = point
+        inputQueue?.events.yield(.pointer(PointerEvent(action: action, button: button, x: point.x, y: point.y)))
+    }
+
+    func sendMouseScroll(at point: CGPoint, x: Int32, y: Int32) {
+        remoteCursor = point
+        inputQueue?.events.yield(.scroll(point, x, y))
+    }
+    #endif
+
+    private func releasePointerInput() {
+        #if os(macOS)
+        mouseInput.cancel()
+        #endif
+        endPress()
+        endDrag()
+        scrollRemainder = .zero
+        lastHoverPixel = nil
     }
 
     /// Rect the remote framebuffer occupies inside the view, mirroring the
@@ -715,7 +738,11 @@ public final class SessionViewModel {
         guard let rect = displayedImageRect(in: size), rect.width > 0, rect.height > 0 else {
             return CGPoint(x: 0.5, y: 0.5)
         }
-        return CGPoint(
+        return Self.normalized(point, in: rect)
+    }
+
+    static func normalized(_ point: CGPoint, in rect: CGRect) -> CGPoint {
+        CGPoint(
             x: min(max((point.x - rect.minX) / rect.width, 0), 1),
             y: min(max((point.y - rect.minY) / rect.height, 0), 1)
         )
@@ -747,24 +774,21 @@ public final class SessionViewModel {
     // MARK: - Keyboard input
 
     public func type(_ text: String) {
-        guard !text.isEmpty, state.isConnected, !isObserving, let session else { return }
-        Task { await session.sendKey(RemoteKeyEvent(key: .text(text))) }
+        guard !text.isEmpty, state.isConnected, !isObserving else { return }
+        inputQueue?.events.yield(.key(RemoteKeyEvent(key: .text(text))))
     }
 
     public func sendKey(_ key: RemoteKey, extraModifiers: RemoteModifiers = []) {
         guard state.isConnected, !isObserving else { return }
         let modifiers = keyboardModifiers.union(extraModifiers)
         keyboardModifiers = []
-        guard let session else { return }
-        let event = RemoteKeyEvent(key: key, modifiers: modifiers)
-        Task { await session.sendKey(event) }
+        inputQueue?.events.yield(.key(RemoteKeyEvent(key: key, modifiers: modifiers)))
     }
 
     /// A menu command has an exact chord, independent of the accessory row's sticky modifiers.
     func sendCommand(_ command: RemoteDesktopCommand) {
-        guard state.isConnected, !isObserving, let session else { return }
-        let event = command.event
-        Task { await session.sendKey(event) }
+        guard state.isConnected, !isObserving else { return }
+        inputQueue?.events.yield(.key(command.event))
     }
 
     public func toggleStickyModifier(_ modifier: RemoteModifiers) {
@@ -892,10 +916,12 @@ public final class SessionViewModel {
     // MARK: - Session controls
 
     public func toggleObserveMode() {
+        if !isObserving {
+            releasePointerInput()
+            clearStickyModifiers()
+        }
         isObserving.toggle()
-        guard let session else { return }
-        let observing = isObserving
-        Task { await session.setObserveMode(observing) }
+        inputQueue?.events.yield(.observe(isObserving))
     }
 
     public func setCursorMode(_ mode: CursorMode) {

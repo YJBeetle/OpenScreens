@@ -6,6 +6,10 @@ import SwiftUI
 struct SessionWindowCloseGuard: NSViewRepresentable {
     let model: SessionViewModel
 
+    static func hasActiveTransfers(in window: NSWindow) -> Bool {
+        (window.delegate as? CloseDelegate)?.model?.hasActiveTransfers == true
+    }
+
     func makeNSView(context: Context) -> CloseGuardView {
         CloseGuardView(model: model)
     }

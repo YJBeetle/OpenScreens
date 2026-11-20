@@ -74,26 +74,34 @@ struct SessionFileTransfers: View {
             }
             Spacer()
             if let url = item.url, FileManager.default.fileExists(atPath: url.path) {
+                #if os(macOS)
                 Menu {
-                    #if os(macOS)
                     Button("Open", systemImage: "arrow.up.forward.app") {
                         NSWorkspace.shared.open(url)
                     }
                     Button("Show in Finder", systemImage: "folder") {
                         NSWorkspace.shared.activateFileViewerSelecting([url])
                     }
-                    #else
-                    if (try? url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true {
+                } label: {
+                    fileActionsLabel
+                }
+                #else
+                if (try? url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true {
+                    Menu {
                         Button("Open", systemImage: "eye") { previewURL = url }
                         ShareLink(item: url)
+                    } label: {
+                        fileActionsLabel
                     }
-                    #endif
-                } label: {
-                    Label("File Actions", systemImage: "ellipsis.circle")
-                        .labelStyle(.iconOnly)
                 }
+                #endif
             }
         }
+    }
+
+    private var fileActionsLabel: some View {
+        Label("File Actions", systemImage: "ellipsis.circle")
+            .labelStyle(.iconOnly)
     }
 
     private func localFolder(for item: SessionTransferItem) -> String {

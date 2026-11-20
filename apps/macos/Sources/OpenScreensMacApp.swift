@@ -1,8 +1,11 @@
+import AppKit
 import OpenScreensUI
 import SwiftUI
 
 @main
 struct OpenScreensMacApp: App {
+    @NSApplicationDelegateAdaptor(MacAppDelegate.self) private var appDelegate
+
     @State private var connections = ConnectionStore()
     @State private var settings = SettingsStore()
     @State private var sshKeys = SSHKeyVault()
@@ -74,6 +77,22 @@ struct OpenScreensMacApp: App {
                 .preferredColorScheme(settings.settings.appearance.colorScheme)
                 .tint(Theme.Colors.accent)
         }
+    }
+}
+
+private final class MacAppDelegate: NSObject, NSApplicationDelegate {
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard sender.windows.contains(where: SessionWindowCloseGuard.hasActiveTransfers(in:)) else {
+            return .terminateNow
+        }
+
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = NSLocalizedString("File Transfer in Progress", comment: "Quit confirmation")
+        alert.informativeText = NSLocalizedString("Quitting will cancel the current file transfers.", comment: "Quit confirmation")
+        alert.addButton(withTitle: NSLocalizedString("Cancel", comment: "Quit confirmation"))
+        alert.addButton(withTitle: NSLocalizedString("Quit", comment: "Quit confirmation"))
+        return alert.runModal() == .alertSecondButtonReturn ? .terminateNow : .terminateCancel
     }
 }
 

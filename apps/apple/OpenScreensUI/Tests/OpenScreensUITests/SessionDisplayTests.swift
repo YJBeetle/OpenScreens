@@ -57,6 +57,34 @@ final class SessionDisplayTests: XCTestCase {
         XCTAssertNil(store.connection(id: profile.id)?.preferredDisplayID)
     }
 
+    func testStartsWithLatestSavedQuality() async {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = ConnectionStore(
+            fileURL: directory.appendingPathComponent("connections.json"),
+            seedDemoData: false
+        )
+        let profile = ConnectionProfile(name: "Studio", host: "studio.local", quality: .low)
+        store.add(profile)
+        let transport = DisplayTestTransport()
+        let model = SessionViewModel(
+            profile: profile,
+            service: DisplayTestService(transport: transport),
+            connectionStore: store
+        )
+
+        var edited = profile
+        edited.quality = .high
+        store.update(edited)
+        model.start()
+        defer { model.stop() }
+        await waitUntil { model.state.isConnected }
+
+        let requestedQuality = await transport.requestedQuality
+        XCTAssertEqual(requestedQuality, .high)
+    }
+
     private func waitUntil(_ condition: () -> Bool, line: UInt = #line) async {
         let clock = ContinuousClock()
         let deadline = clock.now + .seconds(2)
@@ -77,6 +105,7 @@ private actor DisplayTestTransport: RemoteSessionProtocol {
     let events: AsyncStream<RemoteSessionEvent>
     private let continuation: AsyncStream<RemoteSessionEvent>.Continuation
     private(set) var selections: [Int?] = []
+    private(set) var requestedQuality: ConnectionQuality?
 
     init() {
         (events, continuation) = AsyncStream.makeStream()
@@ -86,7 +115,10 @@ private actor DisplayTestTransport: RemoteSessionProtocol {
         continuation.yield(event)
     }
 
-    func connect(profile: ConnectionProfile, password: String?, macSessionChoice: MacSessionChoice?) async throws {}
+    func connect(profile: ConnectionProfile, password: String?, macSessionChoice: MacSessionChoice?) async throws {
+        requestedQuality = profile.initialQuality
+        emit(.state(.connected))
+    }
     func disconnect() async { continuation.finish() }
     func sendPointer(_ event: PointerEvent) async {}
     func sendKey(_ event: RemoteKeyEvent) async {}

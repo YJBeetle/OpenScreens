@@ -976,7 +976,8 @@ async fn perform_apple_handshake(server: &mut DuplexStream) {
 
 #[tokio::test]
 async fn apple_layout_before_pixels_requests_one_full_refresh() {
-    let (client, mut server) = duplex(4096);
+    // Force the combined rectangle payload to span multiple reads.
+    let (client, mut server) = duplex(32);
     let peer = tokio::spawn(async move {
         perform_apple_handshake(&mut server).await;
         read_setup(&mut server).await;

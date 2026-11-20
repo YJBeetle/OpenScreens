@@ -692,6 +692,7 @@ fun SessionScreen(
                 Lifecycle.Event.ON_STOP -> {
                     foreground = false
                     backgroundedAt = SystemClock.elapsedRealtime()
+                    scope.launch { session.checkpointPreview() }
                 }
                 Lifecycle.Event.ON_START -> {
                     foreground = true

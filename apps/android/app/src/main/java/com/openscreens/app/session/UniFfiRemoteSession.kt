@@ -4,15 +4,20 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.Rect as BitmapRect
+import android.os.SystemClock
 import android.util.Log
 import com.openscreens.app.R
 import com.openscreens.app.data.Connection
+import com.openscreens.app.data.ConnectionPreviewStore
 import com.openscreens.app.data.QualityPreset
 import com.openscreens.app.data.SshAuthMode
 import com.openscreens.app.data.SshKey
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -31,6 +36,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlin.math.roundToInt
 import uniffi.rfb_ffi.ConnectionAttempt
 import uniffi.rfb_ffi.MacSessionTarget
 import uniffi.rfb_ffi.Rect
@@ -54,12 +60,13 @@ import uniffi.rfb_ffi.parseTransferProgress
  * ARGB_8888 ints and written into a software bitmap. Two bitmaps are rotated so the
  * UI can keep drawing one while the poller fills the other.
  */
-class UniFfiRemoteSession(
+internal class UniFfiRemoteSession(
     private val context: Context,
     private val connection: Connection,
     private var quality: QualityPreset,
     private val sshKey: SshKey?,
     startInObserveMode: Boolean,
+    private val previews: ConnectionPreviewStore? = null,
 ) : RemoteSession {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -127,6 +134,21 @@ class UniFfiRemoteSession(
     private var coverageCols = 0
     private var coverageRows = 0
     private var coverageRemaining = 0
+
+    private val previewDisplayGeneration = AtomicInteger()
+    @Volatile private var previewSwitchingDisplay = false
+    @Volatile private var previewSelectedDisplay: Int? = null
+
+    // Sampled coverage and bitmap access are guarded by frameMutex.
+    private var previewCoverage: DesktopPreviewCoverage? = null
+    private var previewFrameGeneration = 0
+    private var previewLayout: SessionEvent.DesktopLayout? = null
+    private var previewSource: Bitmap? = null
+    private var previewDirty = false
+    private var previewCapturedAt: Long? = null
+    private var stagedPreview: Pair<ConnectionPreviewStore.Capture, Bitmap>? = null
+    private var previewWrite: Job? = null
+    private val previewPaint = Paint(Paint.FILTER_BITMAP_FLAG)
 
     init {
         scope.launch {
@@ -235,6 +257,12 @@ class UniFfiRemoteSession(
             val width = size.width.toInt()
             val height = size.height.toInt()
             val scale = initialDisplayScale(width, height)
+            previewCoverage = null
+            previewLayout = null
+            previewSelectedDisplay = null
+            previewDirty = false
+            previewCapturedAt = null
+            stagedPreview = null
             if (!installViewport(width, height, 0, 0, width, height, scale)) {
                 _events.emit(
                     SessionEvent.Failed(
@@ -297,6 +325,10 @@ class UniFfiRemoteSession(
             val job = pollJob
             pollJob = null
             job?.cancel()
+            val pendingPreview = frameMutex.withLock {
+                writePreviewLocked(force = true)
+                previewWrite
+            }
             val drained = CompletableDeferred<Unit>()
             inputQueue.send {
                 try {
@@ -314,6 +346,16 @@ class UniFfiRemoteSession(
             }
             closeTransport(current)
             job?.join()
+            pendingPreview?.join()
+        }
+    }
+
+    override suspend fun checkpointPreview() {
+        val current = session ?: return
+        withContext(Dispatchers.IO) {
+            frameMutex.withLock {
+                if (session === current) writePreviewLocked(force = true)
+            }
         }
     }
 
@@ -513,8 +555,15 @@ class UniFfiRemoteSession(
 
     override suspend fun selectDisplay(displayId: Int?) {
         val current = checkNotNull(session)
-        current.selectDisplay(displayId?.toUInt())
-        check(session === current && !disposed.get())
+        previewSwitchingDisplay = true
+        previewDisplayGeneration.incrementAndGet()
+        try {
+            current.selectDisplay(displayId?.toUInt())
+            check(session === current && !disposed.get())
+            previewSelectedDisplay = displayId
+        } finally {
+            previewSwitchingDisplay = false
+        }
     }
 
     override suspend fun copyRegion(x: Int, y: Int, width: Int, height: Int): ByteArray {
@@ -624,23 +673,28 @@ class UniFfiRemoteSession(
                     is NativeEvent.Frame -> renderFrame(connected, event)
                     is NativeEvent.Resized -> applySize(event.width.toInt(), event.height.toInt())
                     is NativeEvent.DesktopLayout -> {
-                        applySize(event.width.toInt(), event.height.toInt())
-                        _events.emit(
-                            SessionEvent.DesktopLayout(
-                                width = event.width.toInt(),
-                                height = event.height.toInt(),
-                                screens = event.screens.map { screen ->
-                                    DisplayScreen(
-                                        id = screen.id.toInt(),
-                                        x = screen.x.toInt(),
-                                        y = screen.y.toInt(),
-                                        width = screen.width.toInt(),
-                                        height = screen.height.toInt(),
-                                        flags = screen.flags.toInt(),
-                                    )
-                                },
-                            ),
+                        val layout = SessionEvent.DesktopLayout(
+                            width = event.width.toInt(),
+                            height = event.height.toInt(),
+                            screens = event.screens.map { screen ->
+                                DisplayScreen(
+                                    id = screen.id.toInt(),
+                                    x = screen.x.toInt(),
+                                    y = screen.y.toInt(),
+                                    width = screen.width.toInt(),
+                                    height = screen.height.toInt(),
+                                    flags = screen.flags.toInt(),
+                                )
+                            },
                         )
+                        frameMutex.withLock {
+                            applySizeLocked(layout.width, layout.height)
+                            if (previewLayout != layout) {
+                                previewLayout = layout
+                                applyPreviewLayout()
+                            }
+                        }
+                        _events.emit(layout)
                     }
                     is NativeEvent.Clipboard -> _events.emit(SessionEvent.RemoteClipboard(event.text))
                     NativeEvent.Bell -> Log.d(TAG, "remote bell")
@@ -689,10 +743,16 @@ class UniFfiRemoteSession(
             throw cancelled
         } catch (error: Exception) {
             Log.w(TAG, "session poll failed", error)
-            if (!disposed.get()) _events.emit(failureEvent(error))
+            if (!disposed.get()) {
+                checkpointPreview()
+                _events.emit(failureEvent(error))
+            }
             return
         }
-        if (!disposed.get()) _events.emit(terminal)
+        if (!disposed.get()) {
+            checkpointPreview()
+            _events.emit(terminal)
+        }
     }
 
     private suspend fun handleFileTransfer(event: NativeEvent.FileTransfer) {
@@ -776,6 +836,9 @@ class UniFfiRemoteSession(
     ): Boolean {
         val bitmapWidth = ceilDiv(width, scale)
         val bitmapHeight = ceilDiv(height, scale)
+        // Keep a small final image of the previous viewport if the new one
+        // never becomes complete. Allocating the new canvas drops the old buffers.
+        capturePreviewLocked()?.let { stagedPreview = it }
         val allocated = withContext(Dispatchers.Default) {
             runCatching { allocate(bitmapWidth, bitmapHeight) }.isSuccess
         }
@@ -791,6 +854,7 @@ class UniFfiRemoteSession(
         this.viewportHeight = height
         this.displayScale = scale
         resetCoverage()
+        resetPreviewCoverage()
         return true
     }
 
@@ -822,7 +886,64 @@ class UniFfiRemoteSession(
     }
 
     private suspend fun renderFrame(connected: NativeSession, event: NativeEvent.Frame) {
-        frameMutex.withLock { renderFrameLocked(connected, event) }
+        frameMutex.withLock {
+            if (!previewSwitchingDisplay && previewFrameGeneration != previewDisplayGeneration.get()) {
+                resetPreviewCoverage()
+            }
+            renderFrameLocked(connected, event)
+        }
+    }
+
+    private fun resetPreviewCoverage() {
+        previewCoverage = if (previews != null && viewportWidth > 0 && viewportHeight > 0) {
+            DesktopPreviewCoverage(viewportX, viewportY, viewportWidth, viewportHeight)
+        } else {
+            null
+        }
+        previewFrameGeneration = previewDisplayGeneration.get()
+        previewSource = null
+        previewDirty = false
+        applyPreviewLayout()
+    }
+
+    private fun applyPreviewLayout() {
+        val layout = previewLayout ?: return
+        if (previewSelectedDisplay == null && layout.width == serverWidth &&
+            layout.height == serverHeight && layout.screens.isNotEmpty()
+        ) {
+            previewCoverage?.restrictToDisplays(
+                layout.screens,
+                wholeDesktop = viewportX == 0 && viewportY == 0 &&
+                    viewportWidth == serverWidth && viewportHeight == serverHeight,
+            )
+        }
+    }
+
+    private fun capturePreviewLocked(): Pair<ConnectionPreviewStore.Capture, Bitmap>? {
+        if (!previewDirty || previewCoverage?.complete != true || previewSwitchingDisplay ||
+            previewFrameGeneration != previewDisplayGeneration.get()
+        ) return null
+        val source = previewSource ?: return null
+        val capture = previews?.beginCapture(connection.id) ?: return null
+        return runCatching {
+            val scale = minOf(1f, 640f / source.width, 360f / source.height)
+            val width = (source.width * scale).roundToInt().coerceAtLeast(1)
+            val height = (source.height * scale).roundToInt().coerceAtLeast(1)
+            val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+            Canvas(bitmap).drawBitmap(source, null, BitmapRect(0, 0, width, height), previewPaint)
+            previewDirty = false
+            capture to bitmap
+        }.onFailure { Log.w(TAG, "Could not capture the remote desktop preview", it) }.getOrNull()
+    }
+
+    private fun writePreviewLocked(force: Boolean) {
+        val store = previews ?: return
+        val now = SystemClock.elapsedRealtime()
+        if (!force && previewCapturedAt?.let { now - it < PREVIEW_INTERVAL_MS } == true) return
+        val snapshot = capturePreviewLocked() ?: stagedPreview ?: return
+        stagedPreview = null
+        previewWrite = store.writeAsync(snapshot.first, snapshot.second)
+        previewCapturedAt = now
     }
 
     private suspend fun renderFrameLocked(connected: NativeSession, event: NativeEvent.Frame) {
@@ -889,6 +1010,9 @@ class UniFfiRemoteSession(
                             destWidth,
                             destHeight,
                         )
+                        if (!previewSwitchingDisplay && previewFrameGeneration == previewDisplayGeneration.get()) {
+                            previewCoverage?.record(left, bandTop, right - left, bandBottom - bandTop)
+                        }
                         painted = true
                         wrote = true
                     }
@@ -900,6 +1024,7 @@ class UniFfiRemoteSession(
             }
         }
         if (!wrote) return
+        finishPreviewFrame(target)
 
         if (!viewportEmitted) {
             if (coverageRemaining > 0) return
@@ -924,6 +1049,16 @@ class UniFfiRemoteSession(
         front = target
         back = previous ?: target
         _events.emit(SessionEvent.Frame(event.sequence.toLong(), target))
+    }
+
+    private fun finishPreviewFrame(bitmap: Bitmap) {
+        if (!previewSwitchingDisplay && previewFrameGeneration == previewDisplayGeneration.get() &&
+            previewCoverage?.finishFrame() == true
+        ) {
+            previewSource = bitmap
+            previewDirty = true
+            writePreviewLocked(force = false)
+        }
     }
 
     private fun scratchFor(size: Int): IntArray {
@@ -1020,6 +1155,7 @@ class UniFfiRemoteSession(
         const val MAX_DISPLAY_SCALE = 16
         const val MAX_SCRATCH_PIXELS = 1_000_000
         // Cell size (source pixels) for the first-paint coverage grid.
+        const val PREVIEW_INTERVAL_MS = 10_000L
         const val COVERAGE_CELL = 64
     }
 }

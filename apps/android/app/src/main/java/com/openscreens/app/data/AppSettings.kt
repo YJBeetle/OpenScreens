@@ -12,4 +12,5 @@ data class AppSettings(
     val librarySort: LibrarySortOrder = LibrarySortOrder.Az,
     /** Browse for computers advertising VNC over Bonjour on the local network. */
     val discoverNearby: Boolean = true,
+    val showSessionPreviews: Boolean = true,
 )

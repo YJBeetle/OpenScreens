@@ -77,6 +77,7 @@ fun SettingsScreen(
     sshKeyCount: Int,
     onThemeModeChange: (ThemeMode) -> Unit,
     onDiscoverNearbyChange: (Boolean) -> Unit,
+    onShowSessionPreviewsChange: (Boolean) -> Unit,
     updateChannel: UpdateChannel,
     onUpdateChannelChange: (UpdateChannel) -> Unit,
     onManageSshKeys: () -> Unit,
@@ -245,6 +246,37 @@ fun SettingsScreen(
                         checked = settings.discoverNearby,
                         onCheckedChange = null,
                     )
+                }
+            }
+
+            SettingsCard {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .toggleable(
+                            value = settings.showSessionPreviews,
+                            role = Role.Switch,
+                            onValueChange = onShowSessionPreviewsChange,
+                        )
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                        Text(
+                            stringResource(R.string.settings_show_session_previews),
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                        Text(
+                            stringResource(R.string.settings_show_session_previews_hint),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Switch(checked = settings.showSessionPreviews, onCheckedChange = null)
                 }
             }
 

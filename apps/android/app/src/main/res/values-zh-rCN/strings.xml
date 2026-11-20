@@ -19,6 +19,9 @@
     <string name="library_group_create">创建</string>
     <string name="library_group_rename">重命名</string>
     <string name="library_rename_group">重命名分组</string>
+    <string name="library_delete_connection_title">删除连接</string>
+    <string name="library_delete_connection_body">删除 %1$s 及其上次会话预览？</string>
+    <string name="library_delete_connection_failed">无法删除此连接。</string>
     <string name="library_delete_group_title">删除分组</string>
     <string name="library_delete_group_body">将删除“%1$s”。其中的连接仍保留在连接库中。</string>
     <string name="library_delete_group_action">删除</string>
@@ -258,6 +261,8 @@
     <string name="settings_back">返回</string>
 
     <string name="settings_security">安全</string>
+    <string name="settings_show_session_previews">显示上次会话预览</string>
+    <string name="settings_show_session_previews_hint">预览仅保存在此设备。</string>
     <string name="settings_library">连接库</string>
     <string name="settings_discover_nearby">自动发现附近电脑</string>
     <string name="settings_discover_nearby_hint">使用 Bonjour 查找本地网络中共享屏幕的电脑。</string>

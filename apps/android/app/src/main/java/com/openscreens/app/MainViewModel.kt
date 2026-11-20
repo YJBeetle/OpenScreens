@@ -25,6 +25,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val connectionStore = ConnectionStore.shared(application)
     val connections = connectionStore.connections
     val groups = connectionStore.groups
+    internal val previews = connectionStore.previews
 
     private val sshKeyStore = SshKeyStore(application)
     val sshKeys = sshKeyStore.keys
@@ -62,6 +63,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun saveConnection(connection: Connection) {
         connectionStore.save(connection)
+    }
+
+    fun deleteConnection(id: String): Boolean = connectionStore.deleteConnection(id)
+
+    fun setShowSessionPreviews(enabled: Boolean) {
+        previews.setEnabled(enabled)
+        _settings.update { it.copy(showSessionPreviews = enabled) }
+        settingsStore.save(_settings.value)
     }
 
     fun markConnected(id: String) {

@@ -90,6 +90,12 @@ public final class SessionViewModel {
 
     public private(set) var clipboardMessage: String?
     public private(set) var failureMessage: String?
+    private(set) var credentialChallenge: RemoteFailureKind?
+    private(set) var loginUsername: String
+    @ObservationIgnored private var sessionPassword: String?
+    private(set) var rememberLogin = false
+    @ObservationIgnored private weak var store: ConnectionStore?
+    @ObservationIgnored private var recordedConnection = false
     public private(set) var receivedFrames = 0
     public private(set) var remoteCursorShape: RemoteCursorShape?
     public private(set) var remoteCursorImage: CGImage?
@@ -136,6 +142,7 @@ public final class SessionViewModel {
         profile: ConnectionProfile,
         service: any RemoteSessionService = MockSessionService()
     ) {
+        self.loginUsername = profile.username
         self.profile = profile
         self.service = service
         self.cursorMode = profile.controls.cursorMode
@@ -146,8 +153,10 @@ public final class SessionViewModel {
 
     // MARK: - Lifecycle
 
-    public func start() {
-        guard eventTask == nil, connectTask == nil else { return }
+    public func start(store: ConnectionStore? = nil) {
+        guard credentialChallenge == nil, eventTask == nil, connectTask == nil else { return }
+        self.store = store
+        recordedConnection = false
         isStopping = false
         reconnectAttempts = 0
         failureMessage = nil
@@ -156,6 +165,7 @@ public final class SessionViewModel {
 
     public func stop() {
         isStopping = true
+        clearCredentials()
         isKeyboardActive = false
         reconnectTask?.cancel()
         reconnectTask = nil
@@ -165,6 +175,7 @@ public final class SessionViewModel {
 
     public func disconnect() {
         isStopping = true
+        clearCredentials()
         isKeyboardActive = false
         reconnectTask?.cancel()
         reconnectTask = nil
@@ -173,7 +184,7 @@ public final class SessionViewModel {
     }
 
     public func reconnect() {
-        guard state.isTerminal else { return }
+        guard credentialChallenge == nil, state.isTerminal else { return }
         restartTransport()
     }
 
@@ -197,7 +208,7 @@ public final class SessionViewModel {
             case .idle, .connecting:
                 needsRestart = false
             }
-            if needsRestart {
+            if needsRestart && credentialChallenge == nil {
                 restartTransport()
             }
         default:
@@ -234,19 +245,22 @@ public final class SessionViewModel {
 
         eventTask = Task { [weak self, session] in
             for await event in session.events {
-                guard let self else { return }
+                guard !Task.isCancelled, let self else { return }
                 self.handle(event)
             }
         }
 
         var profile = profile
         profile.controls.startInObserveMode = isObserving
+        profile.username = loginUsername
+        let password = sessionPassword
         connectTask = Task { [weak self, session, profile] in
             do {
-                try await session.connect(profile: profile)
+                try await session.connect(profile: profile, password: password)
             } catch is CancellationError {
                 // The user stopped the session while it was connecting.
             } catch {
+                guard !Task.isCancelled else { return }
                 self?.handleTransportFailure(error)
             }
         }
@@ -280,6 +294,16 @@ public final class SessionViewModel {
         case .state(let newState):
             state = newState
             if newState.isConnected {
+                if rememberLogin, let sessionPassword {
+                    if store?.rememberLogin(for: profile, username: loginUsername, password: sessionPassword) != true {
+                        showMessage(NSLocalizedString("The credentials could not be saved.", comment: "Credential storage failure"))
+                    }
+                    rememberLogin = false
+                }
+                if !recordedConnection {
+                    store?.markConnected(id: profile.id)
+                    recordedConnection = true
+                }
                 reconnectAttempts = 0
                 failureMessage = nil
             }
@@ -376,8 +400,8 @@ public final class SessionViewModel {
 
     private func handleRemoteClose(reason: String?, kind: RemoteFailureKind) {
         guard !isStopping else { return }
-        eventTask = nil
-        connectTask = nil
+        if challengeIfNeeded(kind) { return }
+        endTransport()
         if let reason, !reason.isEmpty {
             failureMessage = SessionFailureText.localized(kind, reason: reason)
         }
@@ -394,6 +418,7 @@ public final class SessionViewModel {
 
     private func handleTransportFailure(_ error: Error) {
         let failure = error as? RemoteSessionFailure
+        if let failure, challengeIfNeeded(failure.kind) { return }
         let localized = failure.map {
             SessionFailureText.localized($0.kind, reason: $0.reason)
         } ?? error.localizedDescription
@@ -402,6 +427,33 @@ public final class SessionViewModel {
         connectTask = nil
         eventTask?.cancel()
         eventTask = nil
+    }
+
+    private func challengeIfNeeded(_ kind: RemoteFailureKind) -> Bool {
+        guard kind == .missingUsername || kind == .missingPassword || kind == .authenticationFailed else { return false }
+        endTransport()
+        sessionPassword = nil
+        credentialChallenge = kind
+        state = .disconnected(reason: nil, kind: kind)
+        return true
+    }
+
+    func submitCredentials(username: String, password: String, remember: Bool) {
+        let username = username.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let credentialChallenge, !password.isEmpty,
+              credentialChallenge != .missingUsername || !username.isEmpty else { return }
+        self.credentialChallenge = nil
+        loginUsername = username
+        sessionPassword = password
+        rememberLogin = remember
+        restartTransport()
+    }
+
+    private func clearCredentials() {
+        credentialChallenge = nil
+        sessionPassword = nil
+        loginUsername = profile.username
+        rememberLogin = false
     }
 
     // MARK: - Pointer input

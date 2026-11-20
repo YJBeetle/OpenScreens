@@ -372,13 +372,13 @@ final class ConnectionStoreTests: XCTestCase {
         XCTAssertEqual(store.count(in: .custom), 1)
 
         store.delete(id: lab.id)
-        XCTAssertEqual(store.count(in: .nearby), 0)
+        XCTAssertEqual(store.profiles(in: .nearby).map(\.id), [saved.id])
 
         store.syncDiscovered([
             DiscoveredComputer(name: "Studio", host: "studio.local", port: 5900),
             DiscoveredComputer(name: "Lab", host: "lab.local", port: 5901),
         ])
-        XCTAssertEqual(store.count(in: .nearby), 0)
+        XCTAssertEqual(store.profiles(in: .nearby).map(\.id), [saved.id])
         XCTAssertEqual(store.count(in: .custom), 1)
 
         let reloaded = ConnectionStore(fileURL: url, seedDemoData: false)
@@ -397,7 +397,7 @@ final class ConnectionStoreTests: XCTestCase {
         profile.username = "designer"
         store.update(profile)
 
-        XCTAssertEqual(store.count(in: .nearby), 0)
+        XCTAssertEqual(store.profiles(in: .nearby).map(\.id), [profile.id])
         XCTAssertEqual(store.count(in: .custom), 1)
         XCTAssertEqual(store.profiles(in: .custom).first?.name, "My Studio")
         XCTAssertEqual(store.profiles(in: .custom).first?.isDiscovered, false)
@@ -473,6 +473,19 @@ final class ConnectionStoreTests: XCTestCase {
             store.profiles(in: .custom, sort: .manual).map(\.name),
             ["Alpha", "Bravo", "Charlie"]
         )
+    }
+
+    func testQuickConnectRespectsExplicitAccountAndBonjourEndpoint() throws {
+        let url = temporaryFileURL()
+        defer { removeStore(at: url) }
+        let store = ConnectionStore(fileURL: url, seedDemoData: false)
+        let guest = try XCTUnwrap(store.resolveLink(URL(string: "vnc://guest@studio.local")!))
+        let owner = try XCTUnwrap(store.resolveLink(URL(string: "vnc://user@STUDIO.local.")!))
+        XCTAssertNotEqual(guest.id, owner.id)
+        XCTAssertEqual(store.resolveLink(URL(string: "vnc://user@studio.local")!)?.id, owner.id)
+        store.syncDiscovered([DiscoveredComputer(name: "Studio", host: "studio.local", port: 5900)])
+        XCTAssertEqual(Set(store.profiles(in: .nearby).map(\.id)), [guest.id, owner.id])
+        XCTAssertEqual(store.connections.count, 2)
     }
 
     func testResolveLinkReusesAndCreatesProfiles() {

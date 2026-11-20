@@ -146,7 +146,6 @@ struct IPadLibraryView: View {
     }
 
     private func openSession(_ profile: ConnectionProfile, observeOnly: Bool = false) {
-        store.markConnected(id: profile.id)
         activeProfile = profile.forSession(observeOnly: observeOnly)
     }
 
@@ -158,7 +157,6 @@ struct IPadLibraryView: View {
     }
 
     private func openSessionInNewWindow(_ profile: ConnectionProfile) {
-        store.markConnected(id: profile.id)
         openWindow(id: IOSSessionScene.id, value: profile.id)
     }
 

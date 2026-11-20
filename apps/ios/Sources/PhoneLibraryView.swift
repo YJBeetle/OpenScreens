@@ -424,7 +424,6 @@ struct PhoneLibraryView: View {
     }
 
     private func openSession(_ profile: ConnectionProfile, observeOnly: Bool = false) {
-        store.markConnected(id: profile.id)
         activeProfile = profile.forSession(observeOnly: observeOnly)
     }
 

@@ -62,7 +62,8 @@ extension ConnectionStore {
     public func resolveLink(_ url: URL) -> ConnectionProfile? {
         guard let link = VNCLink.parse(url) else { return nil }
         if let existing = connections.first(where: {
-            $0.host.caseInsensitiveCompare(link.host) == .orderedSame && $0.port == link.port
+            Self.endpointKey(host: $0.host, port: $0.port) == Self.endpointKey(host: link.host, port: link.port)
+                && (link.username.isEmpty || $0.username == link.username)
         }) {
             return existing
         }

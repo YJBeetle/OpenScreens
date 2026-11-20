@@ -133,7 +133,7 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
         self.inputContinuation = inputContinuation
     }
 
-    public func connect(profile: ConnectionProfile) async throws {
+    public func connect(profile: ConnectionProfile, password: String? = nil) async throws {
         guard session == nil, !finished else { return }
         observing = profile.controls.startInObserveMode
         sharedClipboard = profile.controls.sharedClipboard
@@ -143,8 +143,7 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
         announceViewport = false
         continuation.yield(.state(.connecting))
 
-        let storedPassword = OpenScreensCredentials.password(for: profile.id)
-        let password = storedPassword ?? debugPassword()
+        let password = password ?? OpenScreensCredentials.password(for: profile.id) ?? debugPassword()
         let username = profile.username.trimmingCharacters(in: .whitespacesAndNewlines)
 
         var sshHost: String?
@@ -233,6 +232,7 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
 
         do {
             let session = try await OpenScreensCore.RemoteSession.connect(config: config)
+            guard !finished, !Task.isCancelled else { throw CancellationError() }
             self.session = session
             continuation.yield(.curtainModeSupport(session.supportsCurtainMode()))
             updateSize(session.size())

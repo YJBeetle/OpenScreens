@@ -195,7 +195,7 @@ public struct SessionScreen: View {
                 containerSize: proxy.size
             )
             .frame(width: proxy.size.width, height: proxy.size.height)
-            .onChange(of: proxy.size) { _, size in
+            .onChange(of: proxy.size, initial: true) { _, size in
                 model.scheduleViewportUpdate(
                     in: size,
                     screenPixelWidth: size.width * displayScale

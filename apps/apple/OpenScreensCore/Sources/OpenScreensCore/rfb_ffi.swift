@@ -649,6 +649,156 @@ fileprivate struct FfiConverterData: FfiConverterRustBuffer {
 
 
 
+/**
+ * Cancels the transport even before authentication yields a RemoteSession.
+ * Cancellation is sticky so closing just before the first poll also works.
+ */
+public protocol ConnectionAttemptProtocol: AnyObject, Sendable {
+
+    func cancel()
+
+    func connect(config: SessionConfig, target: MacSessionTarget?) async throws  -> RemoteSession
+
+}
+/**
+ * Cancels the transport even before authentication yields a RemoteSession.
+ * Cancellation is sticky so closing just before the first poll also works.
+ */
+open class ConnectionAttempt: ConnectionAttemptProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_rfb_ffi_fn_clone_connectionattempt(self.handle, $0) }
+    }
+public convenience init() {
+    let handle =
+        try! rustCall() {
+        uniffiCallStatus in
+    uniffi_rfb_ffi_fn_constructor_connectionattempt_new(uniffiCallStatus
+    )
+}
+    self.init(unsafeFromHandle: handle)
+}
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_rfb_ffi_fn_free_connectionattempt(handle, $0) }
+    }
+
+
+
+
+open func cancel()  {try! rustCall() {
+        uniffiCallStatus in
+    uniffi_rfb_ffi_fn_method_connectionattempt_cancel(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+}
+}
+
+open func connect(config: SessionConfig, target: MacSessionTarget?)async throws  -> RemoteSession  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_rfb_ffi_fn_method_connectionattempt_connect(
+                        self.uniffiCloneHandle(),FfiConverterTypeSessionConfig_lower(config),FfiConverterOptionTypeMacSessionTarget.lower(target)
+                )
+            },
+            pollFunc: ffi_rfb_ffi_rust_future_poll_u64,
+            completeFunc: ffi_rfb_ffi_rust_future_complete_u64,
+            freeFunc: ffi_rfb_ffi_rust_future_free_u64,
+            liftFunc: FfiConverterTypeRemoteSession_lift,
+            errorHandler: FfiConverterTypeSessionFailure_lift
+        )
+}
+
+
+
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeConnectionAttempt: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = ConnectionAttempt
+
+    public static func lift(_ handle: UInt64) throws -> ConnectionAttempt {
+        return ConnectionAttempt(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: ConnectionAttempt) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ConnectionAttempt {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: ConnectionAttempt, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeConnectionAttempt_lift(_ handle: UInt64) throws -> ConnectionAttempt {
+    return try FfiConverterTypeConnectionAttempt.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeConnectionAttempt_lower(_ value: ConnectionAttempt) -> UInt64 {
+    return FfiConverterTypeConnectionAttempt.lower(value)
+}
+
+
+
+
+
+
 public protocol RemoteSessionProtocol: AnyObject, Sendable {
     
     /**
@@ -1952,6 +2102,75 @@ public func FfiConverterTypeTransferEntry_lower(_ value: TransferEntry) -> RustB
 }
 
 
+/**
+ * The Apple session to request if the server offers a selection.
+ */
+
+public enum MacSessionTarget: Equatable, Hashable {
+
+    case personal
+    case shared
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension MacSessionTarget: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeMacSessionTarget: FfiConverterRustBuffer {
+    typealias SwiftType = MacSessionTarget
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MacSessionTarget {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .personal
+
+        case 2: return .shared
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: MacSessionTarget, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .personal:
+            writeInt(&buf, Int32(1))
+
+
+        case .shared:
+            writeInt(&buf, Int32(2))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMacSessionTarget_lift(_ buf: RustBuffer) throws -> MacSessionTarget {
+    return try FfiConverterTypeMacSessionTarget.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMacSessionTarget_lower(_ value: MacSessionTarget) -> RustBuffer {
+    return FfiConverterTypeMacSessionTarget.lower(value)
+}
+
+
+
 public 
 enum OpenVpnProfileError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
@@ -2830,6 +3049,30 @@ fileprivate struct FfiConverterOptionTypeSessionSize: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeMacSessionTarget: FfiConverterRustBuffer {
+    typealias SwiftType = MacSessionTarget?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeMacSessionTarget.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeMacSessionTarget.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeSessionEvent: FfiConverterRustBuffer {
     typealias SwiftType = SessionEvent?
 
@@ -3167,6 +3410,12 @@ private let initializationResult: InitializationResult = {
     if (uniffi_rfb_ffi_checksum_func_validate_openvpn_profile() != 34946) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_rfb_ffi_checksum_method_connectionattempt_cancel() != 54453) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_rfb_ffi_checksum_method_connectionattempt_connect() != 36600) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_rfb_ffi_checksum_method_remotesession_announce_upload() != 54961) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -3252,6 +3501,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_rfb_ffi_checksum_method_remotesession_upload_summary() != 45751) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_rfb_ffi_checksum_constructor_connectionattempt_new() != 58578) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_rfb_ffi_checksum_constructor_remotesession_connect() != 42150) {

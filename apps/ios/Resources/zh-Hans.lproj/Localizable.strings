@@ -414,3 +414,11 @@
 "Authentication is unavailable." = "当前无法使用身份验证。";
 "Authentication failed. Try again." = "验证失败，请重试。";
 "OpenScreens locks when you leave the app. Unlock with %@. Imported SSH keys are kept in the Keychain." = "离开 OpenScreens 后会自动锁定，使用 %@ 解锁。导入的 SSH 密钥保存在钥匙串中。";
+
+"Authentication Required" = "需要身份验证";
+
+"Remember Credentials" = "记住凭据";
+
+"Use a Mac account" = "使用 Mac 账户";
+
+"The credentials could not be saved." = "无法保存凭据。";

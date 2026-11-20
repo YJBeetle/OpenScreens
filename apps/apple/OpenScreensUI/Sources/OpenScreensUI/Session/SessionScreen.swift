@@ -8,6 +8,7 @@ import AppKit
 
 /// Full-screen remote session chrome shared by macOS and iOS.
 public struct SessionScreen: View {
+    @Environment(ConnectionStore.self) private var store
     @Environment(SettingsStore.self) private var settings
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.displayScale) private var displayScale
@@ -79,9 +80,15 @@ public struct SessionScreen: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
             }
             #endif
-            hardwareKeyboardLayer
+            if model.state.isConnected { hardwareKeyboardLayer }
 
-            if model.state.isTerminal {
+            if let challenge = model.credentialChallenge {
+                CredentialPrompt(
+                    endpoint: model.profile.endpoint, challenge: challenge,
+                    username: model.loginUsername, remember: model.rememberLogin,
+                    onConnect: model.submitCredentials, onCancel: closeSession
+                )
+            } else if model.state.isTerminal {
                 connectionClosedOverlay
             } else if !model.state.isConnected {
                 connectingOverlay
@@ -115,8 +122,7 @@ public struct SessionScreen: View {
                 appliedChromeDefault = true
                 model.showsChrome = settings.settings.showToolbarOnLaunch
             }
-            model.start()
-            focusHardwareKeyboard()
+            model.start(store: store)
         }
         .onDisappear {
             model.stop()

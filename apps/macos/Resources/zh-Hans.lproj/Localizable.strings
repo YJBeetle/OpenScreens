@@ -408,3 +408,13 @@
 "Open a session by entering its vnc:// address." = "输入 vnc:// 地址以打开会话。";
 "Enter a valid vnc:// address." = "请输入有效的 vnc:// 地址。";
 "Port defaults to 5900." = "端口默认为 5900。";
+
+"Authentication Required" = "需要身份验证";
+
+"Remember Credentials" = "记住凭据";
+
+"Use a Mac account" = "使用 Mac 账户";
+
+"The credentials could not be saved." = "无法保存凭据。";
+
+"Authentication failed. Try again." = "验证失败，请重试。";

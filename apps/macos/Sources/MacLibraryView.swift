@@ -131,7 +131,6 @@ struct MacLibraryView: View {
     }
 
     private func connect(_ profile: ConnectionProfile) {
-        store.markConnected(id: profile.id)
         openWindow(id: MacSceneID.session, value: SessionRoute(profileID: profile.id))
     }
 

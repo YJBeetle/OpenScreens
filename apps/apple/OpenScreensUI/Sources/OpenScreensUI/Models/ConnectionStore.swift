@@ -16,6 +16,7 @@ public final class ConnectionStore {
     @ObservationIgnored private let fileURL: URL
     @ObservationIgnored private let encoder: JSONEncoder
     @ObservationIgnored private let decoder: JSONDecoder
+    private var advertisedEndpoints: Set<String> = []
     @ObservationIgnored private var dismissedDiscovered: Set<String> = []
 
     public init(fileURL: URL? = nil, seedDemoData: Bool = true) {
@@ -47,7 +48,11 @@ public final class ConnectionStore {
 
     public func count(in section: LibrarySection) -> Int {
         guard !section.isService else { return 0 }
-        return connections.count { $0.section == section }
+        return connections.count { belongs($0, to: section) }
+    }
+
+    private func belongs(_ profile: ConnectionProfile, to section: LibrarySection) -> Bool {
+        profile.section == section || (section == .nearby && advertisedEndpoints.contains(Self.endpointKey(host: profile.host, port: profile.port)))
     }
 
     public func count(in groupID: UUID) -> Int {
@@ -67,7 +72,7 @@ public final class ConnectionStore {
         guard !section.isService else { return [] }
         let needle = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let filtered = connections.filter { profile in
-            guard profile.section == section else { return false }
+            guard belongs(profile, to: section) else { return false }
             if let groupID, profile.groupID != groupID { return false }
             return needle.isEmpty || profile.searchIndex.contains(needle)
         }
@@ -151,11 +156,34 @@ public final class ConnectionStore {
     public func delete(id: UUID) {
         guard let profile = connections.first(where: { $0.id == id }) else { return }
         connections.removeAll { $0.id == id }
+        OpenScreensCredentials.deletePassword(for: id)
+        OpenScreensCredentials.deleteSecret(kind: "ssh-password", for: id)
+        OpenScreensCredentials.deleteSecret(kind: "ssh-passphrase", for: id)
         if profile.isDiscovered {
             dismissedDiscovered.insert(Self.endpointKey(host: profile.host, port: profile.port))
             return
         }
         persist()
+    }
+
+    func rememberLogin(for profile: ConnectionProfile, username: String, password: String) -> Bool {
+        let key = Self.endpointKey(host: profile.host, port: profile.port)
+        var current: ConnectionProfile
+        if let existing = connection(id: profile.id) {
+            guard Self.endpointKey(host: existing.host, port: existing.port) == key else { return false }
+            current = existing
+        } else {
+            // Bonjour can withdraw a service while the prompt is open.
+            guard profile.isDiscovered, !dismissedDiscovered.contains(key) else { return false }
+            current = connections.first {
+                Self.endpointKey(host: $0.host, port: $0.port) == key && ($0.isDiscovered || $0.username == username)
+            } ?? profile
+        }
+        guard OpenScreensCredentials.setPassword(password, for: current.id) else { return false }
+        current.username = username
+        current.authentication = username.isEmpty ? .vncPassword : .macOSAccount
+        update(current)
+        return true
     }
 
     /// Keeps a discovered computer in the saved library.
@@ -172,6 +200,7 @@ public final class ConnectionStore {
 
     /// Reconciles the transient Nearby section with the current Bonjour results.
     public func syncDiscovered(_ computers: [DiscoveredComputer]) {
+        advertisedEndpoints = Set(computers.map { Self.endpointKey(host: $0.host, port: $0.port) })
         let savedKeys = Set(
             connections
                 .filter { !$0.isDiscovered }
@@ -213,8 +242,9 @@ public final class ConnectionStore {
         connections = connections.filter { !$0.isDiscovered } + discovered
     }
 
-    private static func endpointKey(host: String, port: Int) -> String {
-        "\(host.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()):\(port)"
+    static func endpointKey(host: String, port: Int) -> String {
+        let normalized = host.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return "\(normalized.hasSuffix(".") ? String(normalized.dropLast()) : normalized):\(port)"
     }
 
     @discardableResult

@@ -25,7 +25,6 @@ struct IOSRootView: View {
 
     private func openLink(_ url: URL) {
         guard let profile = store.resolveLink(url) else { return }
-        store.markConnected(id: profile.id)
         if horizontalSizeClass == .regular {
             openWindow(id: IOSSessionScene.id, value: profile.id)
         } else {

@@ -685,8 +685,8 @@ public protocol RemoteSessionProtocol: AnyObject, Sendable {
      */
     func requestClipboard() async throws  -> Bool
     
-    func requestCurtainMode(enabled: Bool) async throws
-
+    func requestCurtainMode(enabled: Bool) async throws 
+    
     func requestDownload(handle: UInt32, path: String) async throws 
     
     func requestRefresh() async throws 
@@ -723,7 +723,7 @@ public protocol RemoteSessionProtocol: AnyObject, Sendable {
     func startDragOut(handle: UInt32) async throws 
     
     func supportsCurtainMode()  -> Bool
-
+    
     func uploadComplete(handle: UInt32) async throws 
     
     func uploadData(handle: UInt32, chunk: Data) async throws 
@@ -947,7 +947,7 @@ open func requestCurtainMode(enabled: Bool)async throws   {
             errorHandler: FfiConverterTypeSessionFailure_lift
         )
 }
-
+    
 open func requestDownload(handle: UInt32, path: String)async throws   {
     return
         try  await uniffiRustCallAsync(
@@ -1145,7 +1145,7 @@ open func supportsCurtainMode() -> Bool  {
     )
 })
 }
-
+    
 open func uploadComplete(handle: UInt32)async throws   {
     return
         try  await uniffiRustCallAsync(

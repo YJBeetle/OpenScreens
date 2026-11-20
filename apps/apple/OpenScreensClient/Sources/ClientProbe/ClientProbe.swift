@@ -25,6 +25,10 @@ struct ClientProbe {
                 switch event {
                 case .state(let state):
                     print("state: \(state.label)")
+                case .curtainModeSupport(let supported):
+                    print("curtain mode support: \(supported)")
+                case .viewport(let viewport):
+                    print("viewport: \(viewport)")
                 case .displays(let displays):
                     print("displays: \(displays.map { "\($0.name) \($0.width)x\($0.height)" })")
                 case .frame(let frame):

@@ -392,6 +392,7 @@ pub struct Session {
     /// The server advertised `serverCanReceivePasteboard` (feature bit 32), so
     /// clipboard text is sent as Apple message `0x1F` instead of ClientCutText.
     apple_pasteboard: bool,
+    supports_curtain_mode: bool,
     apple_client_version_sent: AtomicBool,
     input_clock: std::time::Instant,
     last_input_us: AtomicU64,
@@ -574,6 +575,11 @@ impl Session {
             input_key,
             apple_session,
             apple_pasteboard,
+            supports_curtain_mode: apple_session
+                && handshake
+                    .server_init
+                    .apple_features
+                    .is_some_and(|features| features.feature_bits & (1 << 51) != 0),
             apple_client_version_sent: AtomicBool::new(apple_session),
             input_clock: std::time::Instant::now(),
             last_input_us: AtomicU64::new(0),
@@ -749,6 +755,25 @@ impl Session {
             return Ok(());
         }
         self.send_apple_client_version().await
+    }
+
+    pub fn supports_curtain_mode(&self) -> bool {
+        self.supports_curtain_mode
+    }
+
+    /// Screens 5.9 VNCKit uses message 12 with a big-endian action and UTF-8
+    /// byte count. A successful send only queues the request.
+    pub async fn request_curtain_mode(&self, enabled: bool) -> Result<(), SessionError> {
+        if !self.supports_curtain_mode {
+            return Err(SessionError::Protocol(
+                "server does not support Curtain Mode",
+            ));
+        }
+        let message = if enabled { &b"OpenScreens"[..] } else { &[] };
+        let mut packet = vec![12, 0, 0, u8::from(!enabled)];
+        packet.extend_from_slice(&(message.len() as u16).to_be_bytes());
+        packet.extend_from_slice(message);
+        self.send(packet).await
     }
 
     /// Selects an Apple display (message 13). `None` selects all displays.

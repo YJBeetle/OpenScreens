@@ -234,6 +234,7 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
         do {
             let session = try await OpenScreensCore.RemoteSession.connect(config: config)
             self.session = session
+            continuation.yield(.curtainModeSupport(session.supportsCurtainMode()))
             updateSize(session.size())
             continuation.yield(.displays([
                 RemoteDisplay(
@@ -348,6 +349,15 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
 
     public func setObserveMode(_ observing: Bool) async {
         self.observing = observing
+    }
+
+    public func requestCurtainMode(_ enabled: Bool) async {
+        guard let session, !finished else { return }
+        do {
+            try await session.requestCurtainMode(enabled: enabled)
+        } catch {
+            continuation.yield(.failure(error.localizedDescription))
+        }
     }
 
     public func selectDisplay(_ id: Int?) async {

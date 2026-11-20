@@ -679,6 +679,8 @@ public protocol RemoteSessionProtocol: AnyObject, Sendable {
     
     func nextTransferHandle()  -> UInt32
     
+    func requestCurtainMode(enabled: Bool) async throws
+
     func requestDownload(handle: UInt32, path: String) async throws 
     
     func requestRefresh() async throws 
@@ -714,6 +716,8 @@ public protocol RemoteSessionProtocol: AnyObject, Sendable {
     
     func startDragOut(handle: UInt32) async throws 
     
+    func supportsCurtainMode()  -> Bool
+
     func uploadComplete(handle: UInt32) async throws 
     
     func uploadData(handle: UInt32, chunk: Data) async throws 
@@ -902,6 +906,22 @@ open func nextTransferHandle() -> UInt32  {
 })
 }
     
+open func requestCurtainMode(enabled: Bool)async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_rfb_ffi_fn_method_remotesession_request_curtain_mode(
+                        self.uniffiCloneHandle(),FfiConverterBool.lower(enabled)
+                )
+            },
+            pollFunc: ffi_rfb_ffi_rust_future_poll_void,
+            completeFunc: ffi_rfb_ffi_rust_future_complete_void,
+            freeFunc: ffi_rfb_ffi_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeSessionFailure_lift
+        )
+}
+
 open func requestDownload(handle: UInt32, path: String)async throws   {
     return
         try  await uniffiRustCallAsync(
@@ -1091,6 +1111,15 @@ open func startDragOut(handle: UInt32)async throws   {
         )
 }
     
+open func supportsCurtainMode() -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_rfb_ffi_fn_method_remotesession_supports_curtain_mode(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+
 open func uploadComplete(handle: UInt32)async throws   {
     return
         try  await uniffiRustCallAsync(
@@ -3059,6 +3088,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_rfb_ffi_checksum_method_remotesession_next_transfer_handle() != 13031) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_rfb_ffi_checksum_method_remotesession_request_curtain_mode() != 63674) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_rfb_ffi_checksum_method_remotesession_request_download() != 60308) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -3093,6 +3125,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_rfb_ffi_checksum_method_remotesession_start_drag_out() != 1458) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_rfb_ffi_checksum_method_remotesession_supports_curtain_mode() != 26734) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_rfb_ffi_checksum_method_remotesession_upload_complete() != 6976) {

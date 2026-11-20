@@ -252,7 +252,10 @@ public final class SessionViewModel {
         }
     }
 
+    private(set) var supportsCurtainMode = false
+
     private func endTransport() {
+        supportsCurtainMode = false
         let active = session
         session = nil
         connectTask?.cancel()
@@ -285,6 +288,9 @@ public final class SessionViewModel {
                 clearDownloadState()
                 handleRemoteClose(reason: reason, kind: kind)
             }
+
+        case .curtainModeSupport(let supported):
+            supportsCurtainMode = supported
 
         case .displays(let list):
             displays = list
@@ -914,6 +920,11 @@ public final class SessionViewModel {
 
     public func setScaling(_ mode: RemoteContentMode) {
         scaling = mode
+    }
+
+    func requestCurtainMode(_ enabled: Bool) {
+        guard state.isConnected, supportsCurtainMode, let session else { return }
+        Task { await session.requestCurtainMode(enabled) }
     }
 
     public func selectDisplay(_ id: Int?) {

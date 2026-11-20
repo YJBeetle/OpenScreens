@@ -86,7 +86,7 @@ private actor DisplayTestTransport: RemoteSessionProtocol {
         continuation.yield(event)
     }
 
-    func connect(profile: ConnectionProfile) async throws {}
+    func connect(profile: ConnectionProfile, password: String?) async throws {}
     func disconnect() async { continuation.finish() }
     func sendPointer(_ event: PointerEvent) async {}
     func sendKey(_ event: RemoteKeyEvent) async {}

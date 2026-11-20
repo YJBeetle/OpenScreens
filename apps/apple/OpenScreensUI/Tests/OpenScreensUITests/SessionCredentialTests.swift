@@ -71,6 +71,7 @@ private struct LoginTransport: RemoteSessionProtocol {
         (events, stream) = AsyncStream.makeStream(of: RemoteSessionEvent.self)
     }
 
+    func selectDisplay(_ id: Int?) async throws {}
     func connect(profile: ConnectionProfile, password: String?) async throws {
         guard !profile.username.isEmpty else { throw RemoteSessionFailure(kind: .missingUsername, reason: "") }
         guard profile.username == "user", password == " test " else {

@@ -26,6 +26,7 @@ public struct RemoteDragOutHandle: NSViewRepresentable {
             guard let model else { throw RemoteTransferError.notConnected }
             return try await model.downloadRemoteFile(file, toDirectory: directory)
         }
+        view.onSaved = { @MainActor [weak model] url in model?.recordReceivedFiles([url]) }
         return view
     }
 
@@ -42,6 +43,7 @@ final class RemoteDragOutSourceView: NSView, NSDraggingSource {
 
     var onRequestFiles: FileRequest?
     var onDownload: FileDownload?
+    var onSaved: (@MainActor @Sendable (URL) -> Void)?
 
     private let titleLabel = NSTextField(labelWithString: NSLocalizedString("Drag Out", comment: "Drag-out handle"))
     private let iconView = NSImageView()
@@ -153,7 +155,7 @@ final class RemoteDragOutSourceView: NSView, NSDraggingSource {
         mouseIsDown = false
         mouseDownEvent = nil
 
-        let delegates = files.map { RemoteFilePromise(file: $0, download: onDownload) }
+        let delegates = files.map { RemoteFilePromise(file: $0, download: onDownload, onSaved: onSaved) }
         var items: [NSDraggingItem] = []
         items.reserveCapacity(delegates.count)
         for delegate in delegates {
@@ -230,11 +232,17 @@ final class RemoteDragOutSourceView: NSView, NSDraggingSource {
 final class RemoteFilePromise: NSObject, NSFilePromiseProviderDelegate {
     nonisolated let file: RemoteFile
     nonisolated let download: RemoteDragOutSourceView.FileDownload?
+    nonisolated let onSaved: (@MainActor @Sendable (URL) -> Void)?
     weak var provider: NSFilePromiseProvider?
 
-    init(file: RemoteFile, download: RemoteDragOutSourceView.FileDownload?) {
+    init(
+        file: RemoteFile,
+        download: RemoteDragOutSourceView.FileDownload?,
+        onSaved: (@MainActor @Sendable (URL) -> Void)?
+    ) {
         self.file = file
         self.download = download
+        self.onSaved = onSaved
     }
 
     func filePromiseProvider(
@@ -251,6 +259,7 @@ final class RemoteFilePromise: NSObject, NSFilePromiseProviderDelegate {
     ) {
         let file = self.file
         let download = self.download
+        let onSaved = self.onSaved
         let completion = CompletionBox(handler: completionHandler)
         Task { @MainActor in
             let temporary = FileManager.default.temporaryDirectory
@@ -267,6 +276,7 @@ final class RemoteFilePromise: NSObject, NSFilePromiseProviderDelegate {
                 }
                 try FileManager.default.copyItem(at: local, to: url)
                 try? FileManager.default.removeItem(at: temporary)
+                onSaved?(url)
                 completion.handler(nil)
             } catch {
                 try? FileManager.default.removeItem(at: temporary)

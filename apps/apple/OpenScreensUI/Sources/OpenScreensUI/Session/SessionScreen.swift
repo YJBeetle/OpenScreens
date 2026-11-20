@@ -20,6 +20,7 @@ public struct SessionScreen: View {
 
     @State private var confirmingDisconnect = false
     @State private var isDropTargeted = false
+    @State private var showingUploadPicker = false
     @State private var showingDownloadDialog = false
     @State private var downloadPath = ""
     @State private var appliedChromeDefault = false
@@ -42,6 +43,7 @@ public struct SessionScreen: View {
     }
 
     public var body: some View {
+        @Bindable var model = model
         ZStack {
             Theme.Colors.canvas
                 .ignoresSafeArea()
@@ -49,15 +51,6 @@ public struct SessionScreen: View {
             remoteCanvas
                 .ignoresSafeArea()
                 .accessibilityHidden(true)
-                .alert(
-                    "Download Complete",
-                    isPresented: downloadCompleteBinding,
-                    presenting: model.downloadSavedPath
-                ) { _ in
-                    Button("OK", role: .cancel) {}
-                } message: { path in
-                    Text("Saved to \(path)")
-                }
 
             cursorOverlay
             pointerSurface
@@ -150,6 +143,18 @@ public struct SessionScreen: View {
         } message: {
             Text("The remote session ends. You can reconnect from the library at any time.")
         }
+        .alert("File Transfer in Progress", isPresented: $model.confirmsTransferInterruption) {
+            Button("Disconnect", role: .destructive) { closeSession() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Disconnecting will cancel the current file transfers.")
+        }
+        .sheet(isPresented: $model.showsFileTransfers) {
+            SessionFileTransfers(model: model)
+        }
+        .fileImporter(isPresented: $showingUploadPicker, allowedContentTypes: [.item], allowsMultipleSelection: true) {
+            if case .success(let urls) = $0 { model.uploadFiles(urls) }
+        }
         .alert("Download Remote File", isPresented: $showingDownloadDialog) {
             TextField("/path/on/remote/computer", text: $downloadPath)
             Button("Download") {
@@ -159,7 +164,7 @@ public struct SessionScreen: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Enter the POSIX path of a file on the remote computer. It is saved to your Downloads folder.")
+            Text("Enter the POSIX path of a file on the remote computer. You can find its save location in File Transfers.")
         }
     }
 
@@ -185,15 +190,6 @@ public struct SessionScreen: View {
         #else
         RemoteCanvasView(renderer: model.renderer, contentMode: model.scaling)
         #endif
-    }
-
-    private var downloadCompleteBinding: Binding<Bool> {
-        Binding(
-            get: { model.downloadSavedPath != nil },
-            set: { presented in
-                if !presented { model.clearDownloadResult() }
-            }
-        )
     }
 
     // MARK: - Layers
@@ -558,6 +554,7 @@ public struct SessionScreen: View {
             items: settings.settings.toolbarItems.filter {
                 SessionToolbarItem.allCases.contains($0)
             },
+            onUpload: { showingUploadPicker = true },
             onDownload: {
                 downloadPath = ""
                 showingDownloadDialog = true
@@ -875,7 +872,9 @@ public struct SessionScreen: View {
     // MARK: - Actions
 
     private func requestClose() {
-        if settings.settings.confirmDisconnect, model.state.isConnected {
+        if model.hasActiveTransfers {
+            model.confirmsTransferInterruption = true
+        } else if settings.settings.confirmDisconnect, model.state.isConnected {
             confirmingDisconnect = true
         } else {
             closeSession()

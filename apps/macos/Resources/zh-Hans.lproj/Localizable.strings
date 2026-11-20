@@ -273,6 +273,21 @@
 "%@, %@ cursor mode" = "%@，%@ 指针模式";
 
 /* MARK: - File transfer */
+"File Transfers" = "文件传输";
+"Sent Files" = "已发送的文件";
+"Received Files" = "已接收的文件";
+"No File Transfers" = "暂无文件传输";
+"Sent to %@" = "已发送至 %@";
+"Saved in %@" = "已保存于 %@";
+"On My iPhone or iPad / OpenScreens / Downloads / %@" = "在我的 iPhone 或 iPad 上 / OpenScreens / Downloads / %@";
+"Show in Finder" = "在访达中显示";
+"Open" = "打开";
+"Share" = "共享";
+"Send Files…" = "发送文件…";
+"File Transfer in Progress" = "文件传输中";
+"Disconnecting will cancel the current file transfers." = "断开连接将取消当前的文件传输。";
+"Download complete. Open File Transfers to view saved items." = "下载完成。请打开“文件传输”查看已保存的项目。";
+"Enter the POSIX path of a file on the remote computer. You can find its save location in File Transfers." = "请输入远程电脑上文件的 POSIX 路径。保存位置可在“文件传输”中查看。";
 "Download Complete" = "下载完成";
 "Saved to %@" = "已保存到 %@";
 "/path/on/remote/computer" = "/远程/电脑/上的/路径";
@@ -360,6 +375,11 @@
 "Screenshot" = "截图";
 "No remote frame to capture." = "暂无可截取的远端画面。";
 "Screenshot saved to Photos." = "截图已存储到相册。";
+"Copy Screenshot" = "复制截图";
+"Save Screenshot As…" = "截图另存为…";
+"Screenshot.png" = "截图.png";
+"Screenshot saved to %@." = "截图已保存至 %@。";
+"Could not save screenshot: %@" = "无法保存截图：%@";
 "Screenshot copied to clipboard." = "截图已复制到剪贴板。";
 
 /* MARK: - Library groups and sorting */

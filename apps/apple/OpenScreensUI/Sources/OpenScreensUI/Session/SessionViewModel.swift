@@ -108,8 +108,16 @@ public final class SessionViewModel {
     public private(set) var downloadFileName: String?
     /// Download progress (0...1) when the server reports the total size.
     public private(set) var downloadFraction: Double?
-    /// Destination folder of the last successful download, shown in an alert.
-    public private(set) var downloadSavedPath: String?
+    private var activeUploads = 0
+    private var activeDownloads = 0
+    private var promiseDownloads: Set<UUID> = []
+    var sentFiles: [SessionTransferItem] = []
+    var receivedFiles: [SessionTransferItem] = []
+    public var showsFileTransfers = false
+    public var confirmsTransferInterruption = false
+    public var hasActiveTransfers: Bool {
+        activeUploads > 0 || activeDownloads > 0 || !promiseDownloads.isEmpty
+    }
     /// Last known pointer position, normalized to the remote framebuffer.
     public private(set) var remoteCursor = CGPoint(x: 0.5, y: 0.55)
     /// Magnification applied to the remote image; 1 shows the whole desktop.
@@ -291,8 +299,7 @@ public final class SessionViewModel {
         viewportTask = nil
         lastViewportRect = nil
         viewport = nil
-        clearUploadState()
-        clearDownloadState()
+        resetTransferProgress()
         if let active {
             Task { await active.disconnect() }
         }
@@ -321,8 +328,7 @@ public final class SessionViewModel {
             }
             if case .disconnected(let reason, let kind) = newState {
                 resetDisplaySelection()
-                clearUploadState()
-                clearDownloadState()
+                resetTransferProgress()
                 handleRemoteClose(reason: reason, kind: kind)
             }
 
@@ -382,8 +388,12 @@ public final class SessionViewModel {
                 uploadFraction = min(max(fraction, 0), 1)
             }
 
-        case .transferFinished:
-            clearUploadState()
+        case .transferFinished(let names, let destination):
+            activeUploads = max(0, activeUploads - 1)
+            if activeUploads == 0 { clearUploadState() }
+            sentFiles.insert(contentsOf: names.map {
+                SessionTransferItem(name: $0, folder: destination)
+            }, at: 0)
 
         case .downloadProgress(let name, let received, let total):
             if let name, !name.isEmpty {
@@ -393,10 +403,11 @@ public final class SessionViewModel {
                 downloadFraction = min(max(Double(received) / Double(total), 0), 1)
             }
 
-        case .downloadComplete(let savedPath, let error):
-            clearDownloadState()
-            if error == nil, let savedPath, !savedPath.isEmpty {
-                downloadSavedPath = savedPath
+        case .downloadComplete(let items, let error):
+            activeDownloads = max(0, activeDownloads - 1)
+            clearDownloadProgressIfIdle()
+            if error == nil, !items.isEmpty {
+                recordReceivedFiles(items)
             }
 
         case .failure(let message):
@@ -901,6 +912,7 @@ public final class SessionViewModel {
                 urls.count
             )
         }
+        activeUploads += 1
         uploadFraction = nil
         Task { await session.uploadFiles(urls) }
     }
@@ -918,7 +930,7 @@ public final class SessionViewModel {
         guard !path.isEmpty else { return }
         downloadFileName = Self.fileName(inRemotePath: path)
         downloadFraction = nil
-        downloadSavedPath = nil
+        activeDownloads += 1
         Task { await session.download(remotePath: path) }
     }
 
@@ -928,10 +940,25 @@ public final class SessionViewModel {
         return name.isEmpty ? path : name
     }
 
-    private func clearDownloadState() {
+    private func clearDownloadProgressIfIdle() {
+        guard activeDownloads == 0, promiseDownloads.isEmpty else { return }
         downloadFileName = nil
         downloadFraction = nil
-        downloadSavedPath = nil
+    }
+
+    private func resetTransferProgress() {
+        activeUploads = 0
+        activeDownloads = 0
+        promiseDownloads.removeAll()
+        clearUploadState()
+        clearDownloadProgressIfIdle()
+    }
+
+    func recordReceivedFiles(_ urls: [URL]) {
+        receivedFiles.insert(contentsOf: urls.map {
+            SessionTransferItem(name: $0.lastPathComponent, folder: $0.deletingLastPathComponent().path, url: $0)
+        }, at: 0)
+        showMessage(NSLocalizedString("Download complete. Open File Transfers to view saved items.", comment: "Transfer toast"))
     }
 
     // MARK: - Drag out
@@ -954,13 +981,13 @@ public final class SessionViewModel {
         }
         downloadFileName = file.name
         downloadFraction = nil
-        defer { clearDownloadState() }
+        let id = UUID()
+        promiseDownloads.insert(id)
+        defer {
+            promiseDownloads.remove(id)
+            clearDownloadProgressIfIdle()
+        }
         return try await session.download(remotePath: file.path, toDirectory: directory)
-    }
-
-    /// Dismisses the download completion alert.
-    public func clearDownloadResult() {
-        downloadSavedPath = nil
     }
 
     // MARK: - Session controls
@@ -1066,6 +1093,30 @@ public final class SessionViewModel {
             self.showMessage(NSLocalizedString(message, comment: "Screenshot toast"))
         }
     }
+
+    #if os(macOS)
+    public func saveScreenshotAs() {
+        guard state.isConnected, let image = renderer.snapshot() else {
+            showMessage(NSLocalizedString("No remote frame to capture.", comment: "Screenshot toast"))
+            return
+        }
+        Task {
+            do {
+                if let url = try await PlatformScreenshot.saveAsPNG(image) {
+                    showMessage(String(
+                        format: NSLocalizedString("Screenshot saved to %@.", comment: "Screenshot toast"),
+                        url.path
+                    ))
+                }
+            } catch {
+                showMessage(String(
+                    format: NSLocalizedString("Could not save screenshot: %@", comment: "Screenshot error"),
+                    error.localizedDescription
+                ))
+            }
+        }
+    }
+    #endif
 
     public func clearMessages() {
         clipboardMessage = nil

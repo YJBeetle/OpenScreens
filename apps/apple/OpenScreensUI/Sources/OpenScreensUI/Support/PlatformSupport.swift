@@ -6,6 +6,7 @@ import SwiftUI
 import AppKit
 import IOKit.pwr_mgt
 import os
+import UniformTypeIdentifiers
 #else
 import Photos
 import UIKit
@@ -71,6 +72,29 @@ public enum PlatformScreenshot {
     public static func save(_ image: CGImage, completion: @escaping @MainActor (Bool) -> Void) {
         PlatformClipboard.setImage(image)
         completion(true)
+    }
+
+    @MainActor
+    static func saveAsPNG(_ image: CGImage) async throws -> URL? {
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.png]
+        panel.canCreateDirectories = true
+        panel.nameFieldStringValue = NSLocalizedString("Screenshot.png", comment: "Default screenshot filename")
+
+        let response = await withCheckedContinuation { continuation in
+            if let window = NSApp.keyWindow {
+                panel.beginSheetModal(for: window) { continuation.resume(returning: $0) }
+            } else {
+                panel.begin { continuation.resume(returning: $0) }
+            }
+        }
+        guard response == .OK, let url = panel.url else { return nil }
+        let bitmap = NSBitmapImageRep(cgImage: image)
+        guard let png = bitmap.representation(using: .png, properties: [:]) else {
+            throw CocoaError(.fileWriteUnknown)
+        }
+        try png.write(to: url, options: .atomic)
+        return url
     }
     #endif
 }

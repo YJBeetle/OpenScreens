@@ -16,6 +16,7 @@ struct MacSessionWindow: View {
                 SessionScreen(model: model) {
                     dismissWindow()
                 }
+                .background(SessionWindowCloseGuard(model: model))
                 .navigationTitle(model.profile.name)
                 .navigationSubtitle(model.profile.endpoint)
                 .focusedSceneValue(\.sessionCommands, commands(for: model))
@@ -49,10 +50,16 @@ struct MacSessionWindow: View {
             model: model,
             reconnect: { model.reconnect() },
             disconnect: {
-                model.disconnect()
-                dismissWindow()
+                if model.hasActiveTransfers {
+                    model.confirmsTransferInterruption = true
+                } else {
+                    model.disconnect()
+                    dismissWindow()
+                }
             },
             takeScreenshot: { model.grabScreenshot() },
+            saveScreenshotAs: { model.saveScreenshotAs() },
+            showFileTransfers: { model.showsFileTransfers = true },
             toggleToolbar: { model.toggleChrome() },
             toggleObserveMode: { model.toggleObserveMode() },
             setCursorMode: { model.setCursorMode($0) },

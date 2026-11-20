@@ -6,6 +6,8 @@ struct SessionCommands {
     let reconnect: @MainActor () -> Void
     let disconnect: @MainActor () -> Void
     let takeScreenshot: @MainActor () -> Void
+    let saveScreenshotAs: @MainActor () -> Void
+    let showFileTransfers: @MainActor () -> Void
     let toggleToolbar: @MainActor () -> Void
     let toggleObserveMode: @MainActor () -> Void
     let setCursorMode: @MainActor (CursorMode) -> Void
@@ -46,11 +48,21 @@ struct SessionMenuCommands: Commands {
 
             Divider()
 
-            Button("Screenshot") {
+            Button("Copy Screenshot") {
                 session?.takeScreenshot()
             }
             .keyboardShortcut("s", modifiers: [.command, .shift])
             .disabled(session?.isConnected != true)
+
+            Button("Save Screenshot As…") {
+                session?.saveScreenshotAs()
+            }
+            .disabled(session?.isConnected != true)
+
+            Button("File Transfers") {
+                session?.showFileTransfers()
+            }
+            .disabled(session == nil)
 
             Toggle("Show Toolbar", isOn: Binding(
                 get: { session?.showsToolbar ?? false },

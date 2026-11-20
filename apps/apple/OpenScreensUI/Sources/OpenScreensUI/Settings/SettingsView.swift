@@ -194,7 +194,7 @@ public struct SettingsView: View {
                 LabeledContent("Protocol", value: "RFB (VNC)")
                 LabeledContent("Transport", value: NSLocalizedString("Direct connection", comment: "Transport kind"))
 
-                Text("OpenScreens is open source software, licensed under AGPL-3.0. This build uses a local mock session; the Rust RFB engine plugs in behind the same session interface.")
+                Text("OpenScreens is open source software, licensed under AGPL-3.0.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } header: {

@@ -348,7 +348,7 @@
 "Protocol" = "协议";
 "Transport" = "传输方式";
 "Direct connection" = "直接连接";
-"OpenScreens is open source software, licensed under AGPL-3.0. This build uses a local mock session; the Rust RFB engine plugs in behind the same session interface." = "OpenScreens 是开源软件，采用 AGPL-3.0 许可。此构建使用本地模拟会话；Rust RFB 引擎通过同一会话接口接入。";
+"OpenScreens is open source software, licensed under AGPL-3.0." = "OpenScreens 是开源软件，采用 AGPL-3.0 许可。";
 "About" = "关于";
 
 /* MARK: - Updates (macOS) */

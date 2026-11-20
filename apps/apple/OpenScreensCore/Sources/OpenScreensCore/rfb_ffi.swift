@@ -675,6 +675,8 @@ public protocol RemoteSessionProtocol: AnyObject, Sendable {
      */
     func copyRegionScaled(rect: Rect, scale: UInt16)  -> Data?
     
+    func disconnect() async 
+    
     func nextEvent() async  -> SessionEvent?
     
     func nextTransferHandle()  -> UInt32
@@ -916,6 +918,23 @@ open func copyRegionScaled(rect: Rect, scale: UInt16) -> Data?  {
         FfiConverterUInt16.lower(scale),uniffiCallStatus
     )
 })
+}
+    
+open func disconnect()async   {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_rfb_ffi_fn_method_remotesession_disconnect(
+                        self.uniffiCloneHandle()
+                )
+            },
+            pollFunc: ffi_rfb_ffi_rust_future_poll_void,
+            completeFunc: ffi_rfb_ffi_rust_future_complete_void,
+            freeFunc: ffi_rfb_ffi_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: nil
+            
+        )
 }
     
 open func nextEvent()async  -> SessionEvent?  {
@@ -3161,6 +3180,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_rfb_ffi_checksum_method_remotesession_copy_region_scaled() != 46113) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_rfb_ffi_checksum_method_remotesession_disconnect() != 3357) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_rfb_ffi_checksum_method_remotesession_next_event() != 40415) {

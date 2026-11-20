@@ -22,6 +22,7 @@ let package = Package(
             ],
             path: "Sources/OpenScreensClient"
         ),
+        .testTarget(name: "OpenScreensClientTests", dependencies: ["OpenScreensClient", "OpenScreensUI"]),
         .executableTarget(
             name: "ClientProbe",
             dependencies: ["OpenScreensClient", "OpenScreensUI"],

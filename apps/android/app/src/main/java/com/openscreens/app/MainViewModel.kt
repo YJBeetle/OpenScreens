@@ -148,8 +148,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun back() {
-        if (_route.value != Route.Library) {
-            _route.value = Route.Library
+        _route.value = when (_route.value) {
+            Route.SshKeys -> Route.Settings
+            else -> Route.Library
         }
     }
 }

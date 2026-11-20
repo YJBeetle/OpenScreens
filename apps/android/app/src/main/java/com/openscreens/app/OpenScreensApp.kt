@@ -8,6 +8,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -40,6 +41,7 @@ fun OpenScreensApp(viewModel: MainViewModel = viewModel()) {
     }
 
     val context = LocalContext.current
+    val libraryState = rememberSaveableStateHolder()
 
     OpenScreensTheme(darkTheme = darkTheme) {
         Surface(modifier = Modifier.fillMaxSize()) {
@@ -48,41 +50,43 @@ fun OpenScreensApp(viewModel: MainViewModel = viewModel()) {
             }
 
             when (val current = route) {
-                Route.Library -> LibraryScreen(
-                    connections = connections,
-                    groups = groups,
-                    nearby = nearby,
-                    discoverNearby = settings.discoverNearby,
-                    sort = settings.librarySort,
-                    onSortChange = viewModel::setLibrarySort,
-                    onAddGroup = viewModel::addGroup,
-                    onRenameGroup = viewModel::renameGroup,
-                    onDeleteGroup = viewModel::deleteGroup,
-                    onMoveConnection = viewModel::moveConnection,
-                    onOpenConnection = { viewModel.navigate(Route.Session(it.id)) },
-                    onObserveConnection = {
-                        viewModel.navigate(Route.Session(it.id, observeOnly = true))
-                    },
-                    onOpenInNewWindow = { connection ->
-                        val intent = Intent(context, SessionWindowActivity::class.java)
-                            .putExtra(SessionWindowActivity.EXTRA_CONNECTION_ID, connection.id)
-                            .addFlags(
-                                Intent.FLAG_ACTIVITY_NEW_TASK or
-                                    Intent.FLAG_ACTIVITY_NEW_DOCUMENT or
-                                    Intent.FLAG_ACTIVITY_MULTIPLE_TASK,
-                            )
-                        context.startActivity(intent)
-                    },
-                    onAddConnection = { viewModel.navigate(Route.Editor(connectionId = null)) },
-                    onEditConnection = { viewModel.navigate(Route.Editor(it.id)) },
-                    onOpenSettings = { viewModel.navigate(Route.Settings) },
-                    onQuickConnect = { host, port, username ->
-                        viewModel.openEndpoint(Connection(name = host, host = host, port = port, username = username.orEmpty()))
-                    },
-                    onOpenNearby = { server ->
-                        viewModel.openEndpoint(Connection(name = server.name, host = server.host, port = server.port), nearby = true)
-                    },
-                )
+                Route.Library -> libraryState.SaveableStateProvider("library") {
+                    LibraryScreen(
+                        connections = connections,
+                        groups = groups,
+                        nearby = nearby,
+                        discoverNearby = settings.discoverNearby,
+                        sort = settings.librarySort,
+                        onSortChange = viewModel::setLibrarySort,
+                        onAddGroup = viewModel::addGroup,
+                        onRenameGroup = viewModel::renameGroup,
+                        onDeleteGroup = viewModel::deleteGroup,
+                        onMoveConnection = viewModel::moveConnection,
+                        onOpenConnection = { viewModel.navigate(Route.Session(it.id)) },
+                        onObserveConnection = {
+                            viewModel.navigate(Route.Session(it.id, observeOnly = true))
+                        },
+                        onOpenInNewWindow = { connection ->
+                            val intent = Intent(context, SessionWindowActivity::class.java)
+                                .putExtra(SessionWindowActivity.EXTRA_CONNECTION_ID, connection.id)
+                                .addFlags(
+                                    Intent.FLAG_ACTIVITY_NEW_TASK or
+                                        Intent.FLAG_ACTIVITY_NEW_DOCUMENT or
+                                        Intent.FLAG_ACTIVITY_MULTIPLE_TASK,
+                                )
+                            context.startActivity(intent)
+                        },
+                        onAddConnection = { viewModel.navigate(Route.Editor(connectionId = null)) },
+                        onEditConnection = { viewModel.navigate(Route.Editor(it.id)) },
+                        onOpenSettings = { viewModel.navigate(Route.Settings) },
+                        onQuickConnect = { host, port, username ->
+                            viewModel.openEndpoint(Connection(name = host, host = host, port = port, username = username.orEmpty()))
+                        },
+                        onOpenNearby = { server ->
+                            viewModel.openEndpoint(Connection(name = server.name, host = server.host, port = server.port), nearby = true)
+                        },
+                    )
+                }
 
                 Route.Settings -> SettingsScreen(
                     settings = settings,

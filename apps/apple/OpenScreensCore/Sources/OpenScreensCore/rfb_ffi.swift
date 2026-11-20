@@ -679,6 +679,12 @@ public protocol RemoteSessionProtocol: AnyObject, Sendable {
     
     func nextTransferHandle()  -> UInt32
     
+    /**
+     * Returns false for push-only servers. A successful Apple request delivers
+     * the reply through the ordinary Clipboard event.
+     */
+    func requestClipboard() async throws  -> Bool
+    
     func requestCurtainMode(enabled: Bool) async throws
 
     func requestDownload(handle: UInt32, path: String) async throws 
@@ -904,6 +910,26 @@ open func nextTransferHandle() -> UInt32  {
             self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
+}
+    
+    /**
+     * Returns false for push-only servers. A successful Apple request delivers
+     * the reply through the ordinary Clipboard event.
+     */
+open func requestClipboard()async throws  -> Bool  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_rfb_ffi_fn_method_remotesession_request_clipboard(
+                        self.uniffiCloneHandle()
+                )
+            },
+            pollFunc: ffi_rfb_ffi_rust_future_poll_i8,
+            completeFunc: ffi_rfb_ffi_rust_future_complete_i8,
+            freeFunc: ffi_rfb_ffi_rust_future_free_i8,
+            liftFunc: FfiConverterBool.lift,
+            errorHandler: FfiConverterTypeSessionFailure_lift
+        )
 }
     
 open func requestCurtainMode(enabled: Bool)async throws   {
@@ -3086,6 +3112,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_rfb_ffi_checksum_method_remotesession_next_transfer_handle() != 13031) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_rfb_ffi_checksum_method_remotesession_request_clipboard() != 56734) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_rfb_ffi_checksum_method_remotesession_request_curtain_mode() != 63674) {

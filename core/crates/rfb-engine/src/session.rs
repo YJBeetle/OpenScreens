@@ -702,6 +702,24 @@ impl Session {
         self.send(message.to_vec()).await
     }
 
+    /// Requests a fresh pasteboard on Apple RFB 3.889. Standard RFB only pushes
+    /// ServerCutText. VNCKit's requestPasteboardContent sends message 11 with
+    /// whole seconds since Apple's 2001 reference date in native little endian.
+    pub async fn request_clipboard(&self) -> Result<bool, SessionError> {
+        if !self.apple_session {
+            return Ok(false);
+        }
+        let seconds = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs()
+            .saturating_sub(978_307_200) as u32;
+        let mut message = vec![0x0b, 0, 0, 0];
+        message.extend_from_slice(&seconds.to_le_bytes());
+        self.send(message).await?;
+        Ok(true)
+    }
+
     /// Sends clipboard text. Apple servers that advertise
     /// `serverCanReceivePasteboard` receive message `0x1F` with a pasteboard
     /// archive (matching VNCKit); other servers get a standard ClientCutText.

@@ -18,6 +18,7 @@ public struct SessionScreen: View {
     private let model: SessionViewModel
     private let onClose: () -> Void
 
+    @State private var presentedChallenge: RemoteFailureKind?
     @State private var confirmingDisconnect = false
     @State private var isDropTargeted = false
     @State private var showingDownloadDialog = false
@@ -82,15 +83,9 @@ public struct SessionScreen: View {
             #endif
             if model.state.isConnected { hardwareKeyboardLayer }
 
-            if let challenge = model.credentialChallenge {
-                CredentialPrompt(
-                    endpoint: model.profile.endpoint, challenge: challenge,
-                    username: model.loginUsername, remember: model.rememberLogin,
-                    onConnect: model.submitCredentials, onCancel: closeSession
-                )
-            } else if model.state.isTerminal {
+            if model.state.isTerminal && model.credentialChallenge == nil {
                 connectionClosedOverlay
-            } else if !model.state.isConnected {
+            } else if !model.state.isConnected && presentedChallenge == nil && model.credentialChallenge == nil {
                 connectingOverlay
             }
 
@@ -137,6 +132,31 @@ public struct SessionScreen: View {
         }
         .onChange(of: scenePhase) { _, phase in
             model.handleScenePhase(phase)
+        }
+        .onChange(of: model.state, initial: true) { _, state in
+            if let challenge = model.credentialChallenge {
+                presentedChallenge = challenge
+            } else if state.isConnected || state.isTerminal {
+                presentedChallenge = nil
+            }
+        }
+        .sheet(isPresented: Binding(
+            get: { presentedChallenge != nil },
+            set: { if !$0 { presentedChallenge = nil } }
+        )) {
+            if let challenge = presentedChallenge {
+                CredentialPrompt(
+                    endpoint: model.profile.endpoint, challenge: challenge,
+                    isConnecting: model.credentialChallenge == nil,
+                    username: model.loginUsername, remember: model.rememberLogin,
+                    onConnect: model.submitCredentials,
+                    onCancel: {
+                        presentedChallenge = nil
+                        closeSession()
+                    }
+                )
+                .interactiveDismissDisabled()
+            }
         }
         .confirmationDialog(
             "Disconnect from “\(model.profile.name)”?",

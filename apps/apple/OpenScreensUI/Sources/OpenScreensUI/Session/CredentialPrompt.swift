@@ -1,8 +1,10 @@
 import SwiftUI
 
+/// A system sheet keeps credential input separate from the remote keyboard.
 struct CredentialPrompt: View {
     let endpoint: String
     let challenge: RemoteFailureKind
+    let isConnecting: Bool
     @State var username: String
     @State var remember: Bool
     let onConnect: (String, String, Bool) -> Void
@@ -15,73 +17,82 @@ struct CredentialPrompt: View {
 
     private var requiresUsername: Bool { challenge == .missingUsername }
     private var canConnect: Bool {
-        !password.isEmpty && (!requiresUsername || !username.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        !isConnecting && !password.isEmpty && (!requiresUsername || !username.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
     }
 
     var body: some View {
-        Group {
-            if #available(iOS 26, macOS 26, *) {
-                fittedForm.glassEffect(.regular, in: RoundedRectangle(cornerRadius: Theme.Radius.sheet))
-            } else {
-                fittedForm.background(.regularMaterial, in: RoundedRectangle(cornerRadius: Theme.Radius.sheet))
-            }
-        }
-        .padding()
-        .onAppear {
-            showUsername = requiresUsername || !username.isEmpty
-            focused = requiresUsername && username.isEmpty ? .username : .password
-        }
-    }
-
-    private var fittedForm: some View {
-        ViewThatFits(in: .vertical) {
-            form
-            ScrollView { form }
-        }
-        .frame(maxWidth: 360)
-    }
-
-    private var form: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Authentication Required").font(.headline)
-            Text(verbatim: endpoint).foregroundStyle(.secondary)
-            if challenge == .authenticationFailed {
-                Text("Authentication failed. Try again.").foregroundStyle(.red)
-            }
-            if showUsername || requiresUsername {
-                TextField("User Name", text: $username)
-                    .textContentType(.username)
-                    .autocorrectionDisabled()
-                    #if os(iOS)
-                    .textInputAutocapitalization(.never)
-                    #endif
-                    .focused($focused, equals: .username)
-                    .onSubmit { focused = .password }
-            } else {
-                Button("Use a Mac account") {
-                    showUsername = true
-                    focused = .username
+        NavigationStack {
+            Form {
+                Section {
+                    if showUsername || requiresUsername {
+                        TextField("User Name", text: $username)
+                            .textContentType(.username)
+                            .autocorrectionDisabled()
+                            #if os(iOS)
+                            .textInputAutocapitalization(.never)
+                            #endif
+                            .focused($focused, equals: .username)
+                            .submitLabel(.next)
+                            .onSubmit { focused = .password }
+                    } else {
+                        Button("Use a Mac account") {
+                            showUsername = true
+                            focused = .username
+                        }
+                    }
+                    SecureField("Password", text: $password)
+                        .textContentType(.password)
+                        .focused($focused, equals: .password)
+                        .submitLabel(.go)
+                        .onSubmit(submit)
+                    Toggle("Remember Credentials", isOn: $remember)
+                } header: {
+                    Text(verbatim: endpoint)
+                } footer: {
+                    if isConnecting {
+                        ProgressView("Connecting…")
+                    } else if challenge == .authenticationFailed {
+                        Text("Authentication failed. Try again.")
+                            .foregroundStyle(.red)
+                    }
                 }
             }
-            SecureField("Password", text: $password)
-                .textContentType(.password)
-                .focused($focused, equals: .password)
-                .onSubmit(submit)
-            Toggle("Remember Credentials", isOn: $remember)
-            HStack {
-                Spacer()
-                Button("Cancel", action: onCancel).keyboardShortcut(.cancelAction)
-                Button("Connect", action: submit)
-                    .buttonStyle(.borderedProminent)
-                    .disabled(!canConnect)
+            .formStyle(.grouped)
+            .disabled(isConnecting)
+            .navigationTitle("Authentication Required")
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel", action: onCancel)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Connect", action: submit)
+                        .disabled(!canConnect)
+                }
             }
         }
-        .textFieldStyle(.roundedBorder)
-        .padding(20)
+        #if os(macOS)
+        .frame(minWidth: 400, minHeight: 270)
+        #endif
+        .onAppear {
+            showUsername = requiresUsername || !username.isEmpty
+            focusInput()
+        }
+        .onChange(of: isConnecting) { _, connecting in
+            if !connecting { focusInput() }
+        }
+    }
+
+    private func focusInput() {
+        focused = requiresUsername && username.isEmpty ? .username : .password
     }
 
     private func submit() {
         guard canConnect else { return }
-        onConnect(username, password, remember)
+        let entered = password
+        password = ""
+        onConnect(username, entered, remember)
     }
 }

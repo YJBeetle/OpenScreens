@@ -28,17 +28,7 @@ struct OpenScreensIOSApp: App {
             id: IOSSessionScene.id,
             for: UUID.self
         ) { $profileID in
-            Group {
-                if let profileID, let profile = connections.connection(id: profileID) {
-                    IOSSessionWindow(profile: profile)
-                } else {
-                    ContentUnavailableView {
-                        Label("Connection Not Found", systemImage: "questionmark.folder")
-                    } description: {
-                        Text("This connection was removed from the library.")
-                    }
-                }
-            }
+            IOSSessionWindow(profile: profileID.flatMap { connections.connection(id: $0) })
             .appLockLifecycle()
             .environment(connections)
             .environment(settings)

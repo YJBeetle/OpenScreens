@@ -29,7 +29,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         quality: 9,
         frame_interval_ms: 16,
         apple_session: false,
-        request_mac_sharing: false,
+        mac_session_choice: None,
         adaptive_dct: false,
         wireguard: None,
         openvpn: None,

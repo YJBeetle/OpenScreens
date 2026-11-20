@@ -317,4 +317,8 @@
     <string name="session_reconnect">重新连接</string>
     <string name="session_retry_in">将在 %1$d 秒后重试…</string>
     <string name="editor_request_mac_sharing">Mac 账户 — 请求共享现有会话</string>
+    <string name="session_mac_choice_title">选择 Mac 会话</string>
+    <string name="session_mac_choice_hint">此 Mac 上已有其他用户登录。可使用你的 Mac 账户打开个人会话，或请求共享当前会话。</string>
+    <string name="session_mac_personal">打开个人会话</string>
+    <string name="session_mac_share">请求共享会话</string>
 </resources>

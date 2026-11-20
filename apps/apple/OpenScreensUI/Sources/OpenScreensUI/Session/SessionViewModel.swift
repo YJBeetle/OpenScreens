@@ -219,8 +219,23 @@ public final class SessionViewModel {
         endTransport()
     }
 
+    @ObservationIgnored private var selectedMacSession: MacSessionChoice?
+
+    var needsMacSessionChoice: Bool {
+        if case .disconnected(_, .macSessionChoiceRequired) = state { return true }
+        return false
+    }
+
+    func chooseMacSession(_ choice: MacSessionChoice) {
+        guard needsMacSessionChoice, !isStopping else { return }
+        endTransport()
+        failureMessage = nil
+        selectedMacSession = choice
+        beginSession(isReconnect: false)
+    }
+
     public func reconnect() {
-        guard credentialChallenge == nil, state.isTerminal else { return }
+        guard credentialChallenge == nil, !needsMacSessionChoice, state.isTerminal else { return }
         restartTransport()
     }
 
@@ -245,7 +260,7 @@ public final class SessionViewModel {
             case .idle, .connecting:
                 needsRestart = false
             }
-            if needsRestart && credentialChallenge == nil {
+            if needsRestart && credentialChallenge == nil && !needsMacSessionChoice {
                 restartTransport()
             }
         default:
@@ -304,10 +319,11 @@ public final class SessionViewModel {
         profile.controls.startInObserveMode = isObserving
         profile.username = loginUsername
         let password = sessionPassword
+        let macSessionChoice = selectedMacSession
         profile.controls.sharedClipboard = sharedClipboard
         connectTask = Task { [weak self, session, profile] in
             do {
-                try await session.connect(profile: profile, password: password)
+                try await session.connect(profile: profile, password: password, macSessionChoice: macSessionChoice)
             } catch is CancellationError {
                 // The user stopped the session while it was connecting.
             } catch {
@@ -380,6 +396,11 @@ public final class SessionViewModel {
 
         case .displays(let list):
             displays = list
+            // Some transports report a single display before the first frame.
+            if serverSize == nil, list.count == 1, let display = list.first {
+                serverSize = CGSize(width: display.width, height: display.height)
+                scheduleCurrentViewport()
+            }
             reconcileDisplaySelection()
 
         case .frame(let frame):
@@ -547,6 +568,7 @@ public final class SessionViewModel {
         credentialChallenge = nil
         sessionPassword = nil
         loginUsername = profile.username
+        selectedMacSession = nil
         rememberLogin = false
     }
 

@@ -15,7 +15,7 @@ private actor ClipboardTransport: RemoteSessionProtocol, RemoteSessionService {
 
     nonisolated func makeSession() -> any RemoteSessionProtocol { self }
     func selectDisplay(_ id: Int?) async throws {}
-    func connect(profile: ConnectionProfile, password: String?) async throws { output.yield(.state(.connected)) }
+    func connect(profile: ConnectionProfile, password: String?, macSessionChoice: MacSessionChoice?) async throws { output.yield(.state(.connected)) }
     func disconnect() async { output.finish() }
     func sendPointer(_ event: PointerEvent) async {}
     func sendKey(_ event: RemoteKeyEvent) async {}

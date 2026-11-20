@@ -130,14 +130,20 @@ class UniFfiRemoteSession(
         }
     }
 
-    override suspend fun connect() = open()
+    private var selectedMacSession: MacSessionChoice? = null
+
+    override suspend fun connect(macSessionChoice: MacSessionChoice?) {
+        selectedMacSession = macSessionChoice
+        open(macSessionChoice)
+    }
 
     override suspend fun reconnect() {
         if (disposed.get()) return
-        open()
+        open(selectedMacSession)
     }
 
-    private suspend fun open() = openMutex.withLock {
+    private suspend fun open(macSessionChoice: MacSessionChoice? = null) = openMutex.withLock {
+        if (disposed.get()) return@withLock
         detach()
         if (disposed.get()) return
         closed.set(false)
@@ -185,7 +191,9 @@ class UniFfiRemoteSession(
         )
 
         val connected = try {
-            if (connection.requestMacSharing) {
+            if (macSessionChoice == MacSessionChoice.Personal) {
+                NativeSession.connectPersonalMacSession(config)
+            } else if (macSessionChoice == MacSessionChoice.Share || connection.requestMacSharing) {
                 NativeSession.connectRequestingMacSharing(config)
             } else {
                 NativeSession.connect(config)
@@ -194,7 +202,11 @@ class UniFfiRemoteSession(
             throw cancelled
         } catch (error: Exception) {
             Log.w(TAG, "connect to ${connection.address} failed", error)
-            _events.emit(failureEvent(error))
+            if (error is SessionFailure.Session && error.kind == SessionFailureKind.MAC_SESSION_CHOICE_REQUIRED) {
+                _events.emit(SessionEvent.MacSessionChoiceRequired)
+            } else {
+                _events.emit(failureEvent(error))
+            }
             return
         }
 
@@ -925,6 +937,7 @@ class UniFfiRemoteSession(
     }
 
     private fun failureText(kind: SessionFailureKind, reason: String): String = when (kind) {
+        SessionFailureKind.MAC_SESSION_CHOICE_REQUIRED -> context.getString(R.string.session_mac_choice_hint)
         SessionFailureKind.UNKNOWN -> reason
         SessionFailureKind.NETWORK -> context.getString(R.string.session_failure_network)
         SessionFailureKind.CONNECTION_REFUSED ->

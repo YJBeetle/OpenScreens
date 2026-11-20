@@ -51,7 +51,7 @@ public actor MockRemoteSession: RemoteSessionProtocol {
 
     // MARK: - RemoteSessionProtocol
 
-    public func connect(profile: ConnectionProfile, password: String? = nil) async throws {
+    public func connect(profile: ConnectionProfile, password: String?, macSessionChoice: MacSessionChoice?) async throws {
         guard renderTask == nil, !connecting, !stopped else { return }
         connecting = true
         isObserving = profile.controls.startInObserveMode

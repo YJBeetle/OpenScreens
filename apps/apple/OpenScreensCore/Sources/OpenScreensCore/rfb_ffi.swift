@@ -803,6 +803,21 @@ public static func connect(config: SessionConfig)async throws  -> RemoteSession 
         )
 }
     
+public static func connectPersonalMacSession(config: SessionConfig)async throws  -> RemoteSession  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_rfb_ffi_fn_constructor_remotesession_connect_personal_mac_session(FfiConverterTypeSessionConfig_lower(config)
+                )
+            },
+            pollFunc: ffi_rfb_ffi_rust_future_poll_u64,
+            completeFunc: ffi_rfb_ffi_rust_future_complete_u64,
+            freeFunc: ffi_rfb_ffi_rust_future_free_u64,
+            liftFunc: FfiConverterTypeRemoteSession_lift,
+            errorHandler: FfiConverterTypeSessionFailure_lift
+        )
+}
+
 public static func connectRequestingMacSharing(config: SessionConfig)async throws  -> RemoteSession  {
     return
         try  await uniffiRustCallAsync(
@@ -2316,6 +2331,7 @@ public enum SessionFailureKind: Equatable, Hashable {
     case sshTunnel
     case closed
     case invalidInput
+    case macSessionChoiceRequired
 
 
 
@@ -2365,6 +2381,8 @@ public struct FfiConverterTypeSessionFailureKind: FfiConverterRustBuffer {
         
         case 14: return .invalidInput
         
+        case 15: return .macSessionChoiceRequired
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -2428,6 +2446,10 @@ public struct FfiConverterTypeSessionFailureKind: FfiConverterRustBuffer {
         case .invalidInput:
             writeInt(&buf, Int32(14))
         
+
+        case .macSessionChoiceRequired:
+            writeInt(&buf, Int32(15))
+
         }
     }
 }
@@ -3211,6 +3233,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_rfb_ffi_checksum_constructor_remotesession_connect() != 42150) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_rfb_ffi_checksum_constructor_remotesession_connect_personal_mac_session() != 14267) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_rfb_ffi_checksum_constructor_remotesession_connect_requesting_mac_sharing() != 55922) {

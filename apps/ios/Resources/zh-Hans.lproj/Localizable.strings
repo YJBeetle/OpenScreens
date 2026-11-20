@@ -469,3 +469,7 @@
 
 "The credentials could not be saved." = "无法保存凭据。";
 "Mac Account — Request Shared Session" = "Mac 账户 — 请求共享现有会话";
+"Choose a Mac Session" = "选择 Mac 会话";
+"Another user is signed in on this Mac. Open a personal session with your Mac account, or ask to share the active session." = "此 Mac 上已有其他用户登录。可使用你的 Mac 账户打开个人会话，或请求共享当前会话。";
+"Open Personal Session" = "打开个人会话";
+"Request Shared Session" = "请求共享会话";

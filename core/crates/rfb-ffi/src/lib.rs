@@ -85,7 +85,7 @@ impl From<SessionConfig> for EngineConfig {
             // Apple servers are detected during the handshake; non-Apple
             // servers keep the standard 3.8 flow.
             apple_session: true,
-            request_mac_sharing: false,
+            mac_session_choice: None,
             adaptive_dct: true,
             wireguard: config
                 .wireguard_config
@@ -422,12 +422,14 @@ pub enum SessionFailureKind {
     SshTunnel,
     Closed,
     InvalidInput,
+    MacSessionChoiceRequired,
 }
 
 impl From<rfb_engine::session::FailureKind> for SessionFailureKind {
     fn from(kind: rfb_engine::session::FailureKind) -> Self {
         use rfb_engine::session::FailureKind as Kind;
         match kind {
+            Kind::MacSessionChoiceRequired => Self::MacSessionChoiceRequired,
             Kind::Unknown => Self::Unknown,
             Kind::Network => Self::Network,
             Kind::ConnectionRefused => Self::ConnectionRefused,
@@ -529,7 +531,19 @@ impl RemoteSession {
         config: SessionConfig,
     ) -> Result<Arc<Self>, SessionFailure> {
         let mut config: EngineConfig = config.into();
-        config.request_mac_sharing = true;
+        config.mac_session_choice = Some(rfb_engine::handshake::MacSessionChoice::Share);
+        let session = Session::connect(config).await.map_err(to_failure)?;
+        Ok(Arc::new(Self {
+            session: Arc::new(session),
+        }))
+    }
+
+    #[uniffi::constructor]
+    pub async fn connect_personal_mac_session(
+        config: SessionConfig,
+    ) -> Result<Arc<Self>, SessionFailure> {
+        let mut config: EngineConfig = config.into();
+        config.mac_session_choice = Some(rfb_engine::handshake::MacSessionChoice::Personal);
         let session = Session::connect(config).await.map_err(to_failure)?;
         Ok(Arc::new(Self {
             session: Arc::new(session),

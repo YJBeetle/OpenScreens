@@ -16,7 +16,7 @@ private actor InputRecorder: RemoteSessionProtocol, RemoteSessionService {
     private(set) var recorded: [Event] = []
     nonisolated func makeSession() -> any RemoteSessionProtocol { self }
     func selectDisplay(_ id: Int?) async throws {}
-    func connect(profile: ConnectionProfile, password: String?) {
+    func connect(profile: ConnectionProfile, password: String?, macSessionChoice: MacSessionChoice?) {
         continuation.yield(.frame(RemoteFrame(width: 200, height: 100, data: Data(count: 80000))))
         continuation.yield(.state(.connected))
     }

@@ -93,7 +93,7 @@ private struct LoginTransport: RemoteSessionProtocol {
     }
 
     func selectDisplay(_ id: Int?) async throws {}
-    func connect(profile: ConnectionProfile, password: String?) async throws {
+    func connect(profile: ConnectionProfile, password: String?, macSessionChoice: MacSessionChoice?) async throws {
         guard !profile.username.isEmpty else { throw RemoteSessionFailure(kind: .missingUsername, reason: "") }
         guard profile.username == "user", password == " test " else {
             throw RemoteSessionFailure(kind: .authenticationFailed, reason: "")

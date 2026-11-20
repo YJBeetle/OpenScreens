@@ -159,6 +159,7 @@ import com.openscreens.app.data.Connection
 import com.openscreens.app.data.QualityPreset
 import com.openscreens.app.data.SshKey
 import com.openscreens.app.session.SessionClipboard
+import com.openscreens.app.session.MacSessionChoice
 import com.openscreens.app.session.RemoteSession
 import com.openscreens.app.session.sendChord
 import com.openscreens.app.session.DisplayScreen
@@ -259,6 +260,7 @@ fun SessionScreen(
     var viewport by remember { mutableStateOf<SessionEvent.Viewport?>(null) }
     var trackpadMode by rememberSaveable { mutableStateOf(false) }
     var desktopScreens by remember { mutableStateOf<List<DisplayScreen>>(emptyList()) }
+    var needsMacSessionChoice by remember(session) { mutableStateOf(false) }
     var supportsCurtainMode by remember(session) { mutableStateOf(false) }
     var displayMenuExpanded by remember { mutableStateOf(false) }
     var selectedDisplayId by remember(session) { mutableStateOf<Int?>(null) }
@@ -469,7 +471,12 @@ fun SessionScreen(
         session.events.collect { event ->
             if (isExiting) return@collect
             when (event) {
+                SessionEvent.MacSessionChoiceRequired -> {
+                    needsMacSessionChoice = true
+                    status = SessionStatus.Failed
+                }
                 SessionEvent.Connecting -> {
+                    needsMacSessionChoice = false
                     supportsCurtainMode = false
                     clipboard.reset()
                     clipboardFetch?.cancel()
@@ -687,7 +694,7 @@ fun SessionScreen(
                     foreground = true
                     val leftAt = backgroundedAt
                     backgroundedAt = 0L
-                    if (leftAt == 0L || isExiting || login.challenge != null) return@LifecycleEventObserver
+                    if (leftAt == 0L || isExiting || login.challenge != null || needsMacSessionChoice) return@LifecycleEventObserver
                     val away = SystemClock.elapsedRealtime() - leftAt
                     if (away >= RESUME_RECONNECT_MS && status == SessionStatus.Connected) {
                         status = SessionStatus.Connecting
@@ -706,14 +713,14 @@ fun SessionScreen(
     }
 
     fun retry(manual: Boolean) {
-        if (isExiting || !foreground || login.challenge != null || !recovery.takeRetry(manual)) return
+        if (isExiting || !foreground || needsMacSessionChoice || login.challenge != null || !recovery.takeRetry(manual)) return
         status = SessionStatus.Connecting
         scope.launch { session.reconnect() }
     }
 
     // Leaving the foreground, cancelling, or entering authentication cancels the timer.
-    LaunchedEffect(session, recovery.failure, foreground, isExiting, login.challenge) {
-        if (!foreground || isExiting || login.challenge != null) return@LaunchedEffect
+    LaunchedEffect(session, recovery.failure, foreground, isExiting, needsMacSessionChoice, login.challenge) {
+        if (!foreground || isExiting || needsMacSessionChoice || login.challenge != null) return@LaunchedEffect
         recovery.nextDelayMillis?.let {
             delay(it)
             retry(manual = false)
@@ -726,7 +733,7 @@ fun SessionScreen(
         }
     }
 
-    if (!isExiting && login.challenge == null) recovery.failure?.let { failure ->
+    if (!isExiting && !needsMacSessionChoice && login.challenge == null) recovery.failure?.let { failure ->
         AlertDialog(
             onDismissRequest = exitSession,
             title = { Text(stringResource(R.string.session_status_disconnected)) },
@@ -1862,6 +1869,31 @@ fun SessionScreen(
                         }
                     }
                 }
+            },
+        )
+    }
+
+    if (needsMacSessionChoice) {
+        fun select(choice: MacSessionChoice) {
+            needsMacSessionChoice = false
+            scope.launch { session.connect(choice) }
+        }
+        AlertDialog(
+            onDismissRequest = exitSession,
+            title = { Text(stringResource(R.string.session_mac_choice_title)) },
+            text = { Text(stringResource(R.string.session_mac_choice_hint)) },
+            confirmButton = {
+                Column {
+                    TextButton(onClick = { select(MacSessionChoice.Personal) }) {
+                        Text(stringResource(R.string.session_mac_personal))
+                    }
+                    TextButton(onClick = { select(MacSessionChoice.Share) }) {
+                        Text(stringResource(R.string.session_mac_share))
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = exitSession) { Text(stringResource(android.R.string.cancel)) }
             },
         )
     }

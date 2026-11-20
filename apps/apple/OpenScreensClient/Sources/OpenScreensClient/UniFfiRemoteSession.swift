@@ -151,10 +151,12 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
         continuation.yield(.state(.connecting))
 
         let sessionPassword: String?
-        if profile.authentication == .none {
+        if let password {
+            sessionPassword = password
+        } else if profile.authentication == .none {
             sessionPassword = nil
         } else {
-            sessionPassword = password ?? OpenScreensCredentials.password(for: profile.id) ?? debugPassword()
+            sessionPassword = OpenScreensCredentials.password(for: profile.id) ?? debugPassword()
         }
         let username = profile.username.trimmingCharacters(in: .whitespacesAndNewlines)
 

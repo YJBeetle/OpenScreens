@@ -15,12 +15,20 @@ struct RFBTestPeer {
         try handle.readExactly(count)
     }
 
-    func handshake(apple: Bool = false) throws {
+    func offerSecurityType(_ type: UInt8, apple: Bool = false) throws {
         let version = Data((apple ? "RFB 003.889\n" : "RFB 003.008\n").utf8)
         try handle.write(contentsOf: version)
         XCTAssertEqual(try read(12), version)
-        try handle.write(contentsOf: Data([1, 1]))
+        try handle.write(contentsOf: Data([1, type]))
+    }
+
+    func handshake(apple: Bool = false) throws {
+        try offerSecurityType(1, apple: apple)
         XCTAssertEqual(try read(1), Data([1]))
+        try startDesktop(apple: apple)
+    }
+
+    func startDesktop(apple: Bool = false) throws {
         try handle.write(contentsOf: Data(repeating: 0, count: 4))
         _ = try read(1)
         var initMessage = Data([0, 1, 0, 1, 32, 24, 0, 1, 0, 255, 0, 255, 0, 255, 16, 8, 0, 0, 0, 0])

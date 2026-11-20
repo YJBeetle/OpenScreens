@@ -33,6 +33,10 @@ struct LoopbackListener: Sendable {
         let socket = Darwin.accept(handle.fileDescriptor, nil, nil)
         guard socket >= 0 else { throw POSIXError(.ECONNABORTED) }
         let peer = FileHandle(fileDescriptor: socket, closeOnDealloc: true)
+        var noSigpipe: Int32 = 1
+        guard setsockopt(socket, SOL_SOCKET, SO_NOSIGPIPE, &noSigpipe, socklen_t(MemoryLayout.size(ofValue: noSigpipe))) == 0 else {
+            throw POSIXError(.EINVAL)
+        }
         var timeout = timeval(tv_sec: 3, tv_usec: 0)
         guard setsockopt(socket, SOL_SOCKET, SO_RCVTIMEO, &timeout, socklen_t(MemoryLayout.size(ofValue: timeout))) == 0 else {
             throw POSIXError(.EINVAL)

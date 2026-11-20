@@ -953,6 +953,10 @@ async fn apple_desktop_info_populates_displays() {
 }
 
 async fn perform_apple_handshake(server: &mut DuplexStream) {
+    apple_handshake_with_init(server, server_init()).await;
+}
+
+async fn apple_handshake_with_init(server: &mut DuplexStream, init: Vec<u8>) {
     server.write_all(b"RFB 003.889\n").await.unwrap();
     let mut version = [0u8; 12];
     server.read_exact(&mut version).await.unwrap();
@@ -968,10 +972,36 @@ async fn perform_apple_handshake(server: &mut DuplexStream) {
     server.read_exact(&mut client_init).await.unwrap();
     assert_eq!(client_init[0], 0xc1);
 
-    server.write_all(&server_init()).await.unwrap();
+    server.write_all(&init).await.unwrap();
     let mut apple = [0u8; 66];
     server.read_exact(&mut apple).await.unwrap();
     assert_eq!(apple[0], 0x21);
+}
+
+#[tokio::test]
+async fn curtain_requests_require_the_advertised_capability() {
+    for bits in [1 << 50, 1 << 51] {
+        let (client, mut server) = duplex(4096);
+        let mut config = SessionConfig::new("mock", 5900);
+        config.apple_session = true;
+        let task = tokio::spawn(Session::connect_stream(client, config));
+        apple_handshake_with_init(&mut server, apple_server_init(bits)).await;
+        read_setup(&mut server).await;
+        let session = task.await.unwrap().unwrap();
+        let supported = bits == 1 << 51;
+        assert_eq!(session.supports_curtain_mode(), supported);
+        assert_eq!(session.request_curtain_mode(true).await.is_ok(), supported);
+        assert_eq!(session.request_curtain_mode(false).await.is_ok(), supported);
+        if supported {
+            let mut bytes = [0; 23];
+            server.read_exact(&mut bytes).await.unwrap();
+            assert_eq!(&bytes, b"\x0c\0\0\0\0\x0bOpenScreens\x0c\0\0\x01\0\0");
+        }
+        session.request_refresh().await.unwrap();
+        let mut refresh = [0; 10];
+        server.read_exact(&mut refresh).await.unwrap();
+        assert_eq!(refresh[0], 3);
+    }
 }
 
 #[tokio::test]

@@ -207,6 +207,12 @@ struct SessionToolbar: View {
 
     private var displayMenu: some View {
         Menu {
+            if model.state.isConnected && model.supportsCurtainMode {
+                Section("Curtain Mode") {
+                    Button("Enable Curtain Mode") { model.requestCurtainMode(true) }
+                    Button("Disable Curtain Mode") { model.requestCurtainMode(false) }
+                }
+            }
             Section("Scaling") {
                 Picker("Scaling", selection: scalingBinding) {
                     ForEach(RemoteContentMode.allCases) { mode in

@@ -683,6 +683,17 @@ impl RemoteSession {
         self.session.request_refresh().await.map_err(to_failure)
     }
 
+    pub fn supports_curtain_mode(&self) -> bool {
+        self.session.supports_curtain_mode()
+    }
+
+    pub async fn request_curtain_mode(&self, enabled: bool) -> Result<(), SessionFailure> {
+        self.session
+            .request_curtain_mode(enabled)
+            .await
+            .map_err(to_failure)
+    }
+
     /// Selects an Apple display by id; `None` shows all displays.
     pub async fn select_display(&self, display_id: Option<u32>) -> Result<(), SessionFailure> {
         self.session

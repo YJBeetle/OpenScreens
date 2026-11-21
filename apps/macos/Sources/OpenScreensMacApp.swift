@@ -65,6 +65,13 @@ struct OpenScreensMacApp: App {
         .defaultSize(width: 1120, height: 760)
         .commands { SessionMenuCommands() }
 
+        #if canImport(OpenScreensXdb)
+        WindowGroup(id: MacSceneID.xdbSession, for: XdbDevice.self) { $device in
+            if let device { MacXdbSessionView(device: device) }
+        }
+        .defaultSize(width: 480, height: 760)
+        #endif
+
         MenuBarExtra("OpenScreens", systemImage: "display") {
             MacMenuBarContent(updater: updater)
                 .environment(connections)
@@ -104,6 +111,7 @@ private final class MacAppDelegate: NSObject, NSApplicationDelegate {
 
 enum MacSceneID {
     static let library = "library"
+    static let xdbSession = "xdb-session"
     static let session = "session"
 }
 

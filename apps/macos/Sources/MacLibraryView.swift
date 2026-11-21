@@ -9,6 +9,23 @@ struct MacLibraryView: View {
     @State private var selection: LibraryDestination? = .section(.nearby)
     @State private var searchText = ""
     @State private var activeSheet: LibrarySheet?
+    #if canImport(OpenScreensXdb)
+    @State private var xdbDevices: [XdbDevice] = []
+    @Environment(\.scenePhase) private var scenePhase
+    #endif
+
+    private var nearbyDevices: [NearbyLibraryDevice] {
+        #if canImport(OpenScreensXdb)
+        guard settings.settings.discoverNearby else { return [] }
+        return xdbDevices.map { device in
+            NearbyLibraryDevice(id: device.id, name: device.name, detail: String(localized: "Screen Mirroring"), symbol: "iphone") {
+                openWindow(id: MacSceneID.xdbSession, value: device)
+            }
+        }
+        #else
+        return []
+        #endif
+    }
 
     private var isSearching: Bool {
         !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -16,7 +33,7 @@ struct MacLibraryView: View {
 
     var body: some View {
         NavigationSplitView {
-            LibrarySidebar(selection: $selection)
+            LibrarySidebar(selection: $selection, additionalNearbyCount: nearbyDevices.count)
                 .navigationSplitViewColumnWidth(min: 190, ideal: 210, max: 260)
         } detail: {
             detailView
@@ -27,7 +44,7 @@ struct MacLibraryView: View {
                         Button {
                             activeSheet = .quickConnect
                         } label: {
-                            Label("Quick Connect", systemImage: "bolt.horizontal")
+                            Label("Quick Connect", systemImage: "bolt.fill")
                         }
                         .help("Quick Connect (⌘K)")
                     }
@@ -71,6 +88,20 @@ struct MacLibraryView: View {
                 .frame(width: 440)
             }
         }
+        #if canImport(OpenScreensXdb)
+        .task(id: settings.settings.discoverNearby && scenePhase == .active) {
+            guard settings.settings.discoverNearby && scenePhase == .active else {
+                if !settings.settings.discoverNearby { xdbDevices = [] }
+                return
+            }
+            while !Task.isCancelled {
+                let devices = (try? await XdbDevice.discover()) ?? []
+                guard !Task.isCancelled else { return }
+                xdbDevices = devices
+                try? await Task.sleep(for: .seconds(10))
+            }
+        }
+        #endif
         .onAppear(perform: autoConnectForTesting)
         .onOpenURL { url in
             guard let profile = store.resolveLink(url, sharedClipboard: settings.settings.sharedClipboard) else { return }
@@ -83,6 +114,7 @@ struct MacLibraryView: View {
         if isSearching {
             LibrarySearchResultsView(
                 query: searchText,
+                nearbyDevices: nearbyDevices,
                 onConnect: connect,
                 onEdit: edit,
                 onDuplicate: duplicate,
@@ -93,6 +125,7 @@ struct MacLibraryView: View {
             case .section(let section):
                 LibrarySectionView(
                     section: section,
+                    nearbyDevices: section == .nearby ? nearbyDevices : [],
                     onConnect: connect,
                     onEdit: edit,
                     onDuplicate: duplicate,

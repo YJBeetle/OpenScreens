@@ -243,7 +243,7 @@ struct PhoneLibraryView: View {
                 Button {
                     activeSheet = .quickConnect
                 } label: {
-                    Image(systemName: "bolt.horizontal")
+                    Image(systemName: "bolt.fill")
                 }
                 .accessibilityLabel("Quick Connect")
 

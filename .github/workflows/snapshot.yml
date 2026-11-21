@@ -15,56 +15,13 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  android:
-    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
-    runs-on: ubuntu-latest
-    env:
-      HAS_ANDROID_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "17"
-      - uses: android-actions/setup-android@v3
-        with:
-          packages: "platform-tools platforms;android-36 build-tools;35.0.0"
-      - name: Configure release signing
-        if: env.HAS_ANDROID_KEYSTORE == 'true'
-        working-directory: apps/android
-        env:
-          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-          STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-        run: |
-          mkdir -p keystore
-          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > keystore/release.jks
-          umask 077
-          cat > keystore.properties <<EOF
-          storeFile=keystore/release.jks
-          storePassword=$STORE_PASSWORD
-          keyAlias=$KEY_ALIAS
-          keyPassword=$KEY_PASSWORD
-          EOF
-      - name: Build signed snapshot APK
-        working-directory: apps/android
-        run: |
-          chmod +x gradlew
-          ./gradlew :app:assembleRelease --no-daemon \
-            -Popenscreens.versionCode="$(git rev-list --count HEAD)"
-          cp app/build/outputs/apk/release/app-release.apk "$GITHUB_WORKSPACE/OpenScreens-snapshot-android.apk"
-      - uses: actions/upload-artifact@v4
-        with:
-          name: OpenScreens-snapshot-android
-          path: OpenScreens-snapshot-android.apk
-          if-no-files-found: error
-
   macos:
-    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    if: >-
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
+      || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success'
+      && github.event.workflow_run.event == 'push'
+      && github.event.workflow_run.head_branch == 'main'
+      && github.event.workflow_run.head_repository.full_name == github.repository)
     runs-on: macos-26
     environment: Build
     env:
@@ -75,13 +32,14 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          submodules: true
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-apple-darwin,aarch64-apple-ios,aarch64-apple-ios-sim,x86_64-apple-ios
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: core
+          workspaces: vendor/scrctl/core
       - name: Build Apple core
         run: ./scripts/build-apple-core.sh
       - name: Install xcodegen
@@ -156,7 +114,7 @@ jobs:
       - name: Generate Sparkle update feed
         if: steps.package.outputs.notarized == 'true'
         env:
-          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+          SPARKLE_PRIVATE_KEY: ${{ secrets.BUILD_SPARKLE_PRIVATE_KEY }}
         run: |
           python3 -B scripts/ci/update-feed.py \
             --app "$PWD/apps/macos/build/Release/OpenScreens.app" \
@@ -172,8 +130,13 @@ jobs:
           if-no-files-found: ignore
 
   publish:
-    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
-    needs: [android, macos]
+    if: >-
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
+      || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success'
+      && github.event.workflow_run.event == 'push'
+      && github.event.workflow_run.head_branch == 'main'
+      && github.event.workflow_run.head_repository.full_name == github.repository)
+    needs: macos
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
@@ -197,7 +160,6 @@ jobs:
           cat > notes.md <<EOF
           Automated development snapshot from \`${sha}\` (${date}).
 
-          - Android APK is signed with the project release key and updates the "Snapshot" channel.
           - $mac_note
           - Stable and pre-release channels are unaffected by this rolling release.
           EOF

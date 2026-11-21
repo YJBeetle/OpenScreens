@@ -20,15 +20,19 @@
 - 用户态 WireGuard 传输（`rfb-tunnel` + `TunnelDialer`）与 Android wg-quick 配置导入；OpenVPN 与 WireGuard 运行时验收待做
 - Apple Adaptive DCT（1011）：type-0/type-2 解码已在真实 3.889 流上验证并默认优先协商；type-1 系数细化和显式／顺序缓存读取已对照 Screens 5.9 的合成输入验证，遇到未支持的复制引用会退回标准编码并请求全量刷新
 
+待办：
+
+- [ ] macOS 屏幕共享「通过请求许可」。在连接认证界面提供访客请求入口，无需输入远端 Mac 的用户名或密码。远端 Mac 须启用「任何人都可以请求取得屏幕控制权限」，并由现场用户批准后进入会话。在真实 Mac 上验证批准、拒绝、主动取消，以及远端未启用访客请求时的提示。
+
 ## 目录
 
 ```
-core/crates/rfb-proto/     sans-I/O RFB 消息与 Apple DH 认证
-core/crates/rfb-codec/     矩形解码器
-core/crates/rfb-tunnel/    用户态 WireGuard 隧道
-core/crates/rfb-engine/    握手、会话循环、帧缓冲
-core/crates/rfb-io/        TCP 与 SSH 传输
-core/crates/rfb-ffi/       UniFFI 接口层
+vendor/scrctl/core/crates/rfb-proto/     sans-I/O RFB 消息与 Apple DH 认证
+vendor/scrctl/core/crates/rfb-codec/     矩形解码器
+vendor/scrctl/core/crates/rfb-tunnel/    用户态 WireGuard 隧道
+vendor/scrctl/core/crates/rfb-engine/    握手、会话循环、帧缓冲
+vendor/scrctl/core/crates/rfb-io/        TCP 与 SSH 传输
+vendor/scrctl/core/crates/rfb-ffi/       UniFFI 接口层
 apps/apple/OpenScreensUI/  共享 SwiftUI 视图与 Metal 画布
 apps/apple/OpenScreensCore/ 生成的 Swift 绑定（XCFramework 本地构建）
 apps/apple/OpenScreensClient/ UniFFI 会话适配层
@@ -42,7 +46,8 @@ apps/android/              Compose Material 3 应用
 核心：
 
 ```sh
-cd core
+git submodule update --init
+cd vendor/scrctl/core
 cargo test
 cargo clippy --workspace --all-targets -- -D warnings
 ```
@@ -50,6 +55,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 Apple（需要 Xcode、xcodegen 与 Rust Apple targets）。先构建一次 FFI 包，再构建应用：
 
 ```sh
+git submodule update --init
 ./scripts/build-apple-core.sh
 
 cd apps/macos
@@ -69,12 +75,10 @@ DEVELOPER_ID_IDENTITY="Developer ID Application: ..." ./scripts/notarize-macos.s
 Android（改动 Rust core 后需要重编原生库）：
 
 ```sh
-cd core
 export ANDROID_NDK_HOME="$HOME/Library/Android/sdk/ndk/27.2.12479018"
-cargo ndk -t arm64-v8a -t armeabi-v7a -t x86_64 \
-  -o ../apps/android/app/src/main/jniLibs build -p rfb-ffi --release
+./scripts/build-android-core.sh
 
-cd ../apps/android
+cd apps/android
 ./gradlew :app:assembleRelease
 ```
 

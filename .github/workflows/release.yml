@@ -21,13 +21,25 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          submodules: true
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
       - uses: android-actions/setup-android@v3
         with:
-          packages: "platform-tools platforms;android-36 build-tools;35.0.0"
+          packages: "platform-tools platforms;android-36 build-tools;35.0.0 ndk;27.2.12479018"
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: vendor/scrctl/core
+      - name: Build Android core
+        run: |
+          export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/27.2.12479018"
+          cargo install cargo-ndk --locked --version 4.1.2
+          ./scripts/build-android-core.sh
       - name: Configure release signing
         if: env.HAS_ANDROID_KEYSTORE == 'true'
         working-directory: apps/android
@@ -76,12 +88,13 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          submodules: true
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-apple-darwin,aarch64-apple-ios,aarch64-apple-ios-sim,x86_64-apple-ios
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: core
+          workspaces: vendor/scrctl/core
       - name: Build Apple core
         run: ./scripts/build-apple-core.sh
       - name: Install xcodegen

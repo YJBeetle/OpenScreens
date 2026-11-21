@@ -1,0 +1,3 @@
+[submodule "vendor/scrctl"]
+	path = vendor/scrctl
+	url = https://github.com/scrctl/scrctl.git

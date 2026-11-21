@@ -32,7 +32,7 @@ android {
 
     defaultConfig {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        applicationId = "com.openscreens.app"
+        applicationId = "org.scrctl.android"
         minSdk = 26
         targetSdk = 36
         versionCode = providers.gradleProperty("openscreens.versionCode")
@@ -82,6 +82,17 @@ android {
     packaging {
         resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
         jniLibs.useLegacyPackaging = true
+    }
+}
+
+val nativeLibraries = listOf("arm64-v8a", "armeabi-v7a", "x86_64").map {
+    layout.projectDirectory.file("src/main/jniLibs/$it/librfb_ffi.so").asFile
+}
+tasks.named("preBuild") {
+    doFirst {
+        check(nativeLibraries.all { it.isFile }) {
+            "Build the Android core with ./scripts/build-android-core.sh before running Gradle."
+        }
     }
 }
 

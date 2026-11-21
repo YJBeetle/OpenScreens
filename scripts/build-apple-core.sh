@@ -2,7 +2,8 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-CORE="$ROOT/core"
+CORE="$ROOT/vendor/scrctl/core"
+test -f "$CORE/Cargo.toml" || { echo "Run git submodule update --init" >&2; exit 1; }
 OUT="$ROOT/apps/apple/OpenScreensCore"
 HEADERS="$CORE/target/apple-headers"
 TARGETS=(aarch64-apple-darwin aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios)
@@ -31,11 +32,11 @@ export CFLAGS_x86_64_apple_ios="${CFLAGS_x86_64_apple_ios:-} -mios-simulator-ver
 
 cd "$CORE"
 for target in "${TARGETS[@]}"; do
-  "${CARGO[@]}" build -p rfb-ffi --release --target "$target"
+  "${CARGO[@]}" build --locked -p rfb-ffi --release --target "$target"
 done
 
 rm -rf target/apple-bindings
-"${CARGO[@]}" run -p rfb-ffi-bindgen -- generate \
+"${CARGO[@]}" run --locked -p rfb-ffi-bindgen -- generate \
   --library target/aarch64-apple-darwin/release/librfb_ffi.dylib \
   --language swift \
   --out-dir target/apple-bindings

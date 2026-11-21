@@ -20,15 +20,19 @@ Implemented:
 - Userspace WireGuard transport (`rfb-tunnel` + `TunnelDialer`) with Android wg-quick config import; OpenVPN and WireGuard runtime acceptance are pending
 - Apple Adaptive DCT (1011): type-0/type-2 decoding validated against live 3.889 streams and negotiated first; type-1 coefficient refinement and explicit/sequential cache reads tested against synthetic Screens 5.9 vectors. Unsupported copy references fall back to standard encodings with a full refresh
 
+Planned:
+
+- [ ] macOS Screen Sharing guest requests. Offer a request option in the connection authentication prompt without requiring a remote Mac username or password. The remote Mac must allow screen control requests, and its user must approve before the session starts. Verify approval, denial, cancellation, and the message shown when guest requests are disabled on a real Mac.
+
 ## Layout
 
 ```
-core/crates/rfb-proto/     sans-I/O RFB messages and Apple DH auth
-core/crates/rfb-codec/     rectangle decoders
-core/crates/rfb-tunnel/    userspace WireGuard tunnel
-core/crates/rfb-engine/    handshake, session loop, framebuffer
-core/crates/rfb-io/        TCP and SSH transports
-core/crates/rfb-ffi/       UniFFI surface
+vendor/scrctl/core/crates/rfb-proto/     sans-I/O RFB messages and Apple DH auth
+vendor/scrctl/core/crates/rfb-codec/     rectangle decoders
+vendor/scrctl/core/crates/rfb-tunnel/    userspace WireGuard tunnel
+vendor/scrctl/core/crates/rfb-engine/    handshake, session loop, framebuffer
+vendor/scrctl/core/crates/rfb-io/        TCP and SSH transports
+vendor/scrctl/core/crates/rfb-ffi/       UniFFI surface
 apps/apple/OpenScreensUI/  shared SwiftUI views and Metal canvas
 apps/apple/OpenScreensCore/ generated Swift bindings (XCFramework built locally)
 apps/apple/OpenScreensClient/ UniFFI session adapter
@@ -42,7 +46,8 @@ apps/android/              Compose Material 3 app
 Core:
 
 ```sh
-cd core
+git submodule update --init
+cd vendor/scrctl/core
 cargo test
 cargo clippy --workspace --all-targets -- -D warnings
 ```
@@ -50,6 +55,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 Apple (requires Xcode, xcodegen and Rust Apple targets). Build the FFI package once, then the apps:
 
 ```sh
+git submodule update --init
 ./scripts/build-apple-core.sh
 
 cd apps/macos
@@ -70,12 +76,10 @@ DEVELOPER_ID_IDENTITY="Developer ID Application: ..." ./scripts/notarize-macos.s
 Android (after changing the Rust core, rebuild the native libraries):
 
 ```sh
-cd core
 export ANDROID_NDK_HOME="$HOME/Library/Android/sdk/ndk/27.2.12479018"
-cargo ndk -t arm64-v8a -t armeabi-v7a -t x86_64 \
-  -o ../apps/android/app/src/main/jniLibs build -p rfb-ffi --release
+./scripts/build-android-core.sh
 
-cd ../apps/android
+cd apps/android
 ./gradlew :app:assembleRelease
 ```
 

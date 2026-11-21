@@ -1,9 +1,27 @@
 import Foundation
 import SwiftUI
 
+/// A nearby device supplied by a platform-specific session backend.
+public struct NearbyLibraryDevice: Identifiable {
+    public let id: String
+    public let name: String
+    let detail: String
+    let symbol: String
+    let connect: () -> Void
+
+    public init(id: String, name: String, detail: String, symbol: String, connect: @escaping () -> Void) {
+        self.id = id
+        self.name = name
+        self.detail = detail
+        self.symbol = symbol
+        self.connect = connect
+    }
+}
+
 /// Grid of connection tiles used by a library section or by search results.
 struct ConnectionGrid: View {
     let profiles: [ConnectionProfile]
+    var devices: [NearbyLibraryDevice] = []
     let onConnect: (ConnectionProfile, Bool) -> Void
     let onEdit: (ConnectionProfile) -> Void
     let onDuplicate: (ConnectionProfile) -> Void
@@ -58,6 +76,12 @@ struct ConnectionGrid: View {
                     .accessibilityAction(named: "Connect in Observe Mode") { onConnect(profile, true) }
                     .accessibilityAction(named: "Edit") { onEdit(profile) }
                     .accessibilityAction(named: "Duplicate") { onDuplicate(profile) }
+                }
+                ForEach(devices) { device in
+                    Button(action: device.connect) {
+                        ConnectionTile(nearby: device)
+                    }
+                    .buttonStyle(TilePressStyle())
                 }
             }
             .padding(Theme.Spacing.content)
@@ -333,6 +357,7 @@ public struct LibrarySectionView: View {
     private let groupID: UUID?
     private let searchText: String
     private let layout: LibraryLayout
+    private let nearbyDevices: [NearbyLibraryDevice]
     private let reordering: Bool
     private let onConnect: (ConnectionProfile, Bool) -> Void
     private let onEdit: (ConnectionProfile) -> Void
@@ -350,6 +375,7 @@ public struct LibrarySectionView: View {
         groupID: UUID? = nil,
         searchText: String = "",
         layout: LibraryLayout = .grid,
+        nearbyDevices: [NearbyLibraryDevice] = [],
         reordering: Bool = false,
         onConnect: @escaping (ConnectionProfile, Bool) -> Void,
         onEdit: @escaping (ConnectionProfile) -> Void,
@@ -362,6 +388,7 @@ public struct LibrarySectionView: View {
         self.groupID = groupID
         self.searchText = searchText
         self.layout = layout
+        self.nearbyDevices = nearbyDevices
         self.reordering = reordering
         self.onConnect = onConnect
         self.onEdit = onEdit
@@ -378,9 +405,9 @@ public struct LibrarySectionView: View {
             matching: searchText,
             sort: settings.settings.librarySort
         )
-        if profiles.isEmpty {
+        if profiles.isEmpty && nearbyDevices.isEmpty {
             emptyState
-        } else if layout == .list {
+        } else if layout == .list && nearbyDevices.isEmpty {
             ConnectionList(
                 profiles: profiles,
                 onConnect: onConnect,
@@ -399,6 +426,7 @@ public struct LibrarySectionView: View {
         } else {
             ConnectionGrid(
                 profiles: profiles,
+                devices: nearbyDevices,
                 onConnect: onConnect,
                 onEdit: onEdit,
                 onDuplicate: onDuplicate,
@@ -480,6 +508,7 @@ public struct LibrarySectionView: View {
 public struct LibrarySearchResultsView: View {
     private let query: String
     private let layout: LibraryLayout
+    private let nearbyDevices: [NearbyLibraryDevice]
     private let onConnect: (ConnectionProfile, Bool) -> Void
     private let onEdit: (ConnectionProfile) -> Void
     private let onDuplicate: (ConnectionProfile) -> Void
@@ -491,6 +520,7 @@ public struct LibrarySearchResultsView: View {
     public init(
         query: String,
         layout: LibraryLayout = .grid,
+        nearbyDevices: [NearbyLibraryDevice] = [],
         onConnect: @escaping (ConnectionProfile, Bool) -> Void,
         onEdit: @escaping (ConnectionProfile) -> Void,
         onDuplicate: @escaping (ConnectionProfile) -> Void,
@@ -499,6 +529,7 @@ public struct LibrarySearchResultsView: View {
     ) {
         self.query = query
         self.layout = layout
+        self.nearbyDevices = nearbyDevices
         self.onConnect = onConnect
         self.onEdit = onEdit
         self.onDuplicate = onDuplicate
@@ -516,13 +547,14 @@ public struct LibrarySearchResultsView: View {
             )
         } else {
             let results = store.search(trimmed)
-            if results.isEmpty {
+            let devices = nearbyDevices.filter { $0.name.localizedCaseInsensitiveContains(trimmed) }
+            if results.isEmpty && devices.isEmpty {
                 ContentUnavailableView {
                     Label("No Results", systemImage: "magnifyingglass")
                 } description: {
                     Text("No connections match “\(trimmed)”.")
                 }
-            } else if layout == .list {
+            } else if layout == .list && devices.isEmpty {
                 ConnectionList(
                     profiles: results,
                     onConnect: onConnect,
@@ -534,6 +566,7 @@ public struct LibrarySearchResultsView: View {
             } else {
                 ConnectionGrid(
                     profiles: results,
+                    devices: devices,
                     onConnect: onConnect,
                     onEdit: onEdit,
                     onDuplicate: onDuplicate,

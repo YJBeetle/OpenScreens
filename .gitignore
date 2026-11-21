@@ -13,3 +13,7 @@ apps/**/build/
 apps/**/*.xcodeproj
 apps/apple/OpenScreensCore/OpenScreensCore.xcframework/
 apps/**/build-*/
+
+/apps/apple/OpenScreensXdb/XdbCore.xcframework/
+/apps/apple/OpenScreensXdb/Sources/
+/apps/apple/OpenScreensXdb/runtime/

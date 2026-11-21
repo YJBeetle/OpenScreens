@@ -2,13 +2,36 @@ import SwiftUI
 
 /// Screen-shaped preview tile for one saved computer.
 public struct ConnectionTile: View {
-    private let profile: ConnectionProfile
+    private let name: String
+    private let detail: String
+    private let symbol: String
+    private let description: String
+    private let palette: TilePalette
+    private let isFavorite: Bool
+    private let isNearby: Bool
 
     private let preview: CGImage?
 
     public init(profile: ConnectionProfile, preview: CGImage? = nil) {
         self.preview = preview
-        self.profile = profile
+        name = profile.name
+        detail = profile.subtitle
+        symbol = profile.platform.symbolName
+        description = "\(profile.name), \(profile.platform.title), \(profile.subtitle)"
+        palette = profile.palette
+        isFavorite = profile.isFavorite
+        isNearby = profile.section == .nearby
+    }
+
+    init(nearby device: NearbyLibraryDevice) {
+        preview = nil
+        name = device.name
+        detail = device.detail
+        symbol = device.symbol
+        description = "\(device.name), \(device.detail)"
+        palette = TilePalette.allCases[0]
+        isFavorite = false
+        isNearby = true
     }
 
     public var body: some View {
@@ -22,28 +45,28 @@ public struct ConnectionTile: View {
                             .resizable()
                             .scaledToFill()
                     } else {
-                        profile.palette.gradient.overlay { motif }
+                        palette.gradient.overlay { motif }
                     }
                 }
                 .clipped()
 
             HStack(spacing: 8) {
-                Image(systemName: profile.platform.symbolName)
+                Image(systemName: symbol)
                     .foregroundStyle(.secondary)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(profile.name)
+                    Text(name)
                         .font(Theme.Typography.tileName)
                         .foregroundStyle(.primary)
-                    Text(profile.subtitle)
+                    Text(detail)
                         .font(Theme.Typography.tileDetail)
                         .foregroundStyle(.secondary)
                 }
                 .lineLimit(1)
                 Spacer(minLength: 0)
-                if profile.isFavorite {
+                if isFavorite {
                     Image(systemName: "star.fill").font(.caption).foregroundStyle(.secondary)
                 }
-                if profile.section == .nearby {
+                if isNearby {
                     StatusDot(color: Theme.Colors.success, diameter: 7)
                 }
             }
@@ -58,7 +81,7 @@ public struct ConnectionTile: View {
         }
         .shadow(color: .black.opacity(0.18), radius: 12, y: 5)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(profile.name), \(profile.platform.title), \(profile.subtitle)")
+        .accessibilityLabel(description)
         .accessibilityHint("Connects to this remote screen")
         .accessibilityAddTraits(.isButton)
     }

@@ -51,7 +51,7 @@ public struct QuickConnectView: View {
         #else
         VStack(alignment: .leading, spacing: 16) {
             HStack(spacing: 12) {
-                Image(systemName: "bolt.horizontal.circle.fill")
+                Image(systemName: "bolt.circle.fill")
                     .font(.system(size: 30))
                     .foregroundStyle(Theme.Colors.accent)
                     .accessibilityHidden(true)

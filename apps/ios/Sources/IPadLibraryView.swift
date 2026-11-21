@@ -29,7 +29,7 @@ struct IPadLibraryView: View {
                         Button {
                             activeSheet = .quickConnect
                         } label: {
-                            Label("Quick Connect", systemImage: "bolt.horizontal")
+                            Label("Quick Connect", systemImage: "bolt.fill")
                         }
                     }
 

@@ -14,14 +14,16 @@ public struct LibrarySidebar: View {
         }
     }
 
+    private let additionalNearbyCount: Int
     @Binding private var selection: LibraryDestination?
     @Environment(ConnectionStore.self) private var store
     @State private var groupDialog: GroupDialog?
     @State private var groupName = ""
     @State private var pendingDeletion: LibraryGroup?
 
-    public init(selection: Binding<LibraryDestination?>) {
+    public init(selection: Binding<LibraryDestination?>, additionalNearbyCount: Int = 0) {
         _selection = selection
+        self.additionalNearbyCount = additionalNearbyCount
     }
 
     public var body: some View {
@@ -126,7 +128,7 @@ public struct LibrarySidebar: View {
 
             Spacer(minLength: 4)
 
-            let count = store.count(in: section)
+            let count = store.count(in: section) + (section == .nearby ? additionalNearbyCount : 0)
             if count > 0 {
                 CountBadge(count: count)
             }

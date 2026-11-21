@@ -17,13 +17,13 @@ if [[ -z "$IDENTITY" ]]; then
 fi
 
 DD="$WORKSPACE/var/dd-macos-release"
-APP="$DD/Build/Products/Release/OpenScreens.app"
-ZIP="$WORKSPACE/var/OpenScreens-macos.zip"
+APP="$DD/Build/Products/Release/ScrctlGui.app"
+ZIP="$WORKSPACE/var/ScrctlGui-macos.zip"
 mkdir -p "$WORKSPACE/var"
 
 cd "$ROOT/apps/macos"
 xcodegen generate >/dev/null
-xcodebuild -project OpenScreens.xcodeproj -scheme OpenScreens -configuration Release \
+xcodebuild -project ScrctlGui.xcodeproj -scheme ScrctlGui -configuration Release \
   -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO ARCHS=arm64 ONLY_ACTIVE_ARCH=YES \
   -derivedDataPath "$DD" \
   MARKETING_VERSION="$(git -C "$ROOT" describe --tags --always --dirty)" \

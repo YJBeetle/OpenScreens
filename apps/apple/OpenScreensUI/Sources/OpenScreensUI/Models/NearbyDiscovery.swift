@@ -130,7 +130,7 @@ extension NearbyDiscovery: @preconcurrency NetServiceBrowserDelegate, @preconcur
     ) {
         isSearching = false
         failureMessage = NSLocalizedString(
-            "Nearby discovery is unavailable. Allow local network access for OpenScreens in Settings.",
+            "Nearby discovery is unavailable. Allow local network access for Scrctl in Settings.",
             comment: "Nearby discovery failure"
         )
         Self.logger.error("Bonjour search failed: \(errorDict, privacy: .public)")

@@ -1,4 +1,4 @@
-# OpenScreens
+# ScrctlGui
 
 Open-source remote desktop client for macOS, iOS and iPadOS, built on a shared Rust core.
 
@@ -58,7 +58,7 @@ git submodule update --init
 
 cd apps/macos
 xcodegen generate
-xcodebuild -project OpenScreens.xcodeproj -scheme OpenScreens \
+xcodebuild -project ScrctlGui.xcodeproj -scheme ScrctlGui \
   -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO build
 ```
 
@@ -87,7 +87,7 @@ macOS checks GitHub Releases and let you choose a channel in Settings:
 
 The `Snapshot` workflow (manual dispatch) builds and publishes:
 
-- `OpenScreens-snapshot-macos.zip` — unsigned until notarization credentials are configured
+- `ScrctlGui-snapshot-macos.zip` — unsigned until notarization credentials are configured
 
 Stable releases attach a macOS archive. iOS is distributed through the App Store.
 

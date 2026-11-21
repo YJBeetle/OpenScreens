@@ -1,4 +1,4 @@
-name: OpenScreens
+name: ScrctlGui
 
 options:
   bundleIdPrefix: app.openscreens
@@ -31,7 +31,7 @@ packages:
     path: ../apple/OpenScreensClient
 
 targets:
-  OpenScreens:
+  ScrctlGui:
     type: application
     platform: iOS
     sources:
@@ -46,9 +46,9 @@ targets:
         product: OpenScreensClient
     settings:
       base:
-        PRODUCT_NAME: OpenScreens
+        PRODUCT_NAME: ScrctlGui
         PRODUCT_BUNDLE_IDENTIFIER: org.scrctl.ios
-        CODE_SIGN_ENTITLEMENTS: OpenScreens.entitlements
+        CODE_SIGN_ENTITLEMENTS: ScrctlGui.entitlements
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         IPHONEOS_DEPLOYMENT_TARGET: "18.0"
         TARGETED_DEVICE_FAMILY: "1,2"
@@ -57,11 +57,12 @@ targets:
         SWIFT_EMIT_LOC_STRINGS: YES
 
 schemes:
-  OpenScreens:
+  ScrctlGui:
     build:
       targets:
-        OpenScreens: all
+        ScrctlGui: all
     run:
       config: Debug
     archive:
       config: Release
+      customArchiveName: ScrctlGui

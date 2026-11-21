@@ -5,7 +5,7 @@ import Foundation
 /// the same `vnc://` handler as links opened from other apps.
 public struct ConnectIntent: AppIntent {
     public static let title: LocalizedStringResource = "Connect to VNC Server"
-    public static let description = IntentDescription("Open a remote screen in OpenScreens.")
+    public static let description = IntentDescription("Open a remote screen in Scrctl.")
     public static let openAppWhenRun = true
 
     @Parameter(title: "Hostname")

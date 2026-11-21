@@ -43,7 +43,7 @@ jobs:
           marketing="${tag#v}"
           marketing="${marketing%%-*}"
           xcodegen generate
-          xcodebuild -project OpenScreens.xcodeproj -scheme OpenScreens \
+          xcodebuild -project ScrctlGui.xcodeproj -scheme ScrctlGui \
             -configuration Release -destination 'platform=macOS' \
             ARCHS=arm64 ONLY_ACTIVE_ARCH=YES \
             MARKETING_VERSION="$marketing" \
@@ -62,7 +62,7 @@ jobs:
           NOTARY_APP_PASSWORD: ${{ secrets.NOTARY_APP_PASSWORD }}
         run: |
           set -euo pipefail
-          APP="$PWD/build/Release/OpenScreens.app"
+          APP="$PWD/build/Release/ScrctlGui.app"
           NOTARIZED=false
           if [[ "${HAS_MAC_SIGNING:-false}" == "true" ]]; then
             KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
@@ -89,8 +89,8 @@ jobs:
             fi
             codesign --force --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" "$APP"
             codesign --verify --deep --strict --verbose=2 "$APP"
-            ditto -c -k --keepParent "$APP" "$RUNNER_TEMP/OpenScreens-notarize.zip"
-            xcrun notarytool submit "$RUNNER_TEMP/OpenScreens-notarize.zip" \
+            ditto -c -k --keepParent "$APP" "$RUNNER_TEMP/ScrctlGui-notarize.zip"
+            xcrun notarytool submit "$RUNNER_TEMP/ScrctlGui-notarize.zip" \
               --apple-id "$NOTARY_APPLE_ID" --password "$NOTARY_APP_PASSWORD" \
               --team-id "$APPLE_SIGNING_TEAM_ID" --wait
             xcrun stapler staple "$APP"
@@ -100,7 +100,7 @@ jobs:
           fi
           echo "notarized=$NOTARIZED" >> "$GITHUB_OUTPUT"
           ditto -c -k --sequesterRsrc --keepParent \
-            "$APP" "$GITHUB_WORKSPACE/OpenScreens-${GITHUB_REF_NAME}-macos.zip"
+            "$APP" "$GITHUB_WORKSPACE/ScrctlGui-${GITHUB_REF_NAME}-macos.zip"
       - name: Generate Sparkle update feed
         if: steps.package.outputs.notarized == 'true'
         env:
@@ -110,20 +110,20 @@ jobs:
           tag="${GITHUB_REF_NAME}"
           if [[ "$tag" == *-* ]]; then channel=prerelease; else channel=stable; fi
           python3 -B scripts/ci/update-feed.py \
-            --app "$PWD/apps/macos/build/Release/OpenScreens.app" \
-            --archive "$GITHUB_WORKSPACE/OpenScreens-${tag}-macos.zip" \
+            --app "$PWD/apps/macos/build/Release/ScrctlGui.app" \
+            --archive "$GITHUB_WORKSPACE/ScrctlGui-${tag}-macos.zip" \
             --channel "$channel" \
-            --enclosure-url "https://github.com/${{ github.repository }}/releases/download/${tag}/OpenScreens-${tag}-macos.zip" \
+            --enclosure-url "https://github.com/${{ github.repository }}/releases/download/${tag}/ScrctlGui-${tag}-macos.zip" \
             --output "$GITHUB_WORKSPACE/dist-feed"
       - uses: actions/upload-artifact@v4
         with:
-          name: OpenScreens-release-macos
-          path: OpenScreens-*-macos.zip
+          name: ScrctlGui-release-macos
+          path: ScrctlGui-*-macos.zip
           if-no-files-found: error
       - uses: actions/upload-artifact@v4
         if: steps.package.outputs.notarized == 'true'
         with:
-          name: OpenScreens-appcast
+          name: ScrctlGui-appcast
           path: dist-feed/appcast.xml
           if-no-files-found: ignore
 
@@ -133,7 +133,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          pattern: OpenScreens-release-*
+          pattern: ScrctlGui-release-*
           merge-multiple: true
           path: dist
       - name: Publish GitHub release
@@ -145,12 +145,12 @@ jobs:
           extra=()
           if [[ "$tag" == *-* ]]; then extra+=(--prerelease); fi
           gh release create "$tag" dist/* --repo "$GITHUB_REPOSITORY" \
-            --title "OpenScreens ${tag#v}" --generate-notes --verify-tag \
+            --title "ScrctlGui ${tag#v}" --generate-notes --verify-tag \
             "${extra[@]}"
       - uses: actions/download-artifact@v4
         continue-on-error: true
         with:
-          name: OpenScreens-appcast
+          name: ScrctlGui-appcast
           path: feed
       - name: Publish Sparkle update feed
         env:
@@ -165,6 +165,6 @@ jobs:
             gh release upload appcast feed/appcast.xml --repo "$GITHUB_REPOSITORY" --clobber
           else
             gh release create appcast feed/appcast.xml --repo "$GITHUB_REPOSITORY" \
-              --title "Update feed" --notes "Sparkle appcast for OpenScreens." \
+              --title "Update feed" --notes "Sparkle appcast for ScrctlGui." \
               --prerelease --latest=false
           fi

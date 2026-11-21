@@ -1,10 +1,10 @@
 /*
    Localizable.strings (zh-Hans)
-   OpenScreens Apple apps — Simplified Chinese.
+   Scrctl Apple apps — Simplified Chinese.
 
    English is the development language: the keys are the English source
    strings, so a missing entry simply falls back to English at runtime.
-   Protocol and product names (VNC, SSH, WireGuard, OpenScreens)
+   Protocol and product names (VNC, SSH, WireGuard, Scrctl)
    are intentionally left untranslated.
 */
 
@@ -68,7 +68,7 @@
 "Discovered nearby" = "附近发现";
 "%@ · Nearby" = "%@ · 附近";
 "Save to Library" = "保存到连接库";
-"Nearby discovery is unavailable. Allow local network access for OpenScreens in Settings." = "附近发现不可用。请在设置中允许 OpenScreens 访问本地网络。";
+"Nearby discovery is unavailable. Allow local network access for Scrctl in Settings." = "附近发现不可用。请在设置中允许 Scrctl 访问本地网络。";
 "Tile colour" = "卡片颜色";
 "Tile Colour" = "卡片颜色";
 "Connects to this remote screen" = "连接到这台远程屏幕";
@@ -280,7 +280,7 @@
 "No File Transfers" = "暂无文件传输";
 "Sent to %@" = "已发送至 %@";
 "Saved in %@" = "已保存于 %@";
-"On My iPhone or iPad / OpenScreens / Downloads / %@" = "在我的 iPhone 或 iPad 上 / OpenScreens / Downloads / %@";
+"On My iPhone or iPad / Scrctl / Downloads / %@" = "在我的 iPhone 或 iPad 上 / Scrctl / Downloads / %@";
 "Show in Finder" = "在访达中显示";
 "Open" = "打开";
 "Share" = "共享";
@@ -337,7 +337,7 @@
 "Defaults apply to new connections. Existing connections keep their own settings." = "默认设置会应用于新连接。现有连接保留各自的设置。";
 "Restore Sample Connections" = "恢复示例连接";
 "Discover Nearby Computers" = "自动发现附近电脑";
-"OpenScreens uses Bonjour to find computers sharing their screen on your local network. Local network access may be requested the first time. Restoring samples adds the demo computers without removing anything you saved." = "OpenScreens 使用 Bonjour 发现本地网络中共享屏幕的电脑。首次使用时系统可能会请求本地网络权限。恢复示例只会重新加入演示电脑，不会移除你已保存的内容。";
+"Scrctl uses Bonjour to find computers sharing their screen on your local network. Local network access may be requested the first time. Restoring samples adds the demo computers without removing anything you saved." = "Scrctl 使用 Bonjour 发现本地网络中共享屏幕的电脑。首次使用时系统可能会请求本地网络权限。恢复示例只会重新加入演示电脑，不会移除你已保存的内容。";
 "Restore sample connections?" = "恢复示例连接？";
 "Restore Samples" = "恢复示例";
 "The demo hosts are added to your library again. Existing connections are kept." = "演示主机会重新加入连接库，现有连接会保留。";
@@ -345,7 +345,7 @@
 "Protocol" = "协议";
 "Transport" = "传输方式";
 "Direct connection" = "直接连接";
-"OpenScreens is open source software, licensed under AGPL-3.0." = "OpenScreens 是开源软件，采用 AGPL-3.0 许可。";
+"Scrctl is open source software, licensed under AGPL-3.0." = "Scrctl 是开源软件，采用 AGPL-3.0 许可。";
 "About" = "关于";
 
 /* MARK: - Updates (macOS) */
@@ -414,7 +414,7 @@
 
 /* MARK: - Shortcuts */
 "Connect to VNC Server" = "连接到 VNC 服务器";
-"Open a remote screen in OpenScreens." = "在 OpenScreens 中打开远程屏幕。";
+"Open a remote screen in Scrctl." = "在 Scrctl 中打开远程屏幕。";
 "Enter a hostname or IP address." = "请输入主机名或 IP 地址。";
 "The port must be between 1 and 65535." = "端口必须在 1 到 65535 之间。";
 
@@ -433,7 +433,7 @@
 "Port defaults to 5900." = "端口默认为 5900。";
 
 /* MARK: - App lock */
-"OpenScreens is Locked" = "OpenScreens 已锁定";
+"Scrctl is Locked" = "Scrctl 已锁定";
 "Unlock to access your saved connections." = "解锁后可访问已保存的连接。";
 "Unlock with Face ID" = "使用 Face ID 解锁";
 "Unlock with Touch ID" = "使用 Touch ID 解锁";
@@ -444,7 +444,7 @@
 "Require Biometrics" = "需要生物识别";
 "Authentication is unavailable." = "当前无法使用身份验证。";
 "Authentication failed. Try again." = "验证失败，请重试。";
-"OpenScreens locks when you leave the app. Unlock with %@. Imported SSH keys are kept in the Keychain." = "离开 OpenScreens 后会自动锁定，使用 %@ 解锁。导入的 SSH 密钥保存在钥匙串中。";
+"Scrctl locks when you leave the app. Unlock with %@. Imported SSH keys are kept in the Keychain." = "离开 Scrctl 后会自动锁定，使用 %@ 解锁。导入的 SSH 密钥保存在钥匙串中。";
 "Remote Commands" = "远端命令";
 "Mission Control" = "调度中心";
 "Application Windows" = "应用程序窗口";

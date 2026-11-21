@@ -107,7 +107,7 @@ struct SessionFileTransfers: View {
     private func localFolder(for item: SessionTransferItem) -> String {
         #if os(iOS)
         return String(
-            format: NSLocalizedString("On My iPhone or iPad / OpenScreens / Downloads / %@", comment: "Location in the Files app"),
+            format: NSLocalizedString("On My iPhone or iPad / Scrctl / Downloads / %@", comment: "Location in the Files app"),
             item.url?.deletingLastPathComponent().lastPathComponent ?? ""
         )
         #else

@@ -19,7 +19,7 @@ struct OpenScreensMacApp: App {
     }
 
     var body: some Scene {
-        Window("OpenScreens", id: MacSceneID.library) {
+        Window("Scrctl", id: MacSceneID.library) {
             MacLibraryView()
                 .nearbyDiscoveryLifecycle()
                 .environment(connections)
@@ -65,7 +65,7 @@ struct OpenScreensMacApp: App {
         .defaultSize(width: 1120, height: 760)
         .commands { SessionMenuCommands() }
 
-        MenuBarExtra("OpenScreens", systemImage: "display") {
+        MenuBarExtra("Scrctl", systemImage: "display") {
             MacMenuBarContent(updater: updater)
                 .environment(connections)
         }

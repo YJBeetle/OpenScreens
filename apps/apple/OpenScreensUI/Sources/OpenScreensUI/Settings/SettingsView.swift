@@ -153,7 +153,7 @@ public struct SettingsView: View {
             } header: {
                 Text("Updates")
             } footer: {
-                Text("Release receives stable builds, pre-release includes betas, and snapshot follows development builds. Use Check for Updates in the OpenScreens menu.")
+                Text("Release receives stable builds, pre-release includes betas, and snapshot follows development builds. Use Check for Updates in the Scrctl menu.")
             }
             #endif
 
@@ -170,7 +170,7 @@ public struct SettingsView: View {
                 Text("Security")
             } footer: {
                 if AppLock.isAvailable {
-                    Text("OpenScreens locks when you leave the app. Unlock with \(AppLock.biometryName). Imported SSH keys are kept in the Keychain.")
+                    Text("Scrctl locks when you leave the app. Unlock with \(AppLock.biometryName). Imported SSH keys are kept in the Keychain.")
                 } else {
                     Text("Private keys imported for SSH tunnels are kept in the Keychain.")
                 }
@@ -186,7 +186,7 @@ public struct SettingsView: View {
             } header: {
                 Text("Library")
             } footer: {
-                Text("OpenScreens uses Bonjour to find computers sharing their screen on your local network. Local network access may be requested the first time. Restoring samples adds the demo computers without removing anything you saved.")
+                Text("Scrctl uses Bonjour to find computers sharing their screen on your local network. Local network access may be requested the first time. Restoring samples adds the demo computers without removing anything you saved.")
             }
 
             Section {
@@ -194,7 +194,7 @@ public struct SettingsView: View {
                 LabeledContent("Protocol", value: "RFB (VNC)")
                 LabeledContent("Transport", value: NSLocalizedString("Direct connection", comment: "Transport kind"))
 
-                Text("OpenScreens is open source software, licensed under AGPL-3.0.")
+                Text("Scrctl is open source software, licensed under AGPL-3.0.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } header: {

@@ -125,8 +125,8 @@ struct MacLibraryView: View {
         if isSearching { return NSLocalizedString("Search", comment: "Navigation title") }
         switch selection {
         case .section(let section): return section.screenTitle
-        case .group(let groupID): return store.group(id: groupID)?.name ?? "OpenScreens"
-        case nil: return "OpenScreens"
+        case .group(let groupID): return store.group(id: groupID)?.name ?? "Scrctl"
+        case nil: return "Scrctl"
         }
     }
 

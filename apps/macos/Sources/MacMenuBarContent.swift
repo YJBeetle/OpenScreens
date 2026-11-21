@@ -55,7 +55,7 @@ struct MacMenuBarContent: View {
 
         Divider()
 
-        Button("Quit OpenScreens") {
+        Button("Quit Scrctl") {
             NSApp.terminate(nil)
         }
         .keyboardShortcut("q")

@@ -1,4 +1,4 @@
-# OpenScreens
+# ScrctlGui
 
 开源远程桌面客户端，目标平台 macOS、iOS 与 iPadOS，协议核心由 Rust 共享。
 
@@ -56,7 +56,7 @@ git submodule update --init
 
 cd apps/macos
 xcodegen generate
-xcodebuild -project OpenScreens.xcodeproj -scheme OpenScreens \
+xcodebuild -project ScrctlGui.xcodeproj -scheme ScrctlGui \
   -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO build
 ```
 

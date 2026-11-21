@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>OpenScreens</string>
+	<string>Scrctl</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -13,7 +13,7 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>$(PRODUCT_NAME)</string>
+	<string>Scrctl</string>
 	<key>CFBundlePackageType</key>
 	<string>$(PRODUCT_BUNDLE_PACKAGE_TYPE)</string>
 	<key>CFBundleShortVersionString</key>
@@ -42,7 +42,7 @@
 	<key>NSHumanReadableCopyright</key>
 	<string>AGPL-3.0 · OpenScreens contributors</string>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>OpenScreens discovers nearby computers that share their screen on your local network.</string>
+	<string>Scrctl discovers nearby computers that share their screen on your local network.</string>
 	<key>OpenScreensBuildVersion</key>
 	<string>$(OPENSCREENS_BUILD_VERSION)</string>
 	<key>SUEnableAutomaticChecks</key>

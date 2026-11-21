@@ -135,7 +135,7 @@ enum PlatformScreen {
             let result = IOPMAssertionCreateWithName(
                 kIOPMAssertionTypePreventUserIdleSystemSleep as CFString,
                 IOPMAssertionLevel(kIOPMAssertionLevelOn),
-                "OpenScreens session" as CFString,
+                "Scrctl session" as CFString,
                 &newAssertion
             )
             if result == kIOReturnSuccess {

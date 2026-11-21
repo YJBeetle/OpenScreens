@@ -19,7 +19,7 @@ import urllib.error
 import urllib.request
 import xml.etree.ElementTree as ET
 
-REPOSITORY = 'YJBeetle/OpenScreens'
+REPOSITORY = 'scrctl/scrctl-gui-apple'
 SPARKLE_URL = 'https://github.com/sparkle-project/Sparkle/releases/download/2.10.0/Sparkle-for-Swift-Package-Manager.zip'
 SPARKLE_SHA256 = '17e28312b8e18ab7cdbbe09a6fb28cc55a5479ec6c371dbc07cdecd2a14fd959'
 FEED_URL = f'https://github.com/{REPOSITORY}/releases/download/appcast/appcast.xml'
@@ -93,10 +93,10 @@ def make_item(channel, info, enclosure, length, signature):
             raise ValueError('Stable builds need a numeric CFBundleShortVersionString')
         short_version = marketing
         tag = f'v{marketing}'
-        title = f'OpenScreens {marketing}'
+        title = f'ScrctlGui {marketing}'
     else:
         short_version = label if not label.startswith('$(') else marketing
-        title = f'OpenScreens {short_version}'
+        title = f'ScrctlGui {short_version}'
 
     item = ET.Element('item')
     ET.SubElement(item, 'title').text = title
@@ -125,7 +125,7 @@ def merge(existing, item):
     else:
         root = ET.Element('rss', version='2.0')
         channel = ET.SubElement(root, 'channel')
-        ET.SubElement(channel, 'title').text = 'OpenScreens'
+        ET.SubElement(channel, 'title').text = 'ScrctlGui'
         ET.SubElement(channel, 'link').text = f'https://github.com/{REPOSITORY}/releases'
 
     existing_items = channel.findall('item')

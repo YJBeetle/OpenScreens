@@ -196,7 +196,7 @@ struct AppLockView: View {
                     .font(.system(size: 46, weight: .semibold))
                     .foregroundStyle(.secondary)
 
-                Text("OpenScreens is Locked")
+                Text("Scrctl is Locked")
                     .font(.title2.weight(.semibold))
 
                 Text("Unlock to access your saved connections.")

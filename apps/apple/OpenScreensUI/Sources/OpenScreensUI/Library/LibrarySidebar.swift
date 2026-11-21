@@ -47,7 +47,7 @@ public struct LibrarySidebar: View {
             }
         }
         .listStyle(.sidebar)
-        .navigationTitle("OpenScreens")
+        .navigationTitle("Scrctl")
         .alert(dialogTitle, isPresented: dialogBinding) {
             TextField("Group Name", text: $groupName)
             Button("Save") {

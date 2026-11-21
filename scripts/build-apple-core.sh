@@ -59,6 +59,13 @@ xcodebuild -create-xcframework \
   -output "$OUT/OpenScreensCore.xcframework"
 
 mkdir -p "$OUT/Sources/OpenScreensCore"
-cp target/apple-bindings/rfb_ffi.swift "$OUT/Sources/OpenScreensCore/rfb_ffi.swift"
+binding="$OUT/Sources/OpenScreensCore/rfb_ffi.swift"
+generated="target/apple-bindings/rfb_ffi.swift"
+# UniFFI can vary trailing whitespace without changing the binding.
+if [[ ! -f "$binding" ]] || ! cmp -s \
+  <(sed 's/[[:blank:]]*$//' "$generated") \
+  <(sed 's/[[:blank:]]*$//' "$binding"); then
+  cp "$generated" "$binding"
+fi
 
 echo "Apple core built at $OUT"

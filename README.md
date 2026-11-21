@@ -1,6 +1,6 @@
 # OpenScreens
 
-Open-source remote desktop client for macOS, iOS, iPadOS and Android, built on a shared Rust core.
+Open-source remote desktop client for macOS, iOS and iPadOS, built on a shared Rust core.
 
 ## Status
 
@@ -16,7 +16,6 @@ Implemented:
 - Compose Material 3 app for Android
 - Apple Screen Sharing 3.889 sessions: AES-encrypted pointer/keyboard input, Apple clipboard messages, display-list pseudo-encodings, display switching, and drag-and-drop file upload
 - File transfer: Android upload picker and remote-path download with progress; drag-and-drop upload on the Apple apps
-- Android direct-touch and trackpad pointer modes, view-centre pinch zoom, and two-finger pan
 - Userspace WireGuard transport (`rfb-tunnel` + `TunnelDialer`) with Android wg-quick config import; OpenVPN and WireGuard runtime acceptance are pending
 - Apple Adaptive DCT (1011): type-0/type-2 decoding validated against live 3.889 streams and negotiated first; type-1 coefficient refinement and explicit/sequential cache reads tested against synthetic Screens 5.9 vectors. Unsupported copy references fall back to standard encodings with a full refresh
 
@@ -38,7 +37,6 @@ apps/apple/OpenScreensCore/ generated Swift bindings (XCFramework built locally)
 apps/apple/OpenScreensClient/ UniFFI session adapter
 apps/macos/                macOS app shell
 apps/ios/                  iOS/iPadOS app shell
-apps/android/              Compose Material 3 app
 ```
 
 ## Build
@@ -73,17 +71,7 @@ For a signed and notarized macOS build (requires a Developer ID identity and a
 DEVELOPER_ID_IDENTITY="Developer ID Application: ..." ./scripts/notarize-macos.sh <notarytool-profile>
 ```
 
-Android (after changing the Rust core, rebuild the native libraries):
-
-```sh
-export ANDROID_NDK_HOME="$HOME/Library/Android/sdk/ndk/27.2.12479018"
-./scripts/build-android-core.sh
-
-cd apps/android
-./gradlew :app:assembleRelease
-```
-
-Release signing reads `apps/android/keystore.properties` when present and falls back to debug signing otherwise. The test keystore is local and not committed.
+See [scrctl-gui-android](https://github.com/scrctl/scrctl-gui-android) for the Android client.
 
 ## License
 
@@ -91,7 +79,7 @@ AGPL-3.0. See [LICENSE-AGPL](LICENSE-AGPL).
 
 ## Updates
 
-Android and macOS check GitHub Releases and let you choose a channel in Settings:
+macOS checks GitHub Releases and let you choose a channel in Settings:
 
 - **Release** — stable `vX.Y.Z` releases only
 - **Pre-release** — the newest release including betas (the rolling `snapshot` tag is excluded)
@@ -99,9 +87,8 @@ Android and macOS check GitHub Releases and let you choose a channel in Settings
 
 The `Snapshot` workflow (manual dispatch) builds and publishes:
 
-- `OpenScreens-snapshot-android.apk` — signed with the release key from the `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` and `ANDROID_KEY_PASSWORD` secrets
 - `OpenScreens-snapshot-macos.zip` — unsigned until notarization credentials are configured
 
-Stable releases must attach an Android `.apk` and a macOS `.dmg` or `.zip` with names containing `android` / `macos`. On Android the update card's primary action opens the GitHub release page; the in-app download that hands the APK to the system installer remains available. iOS is distributed through the App Store and does not use this updater.
+Stable releases attach a macOS archive. iOS is distributed through the App Store.
 
-Release signing uses repository secrets `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` and `ANDROID_KEY_PASSWORD`. The `Build` environment holds the macOS Apple ID notarization secrets (`NOTARY_APPLE_ID`, `NOTARY_APP_PASSWORD`), the variables `SIGNING_IDENTITY` / `SIGNING_TEAM_ID`, and the `APPLE_CERTIFICATE_P12_BASE64` / `APPLE_CERTIFICATE_PASSWORD` secrets. Without the certificate secrets the snapshot macOS build is packaged unsigned.
+The `Build` environment holds the macOS Apple ID notarization secrets (`NOTARY_APPLE_ID`, `NOTARY_APP_PASSWORD`), the variables `SIGNING_IDENTITY` / `SIGNING_TEAM_ID`, and the `APPLE_CERTIFICATE_P12_BASE64` / `APPLE_CERTIFICATE_PASSWORD` secrets. Without the certificate secrets the snapshot macOS build is packaged unsigned.

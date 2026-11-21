@@ -46,61 +46,6 @@ jobs:
         run: cargo test --workspace
         working-directory: vendor/scrctl/core
 
-  android:
-    runs-on: ubuntu-latest
-    env:
-      HAS_ANDROID_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          submodules: true
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "17"
-      - uses: android-actions/setup-android@v3
-        with:
-          packages: "platform-tools platforms;android-36 build-tools;35.0.0 ndk;27.2.12479018"
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: vendor/scrctl/core
-      - name: Build Android core
-        run: |
-          export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/27.2.12479018"
-          cargo install cargo-ndk --locked --version 4.1.2
-          ./scripts/build-android-core.sh
-      - name: Configure release signing
-        if: env.HAS_ANDROID_KEYSTORE == 'true'
-        working-directory: apps/android
-        env:
-          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-          STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-        run: |
-          mkdir -p keystore
-          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > keystore/release.jks
-          umask 077
-          cat > keystore.properties <<EOF
-          storeFile=keystore/release.jks
-          storePassword=$STORE_PASSWORD
-          keyAlias=$KEY_ALIAS
-          keyPassword=$KEY_PASSWORD
-          EOF
-      - name: Build release APK
-        working-directory: apps/android
-        run: |
-          chmod +x gradlew
-          ./gradlew :app:assembleRelease --no-daemon
-      - uses: actions/upload-artifact@v4
-        with:
-          name: OpenScreens-android-release
-          path: apps/android/app/build/outputs/apk/release/*.apk
-
   apple:
     runs-on: macos-26
     steps:

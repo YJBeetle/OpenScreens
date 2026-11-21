@@ -104,7 +104,7 @@ jobs:
       - name: Generate Sparkle update feed
         if: steps.package.outputs.notarized == 'true'
         env:
-          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+          SPARKLE_PRIVATE_KEY: ${{ secrets.BUILD_SPARKLE_PRIVATE_KEY }}
         run: |
           set -euo pipefail
           tag="${GITHUB_REF_NAME}"

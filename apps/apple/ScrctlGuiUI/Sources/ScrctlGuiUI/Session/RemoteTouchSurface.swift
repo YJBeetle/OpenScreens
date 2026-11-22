@@ -235,18 +235,19 @@ final class TouchGestureView: UIView, UIGestureRecognizerDelegate {
                     heldTransformDistance = distance
                     handlers?.onHeldTransformBegan(focal)
                 }
-            } else if let point = points.first {
+            } else {
                 if heldTransformDistance != nil {
                     heldTransformDistance = nil
                     handlers?.onPinchEnded()
                 }
-                if let last = heldFingerPosition, !gesture.touchSetChanged, last != point {
+                if let point = points.first, let last = heldFingerPosition,
+                   !gesture.touchSetChanged, last != point {
                     handlers?.onHeldDragMoved(
                         CGPoint(x: point.x - last.x, y: point.y - last.y),
                         !heldDragNavigated
                     )
                 }
-                heldFingerPosition = point
+                heldFingerPosition = points.first
             }
         case .ended, .cancelled:
             pressActive = false
@@ -291,11 +292,15 @@ final class TouchGestureView: UIView, UIGestureRecognizerDelegate {
 /// touch-count changes so the user can navigate without dropping the drag.
 final class HeldDragGestureRecognizer: UIGestureRecognizer {
     private var fingers: [UITouch] = []
+    private var holdFinger: UITouch?
     private var initialPosition = CGPoint.zero
     private var timer: Timer?
     private(set) var touchSetChanged = false
 
-    var points: [CGPoint] { fingers.map { $0.location(in: view) } }
+    var points: [CGPoint] {
+        let controls = fingers.count == 1 ? fingers : fingers.filter { $0 !== holdFinger }
+        return controls.map { $0.location(in: view) }
+    }
 
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent) {
         fingers.append(contentsOf: touches)
@@ -314,6 +319,7 @@ final class HeldDragGestureRecognizer: UIGestureRecognizer {
 
     override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent) {
         if state == .began || state == .changed {
+            guard fingers.count == 1 || touches.contains(where: { $0 !== holdFinger }) else { return }
             touchSetChanged = false
             state = .changed
         } else if let point = points.first,
@@ -324,6 +330,7 @@ final class HeldDragGestureRecognizer: UIGestureRecognizer {
 
     override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent) {
         fingers.removeAll { touches.contains($0) }
+        if let holdFinger, touches.contains(holdFinger) { self.holdFinger = fingers.first }
         guard state == .began || state == .changed else {
             state = .failed
             return
@@ -340,12 +347,14 @@ final class HeldDragGestureRecognizer: UIGestureRecognizer {
         timer?.invalidate()
         timer = nil
         fingers.removeAll()
+        holdFinger = nil
         touchSetChanged = false
         super.reset()
     }
 
     @objc private func recognizeHold() {
         guard state == .possible, fingers.count == 1 else { return }
+        holdFinger = fingers.first
         state = .began
     }
 }

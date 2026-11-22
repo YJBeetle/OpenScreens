@@ -234,7 +234,19 @@ public struct SessionScreen: View {
             .ignoresSafeArea(.container)
         }
         #else
-        RemoteCanvasView(renderer: model.renderer, contentMode: model.scaling)
+        GeometryReader { geometry in
+            let size = geometry.size
+            let pixelWidth = size.width * displayScale
+            RemoteCanvasView(
+                renderer: model.renderer,
+                contentMode: model.scaling,
+                imageRect: model.displayedImageRect(in: size),
+                containerSize: size
+            )
+            .onChange(of: [size, CGSize(width: pixelWidth, height: 0)], initial: true) {
+                model.scheduleViewportUpdate(in: size, screenPixelWidth: pixelWidth)
+            }
+        }
         #endif
     }
 

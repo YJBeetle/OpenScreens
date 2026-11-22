@@ -361,10 +361,8 @@ private struct SessionToolbarControl: View {
                 }
             }
             Section("Scaling") {
-                #if os(iOS)
                 Button("Actual Size (1:1)", systemImage: "1.magnifyingglass") { model.showActualSize() }
                 Button("Fit Entire Desktop", systemImage: "arrow.up.left.and.arrow.down.right") { model.resetZoom() }
-                #endif
                 Picker("Scaling", selection: scalingBinding) {
                     ForEach([RemoteContentMode.fit, .fill]) { mode in
                         Text(mode.title).tag(mode)

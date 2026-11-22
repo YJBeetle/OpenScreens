@@ -497,3 +497,5 @@
 "The order applies to all connections. Each session only shows supported actions." = "此顺序适用于所有连接。会话只显示支持的操作。";
 "Waiting for the remote screen" = "正在等待远程画面";
 "The connection timed out." = "连接超时。";
+"Actual Size (1:1)" = "实际大小（1:1）";
+"Fit Entire Desktop" = "完整显示";

@@ -78,19 +78,29 @@ final class RemoteCanvasMetalView: MTKView {
 public struct RemoteCanvasView: NSViewRepresentable {
     private let renderer: RemoteCanvasRenderer
     private let contentMode: RemoteContentMode
+    private let imageRect: CGRect?
+    private let containerSize: CGSize
 
-    public init(renderer: RemoteCanvasRenderer, contentMode: RemoteContentMode = .fit) {
+    public init(
+        renderer: RemoteCanvasRenderer,
+        contentMode: RemoteContentMode = .fit,
+        imageRect: CGRect? = nil,
+        containerSize: CGSize = .zero
+    ) {
         self.renderer = renderer
         self.contentMode = contentMode
+        self.imageRect = imageRect
+        self.containerSize = containerSize
     }
 
     public func makeNSView(context: Context) -> NSView {
-        renderer.contentMode = contentMode
-        return RemoteCanvasMetalView(renderer: renderer)
+        RemoteCanvasMetalView(renderer: renderer)
     }
 
     public func updateNSView(_ nsView: NSView, context: Context) {
         renderer.contentMode = contentMode
+        renderer.imageRect = imageRect
+        renderer.containerSize = containerSize
     }
 }
 #else

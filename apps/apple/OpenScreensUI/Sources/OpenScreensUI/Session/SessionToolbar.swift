@@ -230,6 +230,7 @@ private struct SessionToolbarControl: View {
         } label: {
             menuIcon(model.cursorMode.systemImage, title: "Cursor mode")
         }
+        .menuOrder(.fixed)
         .menuIndicator(.hidden)
         .buttonStyle(.plain)
         .accessibilityLabel("Cursor mode")

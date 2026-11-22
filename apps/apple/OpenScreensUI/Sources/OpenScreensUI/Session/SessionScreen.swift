@@ -357,26 +357,12 @@ public struct SessionScreen: View {
     @ViewBuilder
     private var chrome: some View {
         if model.showsChrome {
-            ZStack {
-                VStack(spacing: 6) {
-                    sessionDebugInfo
-                    HStack(alignment: .top) {
-                        Spacer(minLength: 0)
-                        statusHeader
-                        Spacer(minLength: 0)
-                    }
-                    Spacer(minLength: 0)
-                }
-
-                toolbarChrome
-            }
-            .padding(.horizontal, 12)
-            .padding(.top, 10)
-            .padding(.bottom, 10)
-            .transition(.opacity)
+            toolbarChrome
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .transition(.opacity)
         } else {
-            VStack(spacing: 6) {
-                sessionDebugInfo
+            VStack {
                 HStack {
                     Spacer()
                     showToolbarButton
@@ -386,32 +372,6 @@ public struct SessionScreen: View {
             .padding(12)
             .transition(.opacity)
         }
-    }
-
-    @ViewBuilder
-    private var sessionDebugInfo: some View {
-        if settings.settings.showDebugInfo {
-            HStack {
-                if let size = model.serverSize, size.width > 0, size.height > 0, !model.isObserving {
-                    let x = min(Int((model.remoteCursor.x * size.width).rounded()), Int(size.width) - 1)
-                    let y = min(Int((model.remoteCursor.y * size.height).rounded()), Int(size.height) - 1)
-                    debugBadge("X \(x)  Y \(y)")
-                }
-                Spacer(minLength: 8)
-                debugBadge("\(Double(model.zoom).formatted(.number.precision(.fractionLength(1))))×")
-            }
-            .environment(\.layoutDirection, .leftToRight)
-            .allowsHitTesting(false)
-        }
-    }
-
-    private func debugBadge(_ text: String) -> some View {
-        Text(verbatim: text)
-            .font(.caption.monospacedDigit())
-            .lineLimit(1)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .glassSurface(in: RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 
     @ViewBuilder
@@ -559,47 +519,6 @@ public struct SessionScreen: View {
         )
     }
 
-    private var statusHeader: some View {
-        HStack(spacing: 10) {
-            StatusDot(color: statusColor, diameter: 9)
-
-            VStack(alignment: .leading, spacing: 1) {
-                Text(model.profile.name)
-                    .font(Theme.Typography.overlayTitle)
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
-
-                Text(connectionDetail)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                #if DEBUG && os(iOS)
-                if settings.settings.showDebugInfo, let presentation = model.renderer.presentation {
-                    Text(firstFrameDetail(presentation.stage))
-                        .font(.caption2.monospacedDigit())
-                        .foregroundStyle(.white.opacity(0.7))
-                }
-                #endif
-            }
-
-            if model.isObserving {
-                Text("Observe")
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(Theme.Colors.warning)
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 2)
-                    .background(Theme.Colors.warning.opacity(0.16), in: Capsule())
-                    .accessibilityLabel("Observe mode is on")
-            }
-
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .glassSurface(in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .frame(maxWidth: 430)
-        .accessibilityElement(children: .combine)
-    }
-
     private var connectingOverlay: some View {
         ZStack {
             Theme.Colors.canvas.opacity(0.55)
@@ -726,7 +645,7 @@ public struct SessionScreen: View {
                 .padding(.vertical, 8)
                 .glassSurface(in: Capsule())
                 .frame(maxWidth: 420)
-                .padding(.top, model.showsChrome ? 74 : 16)
+                .padding(.top, 16)
 
                 Spacer()
             }
@@ -798,36 +717,6 @@ public struct SessionScreen: View {
     }
 
     // MARK: - State helpers
-
-    private var statusColor: Color {
-        switch model.state {
-        case .connected: Theme.Colors.success
-        case .connecting, .reconnecting: Theme.Colors.warning
-        case .disconnected: Theme.Colors.danger
-        case .idle: .secondary
-        }
-    }
-
-    #if DEBUG && os(iOS)
-    private func firstFrameDetail(_ stage: CanvasPresentation.Stage) -> String {
-        guard let hasColor = model.firstUpdateHasColor else { return "RFB · waiting for pixels" }
-        let input = hasColor ? "first update has color" : "first update RGB black"
-        let output = switch stage {
-        case .waiting: "waiting for upload"
-        case .uploaded: "uploaded"
-        case .submitted: "submitted"
-        case .presented: "presented"
-        }
-        return "RFB · \(input) · Metal \(output)"
-    }
-    #endif
-
-    private var connectionDetail: String {
-        if let size = model.serverSize ?? model.framebufferSize {
-            return "\(Int(size.width)) × \(Int(size.height)) · \(model.cursorMode.title)"
-        }
-        return model.state.label
-    }
 
     private var accessibilityStatus: String {
         String(

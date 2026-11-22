@@ -109,7 +109,6 @@ public struct SettingsView: View {
 
             Section {
                 Toggle("Show Toolbar on Launch", isOn: $settings.settings.showToolbarOnLaunch)
-                Toggle("Show Debug Info", isOn: $settings.settings.showDebugInfo)
 
                 ForEach(orderedToolbarItems) { item in
                     HStack(spacing: 6) {

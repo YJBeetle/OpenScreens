@@ -485,4 +485,3 @@
 "Remote action before disconnecting: %@" = "断开连接前将在远端执行：%@";
 "Hot Corner — %@" = "触发角 — %@";
 "Screen Mirroring" = "屏幕镜像";
-"Show Debug Info" = "显示调试信息";

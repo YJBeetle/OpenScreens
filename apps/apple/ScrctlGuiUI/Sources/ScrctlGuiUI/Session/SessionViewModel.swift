@@ -161,6 +161,7 @@ public final class SessionViewModel {
     #endif
     @ObservationIgnored private var eventTask: Task<Void, Never>?
     @ObservationIgnored private var connectTask: Task<Void, Never>?
+    @ObservationIgnored private var connectionDeadlineTask: Task<Void, Never>?
     @ObservationIgnored private var reconnectTask: Task<Void, Never>?
     @ObservationIgnored private var messageTask: Task<Void, Never>?
     @ObservationIgnored private var dragAnchor: CGPoint?
@@ -392,6 +393,18 @@ public final class SessionViewModel {
         let password = sessionPassword
         let macSessionChoice = selectedMacSession
         profile.controls.sharedClipboard = sharedClipboard
+        connectionDeadlineTask = Task { [weak self] in
+            do {
+                try await Task.sleep(for: .seconds(45))
+            } catch {
+                return
+            }
+            guard let self, !self.state.isConnected else { return }
+            self.handleTransportFailure(RemoteSessionFailure(
+                kind: .network,
+                reason: NSLocalizedString("The connection timed out.", comment: "Connection timeout")
+            ), isReconnect: isReconnect)
+        }
         connectTask = Task { [weak self, session, profile] in
             do {
                 try await session.connect(profile: profile, password: password, macSessionChoice: macSessionChoice)
@@ -421,6 +434,8 @@ public final class SessionViewModel {
         resetClipboard()
         session = nil
         resetDisplaySelection()
+        connectionDeadlineTask?.cancel()
+        connectionDeadlineTask = nil
         connectTask?.cancel()
         connectTask = nil
         eventTask?.cancel()
@@ -440,6 +455,8 @@ public final class SessionViewModel {
             let wasConnected = state.isConnected
             state = newState
             if newState.isConnected {
+                connectionDeadlineTask?.cancel()
+                connectionDeadlineTask = nil
                 if !wasConnected { scheduleCurrentViewport() }
                 if rememberLogin, let sessionPassword {
                     if store?.rememberLogin(for: profile, username: loginUsername, password: sessionPassword) != true {

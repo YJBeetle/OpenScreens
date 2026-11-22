@@ -496,3 +496,5 @@
 "Move to More" = "移到更多菜单";
 "Add to Toolbar" = "添加到工具栏";
 "The order applies to all connections. Each session only shows supported actions." = "此顺序适用于所有连接。会话只显示支持的操作。";
+"Waiting for the remote screen" = "正在等待远程画面";
+"The connection timed out." = "连接超时。";

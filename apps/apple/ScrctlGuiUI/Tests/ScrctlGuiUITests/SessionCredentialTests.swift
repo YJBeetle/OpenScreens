@@ -117,6 +117,23 @@ final class SessionCredentialTests: XCTestCase {
         try await verifyNoFurtherHandshakes(service)
     }
 
+    func testCancelDuringHandshakeStopsTheTransportAndDoesNotRetry() async throws {
+        let service = LoginService()
+        await service.log.stallNextHandshake()
+        let model = SessionViewModel(profile: ConnectionProfile(name: "Test", host: "localhost"), service: service)
+        defer { model.stop() }
+
+        model.start()
+        try await wait { await service.log.handshakes == 1 }
+        XCTAssertEqual(model.state, .connecting)
+
+        model.disconnect()
+        XCTAssertTrue(model.state.isTerminal)
+        try await wait { await service.log.cancelledHandshakes == 1 }
+        let handshakes = await service.log.handshakes
+        XCTAssertEqual(handshakes, 1)
+    }
+
     func testFirstNetworkFailureWaitsForUser() async throws {
         let service = LoginService()
         let model = SessionViewModel(profile: ConnectionProfile(name: "Test", host: "localhost"), service: service)
@@ -146,9 +163,9 @@ final class SessionCredentialTests: XCTestCase {
         try await wait { model.state.isConnected }
     }
 
-    private func wait(timeout: Duration = .seconds(5), until condition: () -> Bool) async throws {
+    private func wait(timeout: Duration = .seconds(5), until condition: () async -> Bool) async throws {
         let deadline = ContinuousClock.now + timeout
-        while !condition() {
+        while !(await condition()) {
             guard ContinuousClock.now < deadline else {
                 throw NSError(domain: "SessionCredentialTests.Timeout", code: 1)
             }
@@ -161,14 +178,29 @@ private actor LoginLog {
     var latest: AsyncStream<RemoteSessionEvent>.Continuation?
     var accepted = 0
     var handshakes = 0
+    private(set) var cancelledHandshakes = 0
+    private var stall = false
     private var failures: [RemoteFailureKind] = []
 
     func failNextHandshakes(_ failures: [RemoteFailureKind]) {
         self.failures = failures
     }
 
-    func beginHandshake() throws {
+    func stallNextHandshake() {
+        stall = true
+    }
+
+    func beginHandshake() async throws {
         handshakes += 1
+        if stall {
+            stall = false
+            do {
+                try await Task.sleep(for: .seconds(60))
+            } catch is CancellationError {
+                cancelledHandshakes += 1
+                throw CancellationError()
+            }
+        }
         if !failures.isEmpty {
             throw RemoteSessionFailure(kind: failures.removeFirst(), reason: "scripted handshake failure")
         }

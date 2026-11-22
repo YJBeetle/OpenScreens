@@ -61,6 +61,7 @@ public struct SessionScreen: View {
                 #endif
                 cursorOverlay
                 pointerSurface
+                    .allowsHitTesting(model.state.isConnected && model.frameSize != nil)
                 if let indicator = pressIndicator {
                     GeometryReader { geometry in
                         let size = geometry.size
@@ -92,11 +93,11 @@ public struct SessionScreen: View {
 
             if model.state.isTerminal && model.credentialChallenge == nil {
                 connectionClosedOverlay
-            } else if !model.state.isConnected && presentedChallenge == nil && model.credentialChallenge == nil {
+            } else if (!model.state.isConnected || model.frameSize == nil) && presentedChallenge == nil && model.credentialChallenge == nil {
                 connectingOverlay
             }
 
-            if model.state.isConnected {
+            if model.state.isConnected && model.frameSize != nil {
                 chrome
                 toast
                 transferStatus
@@ -583,17 +584,24 @@ public struct SessionScreen: View {
                 ProgressView()
                     .controlSize(.large)
 
-                Text(model.state.label)
-                    .font(.headline)
+                Group {
+                    if model.state.isConnected {
+                        Text("Waiting for the remote screen")
+                    } else {
+                        Text(model.state.label)
+                    }
+                }
+                .font(.headline)
+                .multilineTextAlignment(.center)
 
-                Text("Connecting to \(model.profile.endpoint)")
+                Text(model.profile.endpoint)
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
 
-                Button("Cancel") {
-                    closeSession()
-                }
-                .padding(.top, 4)
+                Button("Cancel", action: closeSession)
+                    .buttonStyle(.bordered)
+                    .padding(.top, 4)
             }
             .padding(28)
             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Theme.Radius.sheet, style: .continuous))
@@ -842,8 +850,8 @@ public struct SessionScreen: View {
     }
 
     private func closeSession() {
-        model.disconnect()
         onClose()
+        model.disconnect()
     }
 
     private func focusHardwareKeyboard() {

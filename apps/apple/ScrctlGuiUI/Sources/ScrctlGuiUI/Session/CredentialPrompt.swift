@@ -24,28 +24,31 @@ struct CredentialPrompt: View {
         NavigationStack {
             Form {
                 Section {
-                    if showUsername || requiresUsername {
-                        TextField("User Name", text: $username)
-                            .textContentType(.username)
-                            .autocorrectionDisabled()
+                    Group {
+                        if showUsername || requiresUsername {
+                            TextField("User Name", text: $username)
+                                .textContentType(.username)
+                                .autocorrectionDisabled()
                             #if os(iOS)
-                            .textInputAutocapitalization(.never)
+                                .textInputAutocapitalization(.never)
                             #endif
-                            .focused($focused, equals: .username)
-                            .submitLabel(.next)
-                            .onSubmit { focused = .password }
-                    } else {
-                        Button("Use a Mac account") {
-                            showUsername = true
-                            focused = .username
+                                .focused($focused, equals: .username)
+                                .submitLabel(.next)
+                                .onSubmit { focused = .password }
+                        } else {
+                            Button("Use a Mac account") {
+                                showUsername = true
+                                focused = .username
+                            }
                         }
+                        SecureField("Password", text: $password)
+                            .textContentType(.password)
+                            .focused($focused, equals: .password)
+                            .submitLabel(.go)
+                            .onSubmit(submit)
+                        Toggle("Remember Credentials", isOn: $remember)
                     }
-                    SecureField("Password", text: $password)
-                        .textContentType(.password)
-                        .focused($focused, equals: .password)
-                        .submitLabel(.go)
-                        .onSubmit(submit)
-                    Toggle("Remember Credentials", isOn: $remember)
+                    .disabled(isConnecting)
                 } header: {
                     Text(verbatim: endpoint)
                 } footer: {
@@ -58,7 +61,6 @@ struct CredentialPrompt: View {
                 }
             }
             .formStyle(.grouped)
-            .disabled(isConnecting)
             .navigationTitle("Authentication Required")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
@@ -81,7 +83,7 @@ struct CredentialPrompt: View {
             focusInput()
         }
         .onChange(of: isConnecting) { _, connecting in
-            if !connecting { focusInput() }
+            if connecting { focused = nil } else { focusInput() }
         }
     }
 

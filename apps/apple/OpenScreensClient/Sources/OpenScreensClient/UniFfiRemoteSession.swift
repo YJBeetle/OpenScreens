@@ -217,8 +217,8 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
             )
         }
 
-        // macOS draws the pointer client-side; on touch platforms the remote
-        // server keeps compositing it into the framebuffer.
+        // macOS requests the host's cursor image. iOS uses its own pointer
+        // image and local input position.
         #if os(macOS)
         let localCursor = true
         #else

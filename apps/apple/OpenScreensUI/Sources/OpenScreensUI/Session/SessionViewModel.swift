@@ -352,6 +352,9 @@ public final class SessionViewModel {
         state = isReconnect ? .reconnecting(attempt: reconnectAttempts) : .connecting
         remoteCursorShape = nil
         remoteCursorImage = nil
+        #if os(iOS)
+        remoteCursor = CGPoint(x: 0.5, y: 0.55)
+        #endif
         lastHoverPixel = nil
 
         eventTask = Task { [weak self, session] in
@@ -506,10 +509,14 @@ public final class SessionViewModel {
             }
 
         case .pointerPosition(let x, let y):
+            #if os(macOS)
             remoteCursor = CGPoint(
                 x: min(max(x, 0), 1),
                 y: min(max(y, 0), 1)
             )
+            #else
+            _ = (x, y)
+            #endif
 
         case .clipboard(let text):
             guard state.isConnected else { return }

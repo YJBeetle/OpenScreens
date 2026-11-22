@@ -24,11 +24,11 @@ fi
 # Native dependencies compile C and assembly alongside Rust. Pass the
 # deployment version to their compiler as well as to rustc.
 export MACOSX_DEPLOYMENT_TARGET=15.0
-export IPHONEOS_DEPLOYMENT_TARGET=18.0
+export IPHONEOS_DEPLOYMENT_TARGET=17.0
 export CFLAGS_aarch64_apple_darwin="${CFLAGS_aarch64_apple_darwin:-} -mmacosx-version-min=15.0"
-export CFLAGS_aarch64_apple_ios="${CFLAGS_aarch64_apple_ios:-} -miphoneos-version-min=18.0"
-export CFLAGS_aarch64_apple_ios_sim="${CFLAGS_aarch64_apple_ios_sim:-} -mios-simulator-version-min=18.0"
-export CFLAGS_x86_64_apple_ios="${CFLAGS_x86_64_apple_ios:-} -mios-simulator-version-min=18.0"
+export CFLAGS_aarch64_apple_ios="${CFLAGS_aarch64_apple_ios:-} -miphoneos-version-min=17.0"
+export CFLAGS_aarch64_apple_ios_sim="${CFLAGS_aarch64_apple_ios_sim:-} -mios-simulator-version-min=17.0"
+export CFLAGS_x86_64_apple_ios="${CFLAGS_x86_64_apple_ios:-} -mios-simulator-version-min=17.0"
 
 cd "$CORE"
 for target in "${TARGETS[@]}"; do

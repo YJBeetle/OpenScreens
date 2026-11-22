@@ -3,7 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "OpenScreensCore",
-    platforms: [.iOS(.v18), .macOS(.v15)],
+    platforms: [.iOS(.v17), .macOS(.v15)],
     products: [
         .library(name: "OpenScreensCore", targets: ["OpenScreensCore"]),
         .executable(name: "Probe", targets: ["Probe"]),

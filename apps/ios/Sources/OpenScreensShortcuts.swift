@@ -1,6 +1,7 @@
 import AppIntents
 import OpenScreensUI
 
+@available(iOS 18, *)
 struct OpenScreensShortcuts: AppShortcutsProvider {
     static var appShortcuts: [AppShortcut] {
         AppShortcut(

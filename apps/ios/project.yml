@@ -3,7 +3,7 @@ name: ScrctlGui
 options:
   bundleIdPrefix: app.openscreens
   deploymentTarget:
-    iOS: "18.0"
+    iOS: "17.0"
   createIntermediateGroups: true
   groupSortPosition: top
   xcodeVersion: "26.0"
@@ -50,7 +50,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: org.scrctl.ios
         CODE_SIGN_ENTITLEMENTS: ScrctlGui.entitlements
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-        IPHONEOS_DEPLOYMENT_TARGET: "18.0"
+        IPHONEOS_DEPLOYMENT_TARGET: "17.0"
         TARGETED_DEVICE_FAMILY: "1,2"
         GENERATE_INFOPLIST_FILE: NO
         INFOPLIST_FILE: Info.plist

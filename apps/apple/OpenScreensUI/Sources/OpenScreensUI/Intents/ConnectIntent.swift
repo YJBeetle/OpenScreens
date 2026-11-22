@@ -3,6 +3,7 @@ import Foundation
 
 /// Opens a remote session from Shortcuts or Siri. The session travels through
 /// the same `vnc://` handler as links opened from other apps.
+@available(iOS 18, *)
 public struct ConnectIntent: AppIntent {
     public static let title: LocalizedStringResource = "Connect to VNC Server"
     public static let description = IntentDescription("Open a remote screen in Scrctl.")

@@ -34,65 +34,7 @@ struct PhoneLibraryView: View {
     @State private var pendingQuickConnect: URL?
 
     var body: some View {
-        TabView(selection: $tab) {
-            Tab(
-                PhoneTab.nearby.title,
-                systemImage: PhoneTab.nearby.systemImage,
-                value: PhoneTab.nearby
-            ) {
-                NavigationStack {
-                    sectionContent(.nearby)
-                        .navigationTitle(PhoneTab.nearby.screenTitle)
-                        .toolbar { libraryToolbar(groupID: nil) }
-                }
-            }
-            .badge(store.count(in: .nearby))
-
-            Tab(
-                PhoneTab.links.title,
-                systemImage: PhoneTab.links.systemImage,
-                value: PhoneTab.links
-            ) {
-                NavigationStack {
-                    sectionContent(.links)
-                        .navigationTitle(PhoneTab.links.screenTitle)
-                        .toolbar { libraryToolbar(groupID: nil) }
-                }
-            }
-
-            Tab(
-                PhoneTab.library.title,
-                systemImage: PhoneTab.library.systemImage,
-                value: PhoneTab.library
-            ) {
-                NavigationStack {
-                    libraryContent
-                        .navigationTitle(libraryTitle)
-                        .toolbar { libraryToolbar(groupID: effectiveGroupID) }
-                }
-            }
-
-            Tab(
-                PhoneTab.search.title,
-                systemImage: PhoneTab.search.systemImage,
-                value: PhoneTab.search,
-                role: .search
-            ) {
-                NavigationStack {
-                    LibrarySearchResultsView(
-                        query: searchText,
-                        layout: settings.settings.libraryLayout,
-                        onConnect: openSession,
-                        onEdit: edit,
-                        onDuplicate: duplicate,
-                        onDelete: delete
-                    )
-                    .navigationTitle(PhoneTab.search.screenTitle)
-                    .searchable(text: $searchText, prompt: "Search connections")
-                    .toolbar { libraryToolbar(groupID: nil) }
-                }
-            }
-        }
+        tabs
         .background(Color(uiColor: .systemBackground))
         .onChange(of: tab) { _, newTab in
             if newTab != .library {
@@ -155,6 +97,71 @@ struct PhoneLibraryView: View {
             }
         } message: { _ in
             Text("Connections in this group stay in the library.")
+        }
+    }
+
+    @ViewBuilder
+    private var tabs: some View {
+        if #available(iOS 18, *) {
+            modernTabs
+        } else {
+            TabView(selection: $tab) {
+                ForEach(PhoneTab.allCases, id: \.self) { section in
+                    tabContent(section)
+                        .tabItem { Label(section.title, systemImage: section.systemImage) }
+                        .tag(section)
+                        .badge(section == .nearby ? store.count(in: .nearby) : 0)
+                }
+            }
+        }
+    }
+
+    @available(iOS 18, *)
+    private var modernTabs: some View {
+        TabView(selection: $tab) {
+            Tab(PhoneTab.nearby.title, systemImage: PhoneTab.nearby.systemImage, value: PhoneTab.nearby) {
+                tabContent(.nearby)
+            }
+            .badge(store.count(in: .nearby))
+
+            Tab(PhoneTab.links.title, systemImage: PhoneTab.links.systemImage, value: PhoneTab.links) {
+                tabContent(.links)
+            }
+
+            Tab(PhoneTab.library.title, systemImage: PhoneTab.library.systemImage, value: PhoneTab.library) {
+                tabContent(.library)
+            }
+
+            Tab(PhoneTab.search.title, systemImage: PhoneTab.search.systemImage, value: PhoneTab.search, role: .search) {
+                tabContent(.search)
+            }
+        }
+    }
+
+    private func tabContent(_ section: PhoneTab) -> some View {
+        NavigationStack {
+            Group {
+                switch section {
+                case .nearby:
+                    sectionContent(.nearby)
+                case .links:
+                    sectionContent(.links)
+                case .library:
+                    libraryContent
+                case .search:
+                    LibrarySearchResultsView(
+                        query: searchText,
+                        layout: settings.settings.libraryLayout,
+                        onConnect: openSession,
+                        onEdit: edit,
+                        onDuplicate: duplicate,
+                        onDelete: delete
+                    )
+                    .searchable(text: $searchText, prompt: "Search connections")
+                }
+            }
+            .navigationTitle(section == .library ? libraryTitle : section.screenTitle)
+            .toolbar { libraryToolbar(groupID: section == .library ? effectiveGroupID : nil) }
         }
     }
 

@@ -127,14 +127,15 @@ final class SessionDisplayTests: XCTestCase {
         let canvas = CGSize(width: 400, height: 800)
         model.scheduleViewportUpdate(in: canvas, screenPixelWidth: 400)
         model.setCursorMode(.trackpad)
+        model.jumpPointer(to: CGPoint(x: 0.5, y: 0.5))
         model.applyPinch(
             scale: 4, startZoom: 1, startPan: .zero,
-            startFocal: .zero, currentFocal: .zero, in: canvas
+            startFocal: CGPoint(x: 200, y: 400), currentFocal: CGPoint(x: 200, y: 400), in: canvas
         )
         model.drag(to: CGPoint(x: 180, y: 390), in: canvas)
         model.drag(to: CGPoint(x: 205, y: 410), in: canvas)
 
-        await waitUntil { await transport.lastPointer != nil }
+        await waitUntil { await transport.lastPointer?.x == model.remoteCursor.x }
         let lastPointer = await transport.lastPointer
         let event = try XCTUnwrap(lastPointer)
         XCTAssertFalse(event.isRelative)
@@ -157,6 +158,43 @@ final class SessionDisplayTests: XCTestCase {
         XCTAssertEqual(model.remoteCursor, .zero)
         XCTAssertEqual(oppositeEdge.minX, 0, accuracy: 0.0001)
         XCTAssertEqual(oppositeEdge.minY, 0, accuracy: 0.0001)
+    }
+
+    func testHeldTrackpadZoomRecentersWithoutMovingTheRemotePointer() async throws {
+        let transport = DisplayTestTransport()
+        let model = SessionViewModel(
+            profile: ConnectionProfile(name: "Held trackpad", host: "localhost"),
+            service: DisplayTestService(transport: transport)
+        )
+        model.start()
+        defer { model.stop() }
+        transport.emit(.framebufferSize(width: 800, height: 800))
+        await waitUntil { model.state.isConnected && model.serverSize != nil }
+
+        let canvas = CGSize(width: 400, height: 400)
+        let center = CGPoint(x: 200, y: 200)
+        model.scheduleViewportUpdate(in: canvas, screenPixelWidth: 400)
+        model.setCursorMode(.trackpad)
+        model.jumpPointer(to: CGPoint(x: 0.625, y: 0.375))
+        model.beginPress(button: .left, at: center, in: canvas)
+        await waitUntil { await transport.lastPointer?.action == .down }
+        let cursor = model.remoteCursor
+        model.applyPinch(
+            scale: 2, startZoom: 1, startPan: .zero,
+            startFocal: center, currentFocal: center, in: canvas
+        )
+
+        model.recenterTrackpad(in: canvas)
+        XCTAssertEqual(model.pan, .zero)
+        await waitUntil { model.pan.width < -1 }
+        XCTAssertGreaterThan(model.pan.width, -100)
+        await waitUntil { model.pan == CGSize(width: -100, height: 100) }
+        XCTAssertEqual(model.remoteCursor, cursor)
+        let heldAction = await transport.lastPointer?.action
+        XCTAssertEqual(heldAction, .down)
+
+        model.endPress()
+        await waitUntil { await transport.lastPointer?.action == .up }
     }
 
     func testHybridTapStaysInPlaceAndDragRecentersWithinExpandedRenderingArea() async throws {

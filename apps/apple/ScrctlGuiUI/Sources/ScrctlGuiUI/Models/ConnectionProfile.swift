@@ -16,7 +16,6 @@ extension ConnectionProfile {
 /// Groups of connections shown in the library sidebar.
 public enum LibrarySection: String, Codable, CaseIterable, Identifiable, Sendable {
     case nearby
-    case links
     case custom
 
     public var id: String { rawValue }
@@ -24,7 +23,6 @@ public enum LibrarySection: String, Codable, CaseIterable, Identifiable, Sendabl
     public var title: String {
         switch self {
         case .nearby: NSLocalizedString("Nearby", comment: "Library section")
-        case .links: NSLocalizedString("Links", comment: "Library section")
         case .custom: NSLocalizedString("Custom", comment: "Library section")
         }
     }
@@ -38,7 +36,6 @@ public enum LibrarySection: String, Codable, CaseIterable, Identifiable, Sendabl
     public var systemImage: String {
         switch self {
         case .nearby: "dot.radiowaves.left.and.right"
-        case .links: "link"
         case .custom: "square.grid.2x2"
         }
     }
@@ -46,17 +43,7 @@ public enum LibrarySection: String, Codable, CaseIterable, Identifiable, Sendabl
     public init(from decoder: any Decoder) throws {
         let container = try decoder.singleValueContainer()
         let value = try container.decode(String.self)
-        // Older libraries could contain records from the retired Connect section.
-        if value == "connect" {
-            self = .custom
-        } else if let section = Self(rawValue: value) {
-            self = section
-        } else {
-            throw DecodingError.dataCorruptedError(
-                in: container,
-                debugDescription: "Unknown library section: \(value)"
-            )
-        }
+        self = Self(rawValue: value) ?? .custom
     }
 
     /// New hand-made connections always land in the custom section.

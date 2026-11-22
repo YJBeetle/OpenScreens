@@ -30,7 +30,7 @@ public final class ConnectionStore {
         self.decoder = Self.makeDecoder()
 
         if let stored = Self.load(from: self.fileURL, decoder: decoder) {
-            self.connections = Self.librarySections(for: stored.connections.filter { !$0.isDiscovered })
+            self.connections = stored.connections.filter { !$0.isDiscovered }
             self.groups = stored.groups ?? []
             self.nearbyCursorModes = stored.nearbyCursorModes ?? [:]
             if self.connections != stored.connections {
@@ -44,19 +44,6 @@ public final class ConnectionStore {
             self.connections = []
             self.groups = []
         }
-    }
-
-    private static func librarySections(for profiles: [ConnectionProfile]) -> [ConnectionProfile] {
-        #if os(iOS)
-        profiles.map { profile in
-            guard profile.section == .links else { return profile }
-            var migrated = profile
-            migrated.section = .custom
-            return migrated
-        }
-        #else
-        profiles
-        #endif
     }
 
     // MARK: - Queries
@@ -380,12 +367,11 @@ public final class ConnectionStore {
     // MARK: - Sample data
 
     public static func sampleConnections(referenceDate: Date = .now) -> [ConnectionProfile] {
-        librarySections(for: [
+        [
             ConnectionProfile(
                 name: "Lab Workstation",
                 host: "10.20.0.14",
                 platform: .linux,
-                section: .links,
                 palette: .forest,
                 authentication: .vncPassword,
                 username: "lab",
@@ -397,7 +383,6 @@ public final class ConnectionStore {
                 name: "Living Room PC",
                 host: "media-center.local",
                 platform: .windows,
-                section: .links,
                 palette: .midnight,
                 authentication: .vncPassword,
                 createdAt: referenceDate.addingTimeInterval(-86_400 * 30)
@@ -436,7 +421,7 @@ public final class ConnectionStore {
                 authentication: .vncPassword,
                 createdAt: referenceDate.addingTimeInterval(-86_400 * 60)
             )
-        ])
+        ]
     }
 
     // MARK: - Persistence

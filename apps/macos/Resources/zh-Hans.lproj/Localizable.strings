@@ -27,7 +27,6 @@
 
 /* MARK: - Library sections and navigation */
 "Nearby" = "附近";
-"Links" = "链接";
 "Custom" = "自定义";
 "All Connections" = "所有连接";
 "Library" = "连接库";
@@ -53,7 +52,6 @@
 "No connections match “%@”." = "没有与“%@”匹配的连接。";
 "No connections in %@ match “%@”." = "“%@”中没有与“%@”匹配的连接。";
 "Computers discovered on this network appear here. You can also add one manually." = "在此网络中发现的计算机会显示在这里。你也可以手动添加。";
-"Connections shared with you as links appear here." = "以链接分享给你的连接会显示在这里。";
 "Add a computer to start a remote session." = "添加一台电脑以开始远程会话。";
 
 /* MARK: - Phone library subtitles */

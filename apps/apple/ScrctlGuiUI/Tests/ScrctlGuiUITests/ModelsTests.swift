@@ -113,11 +113,11 @@ final class ConnectionProfileTests: XCTestCase {
         XCTAssertTrue(profile.forSession(observeOnly: false).controls.startInObserveMode)
     }
 
-    func testLegacyConnectProfileDecodesIntoCustomLibrary() throws {
+    func testUnknownSectionDecodesIntoCustomLibrary() throws {
         let profile = ConnectionProfile(name: "Studio", host: "studio.local", groupID: UUID())
         let encoded = try JSONEncoder().encode(profile)
         var legacy = try XCTUnwrap(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
-        legacy["section"] = "connect"
+        legacy["section"] = "unknown-section"
 
         let decoded = try JSONDecoder().decode(
             ConnectionProfile.self,

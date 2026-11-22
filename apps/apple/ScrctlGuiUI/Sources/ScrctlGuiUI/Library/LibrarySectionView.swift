@@ -484,11 +484,6 @@ public struct LibrarySectionView: View {
                 "Computers discovered on this network appear here. You can also add one manually.",
                 comment: "Empty library explanation"
             )
-        case .links:
-            return NSLocalizedString(
-                "Connections shared with you as links appear here.",
-                comment: "Empty library explanation"
-            )
         default:
             if groupID != nil {
                 return NSLocalizedString(

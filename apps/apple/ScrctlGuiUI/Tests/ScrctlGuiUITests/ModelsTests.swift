@@ -356,6 +356,22 @@ final class ConnectionStoreTests: XCTestCase {
         XCTAssertEqual(reloaded.connection(id: busy.id)?.connectionCount, 2)
     }
 
+    func testDefaultLibrarySeedingDependsOnBuildAndSavedConnectionsAreKept() {
+        let url = temporaryFileURL()
+        defer { removeStore(at: url) }
+        let store = ConnectionStore(fileURL: url)
+        #if DEBUG
+        XCTAssertEqual(store.connections.count, ConnectionStore.sampleConnections().count)
+        #else
+        XCTAssertTrue(store.connections.isEmpty)
+        #endif
+
+        let custom = ConnectionProfile(name: "Saved", host: "saved.example")
+        store.add(custom)
+        let reloaded = ConnectionStore(fileURL: url)
+        XCTAssertEqual(reloaded.connection(id: custom.id)?.host, custom.host)
+    }
+
     func testSamplesAreAvailable() {
         let samples = ConnectionStore.sampleConnections()
         XCTAssertFalse(samples.isEmpty)

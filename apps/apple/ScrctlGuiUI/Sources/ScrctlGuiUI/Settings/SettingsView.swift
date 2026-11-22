@@ -3,11 +3,15 @@ import SwiftUI
 /// Settings form shared by the macOS Settings scene and the iOS settings sheet.
 public struct SettingsView: View {
     @Environment(SettingsStore.self) private var settings
+    #if DEBUG
     @Environment(ConnectionStore.self) private var connections
+    #endif
 
     private let appVersion: String
     private let buildVersion: String?
+    #if DEBUG
     @State private var confirmingRestore = false
+    #endif
 
     @State private var editingToolbar = false
 
@@ -114,13 +118,15 @@ public struct SettingsView: View {
             Section {
                 Toggle("Discover Nearby Computers", isOn: $settings.settings.discoverNearby)
 
+                #if DEBUG
                 Button("Restore Sample Connections") {
                     confirmingRestore = true
                 }
+                #endif
             } header: {
                 Text("Library")
             } footer: {
-                Text("Scrctl uses Bonjour to find computers sharing their screen on your local network. Local network access may be requested the first time. Restoring samples adds the demo computers without removing anything you saved.")
+                Text("Scrctl uses Bonjour to find computers sharing their screen on your local network. Local network access may be requested the first time.")
             }
 
             Section {
@@ -142,6 +148,7 @@ public struct SettingsView: View {
                 SessionToolbarSettings()
             }
         }
+        #if DEBUG
         .confirmationDialog(
             "Restore sample connections?",
             isPresented: $confirmingRestore,
@@ -154,6 +161,7 @@ public struct SettingsView: View {
         } message: {
             Text("The demo hosts are added to your library again. Existing connections are kept.")
         }
+        #endif
     }
 }
 

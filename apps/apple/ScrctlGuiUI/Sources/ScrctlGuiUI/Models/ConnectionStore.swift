@@ -36,7 +36,7 @@ public final class ConnectionStore {
             if self.connections != stored.connections {
                 persist()
             }
-        } else if seedDemoData {
+        } else if seedDemoData && Self.automaticallySeedsExamples {
             self.connections = Self.sampleConnections()
             self.groups = []
             persist()
@@ -362,6 +362,14 @@ public final class ConnectionStore {
             connections.append(sample)
         }
         persist()
+    }
+
+    private static var automaticallySeedsExamples: Bool {
+        #if DEBUG
+        true
+        #else
+        false
+        #endif
     }
 
     // MARK: - Sample data

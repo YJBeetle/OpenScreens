@@ -24,6 +24,10 @@ struct SessionToolbar: View {
             if item == .displays {
                 return model.displays.count > 1 || model.selectedDisplayID != nil
             }
+            if item == .hotCorners {
+                return !model.isObserving && (model.profile.platform == .macos ||
+                    model.profile.authentication.requiresUsername || model.supportsCurtainMode)
+            }
             #if os(macOS)
             if item == .keyboard { return false }
             #endif
@@ -161,6 +165,7 @@ private struct SessionToolbarControl: View {
             } label: {
                 menuIcon("arrow.up.arrow.down", title: "File Transfers")
             }
+            .menuOrder(.fixed)
             .menuIndicator(.hidden)
             .buttonStyle(.plain)
             .accessibilityLabel("File Transfers")
@@ -248,6 +253,7 @@ private struct SessionToolbarControl: View {
         } label: {
             menuIcon("rectangle.on.rectangle", title: "Select display")
         }
+        .menuOrder(.fixed)
         .menuIndicator(.hidden)
         .buttonStyle(.plain)
         .accessibilityLabel("Select display")
@@ -297,6 +303,7 @@ private struct SessionToolbarControl: View {
         } label: {
             menuIcon("doc.on.clipboard", title: "Clipboard")
         }
+        .menuOrder(.fixed)
         .menuIndicator(.hidden)
         .buttonStyle(.plain)
         .disabled(!model.state.isConnected)
@@ -329,6 +336,7 @@ private struct SessionToolbarControl: View {
         } label: {
             menuIcon("square.grid.3x3", title: "Hot Corners")
         }
+        .menuOrder(.fixed)
         .menuIndicator(.hidden)
         .buttonStyle(.plain)
         .accessibilityLabel("Hot Corners")
@@ -344,14 +352,25 @@ private struct SessionToolbarControl: View {
             }
             Section("Scaling") {
                 Picker("Scaling", selection: scalingBinding) {
-                    ForEach(RemoteContentMode.allCases) { mode in
+                    ForEach([RemoteContentMode.fit, .fill]) { mode in
                         Text(mode.title).tag(mode)
+                    }
+                }
+            }
+            Section("Picture Quality") {
+                Picker("Picture Quality", selection: Binding(
+                    get: { model.quality },
+                    set: { model.setQuality($0) }
+                )) {
+                    ForEach(ConnectionQuality.allCases) { quality in
+                        Text(quality.title).tag(quality)
                     }
                 }
             }
         } label: {
             menuIcon("display", title: "Display options")
         }
+        .menuOrder(.fixed)
         .menuIndicator(.hidden)
         .buttonStyle(.plain)
         .accessibilityLabel("Display options")

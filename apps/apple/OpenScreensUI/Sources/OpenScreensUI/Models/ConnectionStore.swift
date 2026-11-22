@@ -330,6 +330,13 @@ public final class ConnectionStore {
         persist()
     }
 
+    func setQuality(_ quality: ConnectionQuality, for id: UUID) {
+        guard let index = connections.firstIndex(where: { $0.id == id && !$0.isDiscovered }),
+              connections[index].quality != quality else { return }
+        connections[index].quality = quality
+        persist()
+    }
+
     public func setPreferredDisplay(_ displayID: Int?, for id: UUID) {
         guard let index = connections.firstIndex(where: { $0.id == id }),
               connections[index].remembersSelectedDisplay,

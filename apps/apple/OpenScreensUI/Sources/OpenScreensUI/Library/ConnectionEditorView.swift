@@ -760,7 +760,7 @@ public struct ConnectionEditorView: View {
                 }
             }
             Picker("Display Scaling", selection: $draft.controls.scaling) {
-                ForEach(RemoteContentMode.allCases) { mode in
+                ForEach([RemoteContentMode.fit, .fill]) { mode in
                     Text(mode.title).tag(mode)
                 }
             }

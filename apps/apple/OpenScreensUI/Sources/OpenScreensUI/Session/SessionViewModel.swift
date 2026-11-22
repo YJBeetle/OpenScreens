@@ -57,6 +57,11 @@ import SwiftUI
 @Observable
 public final class SessionViewModel {
     public let profile: ConnectionProfile
+    private var qualityOverride: ConnectionQuality?
+
+    var quality: ConnectionQuality {
+        qualityOverride ?? (store?.connection(id: profile.id) ?? profile).initialQuality
+    }
     public let renderer: RemoteCanvasRenderer
 
     public private(set) var state: RemoteSessionState = .idle {
@@ -373,7 +378,7 @@ public final class SessionViewModel {
         }
 
         var profile = profile
-        profile.quality = saved.quality
+        profile.quality = qualityOverride ?? saved.quality
         profile.controls.startInObserveMode = isObserving
         profile.username = loginUsername
         let password = sessionPassword
@@ -533,7 +538,6 @@ public final class SessionViewModel {
             cancelClipboardFetch()
             writeClipboard(text)
             if sharedClipboard { clipboardChangeCount = readClipboardChangeCount() }
-            showMessage(NSLocalizedString("Remote clipboard copied.", comment: "Clipboard toast"))
 
         case .clipboardRequest:
             shareLocalClipboardIfNeeded()
@@ -822,8 +826,13 @@ public final class SessionViewModel {
             x: min(max(normalized.x, 0), 1),
             y: min(max(normalized.y, 0), 1)
         )
+        stopRecentering()
         remoteCursor = target
         dragAnchor = nil
+        if isCenteredTrackpad, canvasSize.width > 0, canvasSize.height > 0 {
+            followTrackpadCursor(in: canvasSize)
+            scheduleCurrentViewport()
+        }
         queuePointer([PointerEvent(action: .move, x: target.x, y: target.y)])
     }
 
@@ -1219,7 +1228,6 @@ public final class SessionViewModel {
         Task {
             do {
                 try await session.sendClipboard(text, automatic: false)
-                showMessage(NSLocalizedString("Sent local clipboard.", comment: "Clipboard toast"))
             } catch let error as RemoteSessionFailure where error.kind == .invalidInput {
                 showMessage(NSLocalizedString("This server’s clipboard supports only Latin-1 text.", comment: "Legacy RFB clipboard"))
             } catch {
@@ -1231,7 +1239,6 @@ public final class SessionViewModel {
     public func fetchRemoteClipboard() {
         guard sceneIsActive, state.isConnected, let session else { return }
         fetchTask?.cancel()
-        showMessage(NSLocalizedString("Requesting remote clipboard…", comment: "Clipboard toast"))
         fetchTask = Task {
             defer { if !Task.isCancelled { fetchTask = nil } }
             do {
@@ -1245,7 +1252,6 @@ public final class SessionViewModel {
                     showMessage(NSLocalizedString("No clipboard text received.", comment: "Clipboard toast"))
                 } else if let latestRemoteText {
                     writeClipboard(latestRemoteText)
-                    showMessage(NSLocalizedString("Copied the last text received from this server.", comment: "Clipboard toast"))
                 } else {
                     showMessage(NSLocalizedString("Copy text on the remote computer first.", comment: "Clipboard toast"))
                 }
@@ -1380,6 +1386,13 @@ public final class SessionViewModel {
             }
             scheduleCurrentViewport()
         }
+    }
+
+    func setQuality(_ quality: ConnectionQuality) {
+        guard self.quality != quality else { return }
+        qualityOverride = quality
+        store?.setQuality(quality, for: profile.id)
+        showMessage(NSLocalizedString("Picture quality will apply next time you connect.", comment: "Picture quality"))
     }
 
     public func setScaling(_ mode: RemoteContentMode) {

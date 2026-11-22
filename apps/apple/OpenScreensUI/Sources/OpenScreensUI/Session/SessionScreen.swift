@@ -374,15 +374,10 @@ public struct SessionScreen: View {
                 .padding(.bottom, toolbarBottomSpacing)
                 .transition(.opacity)
         } else {
-            VStack {
-                HStack {
-                    Spacer()
-                    showToolbarButton
-                }
-                Spacer()
-            }
-            .padding(12)
-            .transition(.opacity)
+            showToolbarButton
+                .padding(12)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                .transition(.opacity)
         }
     }
 

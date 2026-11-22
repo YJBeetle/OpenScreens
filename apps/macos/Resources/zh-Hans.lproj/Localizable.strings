@@ -485,3 +485,5 @@
 "Remote action before disconnecting: %@" = "断开连接前将在远端执行：%@";
 "Hot Corner — %@" = "触发角 — %@";
 "Screen Mirroring" = "屏幕镜像";
+"Picture Quality" = "画质";
+"Picture quality will apply next time you connect." = "画质将在下次连接时生效。";

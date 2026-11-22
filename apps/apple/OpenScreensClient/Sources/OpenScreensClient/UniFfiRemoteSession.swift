@@ -217,21 +217,13 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
             )
         }
 
-        // macOS requests the host's cursor image. iOS uses its own pointer
-        // image and local input position.
-        #if os(macOS)
-        let localCursor = true
-        #else
-        let localCursor = false
-        #endif
-
         let config = OpenScreensCore.SessionConfig(
             host: profile.trimmedHost,
             port: UInt16(clamping: profile.port),
             username: username.isEmpty ? nil : username,
             password: (sessionPassword?.isEmpty == false) ? sessionPassword : nil,
             shared: true,
-            localCursor: localCursor,
+            localCursor: true,
             quality: profile.initialQuality.jpegLevel,
             frameIntervalMs: 16,
             wireguardConfig: profile.wireGuardConfig,
@@ -1225,7 +1217,12 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
         height: UInt16,
         pixels: Data
     ) -> RemoteCursorShape {
+        #if os(macOS)
         let scale = Int(displayScale)
+        #else
+        // Mobile cursors are drawn at a fixed UI size, independent of framebuffer sampling.
+        let scale = 1
+        #endif
         let sourceWidth = Int(width)
         let sourceHeight = Int(height)
         guard scale > 1, sourceWidth > 0, sourceHeight > 0,

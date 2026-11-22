@@ -17,22 +17,35 @@ struct SessionCursorOverlay: View {
     var body: some View {
         GeometryReader { proxy in
             #if os(iOS)
-            if model.state.isConnected, !model.isObserving, let rect = imageRect(proxy.size) {
+            if model.state.isConnected, !model.isObserving, !model.remoteCursorHidden,
+               let rect = imageRect(proxy.size) {
                 let x = rect.minX + model.remoteCursor.x * rect.width
                 let y = rect.minY + model.remoteCursor.y * rect.height
-                Canvas { context, _ in
-                    let arrow = Path { path in
-                        path.move(to: CGPoint(x: x, y: y))
-                        path.addLine(to: CGPoint(x: x, y: y + 18))
-                        path.addLine(to: CGPoint(x: x + 4.5, y: y + 14))
-                        path.addLine(to: CGPoint(x: x + 8, y: y + 20))
-                        path.addLine(to: CGPoint(x: x + 11, y: y + 18.5))
-                        path.addLine(to: CGPoint(x: x + 7.5, y: y + 12.5))
-                        path.addLine(to: CGPoint(x: x + 14, y: y + 12.5))
-                        path.closeSubpath()
+                if let image = model.remoteCursorImage, let shape = model.remoteCursorShape {
+                    let scale = 24 / CGFloat(max(shape.width, shape.height))
+                    Image(decorative: image, scale: 1)
+                        .resizable()
+                        .interpolation(.none)
+                        .frame(width: CGFloat(shape.width) * scale, height: CGFloat(shape.height) * scale)
+                        .position(
+                            x: x + (CGFloat(shape.width) / 2 - CGFloat(shape.hotspotX)) * scale,
+                            y: y + (CGFloat(shape.height) / 2 - CGFloat(shape.hotspotY)) * scale
+                        )
+                } else {
+                    Canvas { context, _ in
+                        let arrow = Path { path in
+                            path.move(to: CGPoint(x: x, y: y))
+                            path.addLine(to: CGPoint(x: x, y: y + 18))
+                            path.addLine(to: CGPoint(x: x + 4.5, y: y + 14))
+                            path.addLine(to: CGPoint(x: x + 8, y: y + 20))
+                            path.addLine(to: CGPoint(x: x + 11, y: y + 18.5))
+                            path.addLine(to: CGPoint(x: x + 7.5, y: y + 12.5))
+                            path.addLine(to: CGPoint(x: x + 14, y: y + 12.5))
+                            path.closeSubpath()
+                        }
+                        context.fill(arrow, with: .color(.white))
+                        context.stroke(arrow, with: .color(.black), lineWidth: 1)
                     }
-                    context.fill(arrow, with: .color(.white))
-                    context.stroke(arrow, with: .color(.black), lineWidth: 1)
                 }
             }
             #else

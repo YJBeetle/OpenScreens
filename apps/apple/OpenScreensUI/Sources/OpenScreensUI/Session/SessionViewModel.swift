@@ -117,6 +117,7 @@ public final class SessionViewModel {
     #endif
     public private(set) var remoteCursorShape: RemoteCursorShape?
     public private(set) var remoteCursorImage: CGImage?
+    private(set) var remoteCursorHidden = false
     /// Name of the file currently being received by the remote desktop.
     public private(set) var uploadFileName: String?
     /// Overall transfer progress (0...1) when the server reports it.
@@ -371,6 +372,7 @@ public final class SessionViewModel {
         state = isReconnect ? .reconnecting(attempt: reconnectAttempts) : .connecting
         remoteCursorShape = nil
         remoteCursorImage = nil
+        remoteCursorHidden = false
         #if os(iOS)
         remoteCursor = CGPoint(x: 0.5, y: isCenteredTrackpad ? 0.5 : 0.55)
         #endif
@@ -528,6 +530,7 @@ public final class SessionViewModel {
             }
 
         case .cursor(let shape):
+            remoteCursorHidden = shape.width == 0 || shape.height == 0
             if shape.isEmpty {
                 remoteCursorShape = nil
                 remoteCursorImage = nil

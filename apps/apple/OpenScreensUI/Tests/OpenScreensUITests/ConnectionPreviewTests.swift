@@ -131,10 +131,10 @@ final class ConnectionPreviewTests: XCTestCase {
         let deadline = ContinuousClock.now + .seconds(3)
         while model.selectedDisplayID != 3 && ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(5)) }
         XCTAssertEqual(model.selectedDisplayID, 3)
-        transport.emit(.viewport(RemoteViewport(x: 650, y: 250, width: 200, height: 180, scale: 2,
+        let viewport = RemoteViewport(x: 650, y: 250, width: 200, height: 180, scale: 2,
                                                bufferWidth: 100, bufferHeight: 90,
-                                               framebufferWidth: 960, framebufferHeight: 480)))
-        try await deliver(RemoteFrame(width: 100, height: 90, data: Data(repeating: 202, count: 100 * 90 * 4)),
+                                               framebufferWidth: 960, framebufferHeight: 480)
+        try await deliver(RemoteFrame(width: 100, height: 90, data: Data(repeating: 202, count: 100 * 90 * 4), viewport: viewport),
                           to: model, via: transport)
         model.stop()
         let cropped = try XCTUnwrap(Library(root).store.previews.image(for: profile.id))

@@ -478,16 +478,23 @@ public final class SessionViewModel {
                 renderer.updateFullFrame(width: frame.width, height: frame.height, pixels: frame.data)
             }
 
-            if renderer.frameRevision != revision, state.isConnected, !isSwitchingDisplay {
+            guard renderer.frameRevision != revision else { return }
+            if viewport != frame.viewport {
+                viewport = frame.viewport
+                renderer.textureCrop = frame.viewport.map {
+                    CGRect(
+                        x: CGFloat($0.x) / CGFloat($0.framebufferWidth),
+                        y: CGFloat($0.y) / CGFloat($0.framebufferHeight),
+                        width: CGFloat($0.width) / CGFloat($0.framebufferWidth),
+                        height: CGFloat($0.height) / CGFloat($0.framebufferHeight)
+                    )
+                }
+                previewRecorder.reset()
+            }
+            if state.isConnected, !isSwitchingDisplay {
                 previewRecorder.received(frame, displays: displays, selectedID: selectedDisplayID,
                                          viewport: viewport, serverSize: serverSize)
             }
-
-        case .viewport(let viewport):
-            if self.viewport != viewport {
-                previewRecorder.reset()
-            }
-            self.viewport = viewport
 
         case .cursor(let shape):
             if shape.isEmpty {
@@ -978,22 +985,6 @@ public final class SessionViewModel {
         )
     }
 
-    /// Rect the currently delivered crop occupies on screen.
-    public func displayedViewportRect(in size: CGSize) -> CGRect? {
-        guard let viewport,
-              let displayed = displayedImageRect(in: size),
-              let framebuffer = framebufferSize,
-              framebuffer.width > 0, framebuffer.height > 0
-        else { return nil }
-        let scaleX = displayed.width / framebuffer.width
-        let scaleY = displayed.height / framebuffer.height
-        return CGRect(
-            x: displayed.minX + CGFloat(viewport.x) * scaleX,
-            y: displayed.minY + CGFloat(viewport.y) * scaleY,
-            width: CGFloat(viewport.width) * scaleX,
-            height: CGFloat(viewport.height) * scaleY
-        )
-    }
 
     private func normalized(_ point: CGPoint, in size: CGSize) -> CGPoint {
         guard let rect = displayedImageRect(in: size), rect.width > 0, rect.height > 0 else {

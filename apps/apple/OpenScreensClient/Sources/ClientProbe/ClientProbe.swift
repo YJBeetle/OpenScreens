@@ -35,8 +35,6 @@ struct ClientProbe {
                     frames += 1
                     print("frame \(frames): \(frame.width)x\(frame.height) region=\(String(describing: frame.region)) bytes=\(frame.data.count)")
                     if frames >= 2 { exit(0) }
-                case .viewport(let viewport):
-                    print("viewport: \(viewport.width)x\(viewport.height) at \(viewport.x),\(viewport.y), scale 1/\(viewport.scale)")
                 case .clipboardRequest:
                     print("clipboard requested")
                 case .clipboard(let text):

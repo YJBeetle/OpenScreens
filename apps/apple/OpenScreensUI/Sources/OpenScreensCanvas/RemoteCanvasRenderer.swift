@@ -55,6 +55,9 @@ public final class RemoteCanvasRenderer {
     /// Rect the framebuffer occupies in the hosting view, in points. When set,
     /// the renderer samples that visible portion at drawable resolution instead
     /// of magnifying a fitted layer, so zoomed content stays sharp.
+    /// Normalized desktop region stored in the current texture.
+    public var textureCrop: CGRect?
+
     public var imageRect: CGRect? {
         didSet { requestRedraw() }
     }
@@ -187,6 +190,7 @@ public final class RemoteCanvasRenderer {
 
     /// Discards the current frame, e.g. when a session disconnects.
     public func reset() {
+        textureCrop = nil
         #if DEBUG
         presentation?.generation += 1
         presentation?.stage = .waiting
@@ -325,8 +329,16 @@ public final class RemoteCanvasRenderer {
     }
 
     private func canvasUniforms(for target: CGSize, asMirror: Bool) -> CanvasUniforms {
-        if !asMirror, let imageRect, containerSize.width > 0, containerSize.height > 0,
+        if !asMirror, var imageRect, containerSize.width > 0, containerSize.height > 0,
            imageRect.width > 0, imageRect.height > 0 {
+            if let crop = textureCrop {
+                imageRect = CGRect(
+                    x: imageRect.minX + crop.minX * imageRect.width,
+                    y: imageRect.minY + crop.minY * imageRect.height,
+                    width: crop.width * imageRect.width,
+                    height: crop.height * imageRect.height
+                )
+            }
             return CanvasUniforms(
                 origin: SIMD2(
                     Float(imageRect.minX / containerSize.width),

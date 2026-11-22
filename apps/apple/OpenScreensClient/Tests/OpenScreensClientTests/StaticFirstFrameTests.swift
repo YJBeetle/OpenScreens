@@ -80,12 +80,19 @@ final class StaticFirstFrameTests: XCTestCase {
         model.applyPinch(scale: 4, startZoom: 1, startPan: .zero, startFocal: center, currentFocal: center, in: size)
         model.scheduleViewportUpdate(in: size, screenPixelWidth: 240)
         try await Self.expectRequest(peer, incremental: false, side: 240)
-        try peer.write(contentsOf: initial)
+        // A sparse update can arrive while the full refresh is still pending.
+        let patch = Self.rawRectangle(x: 120, y: 120, width: 1, height: 1, pixels: Data([0, 255, 0, 255]))
+        try peer.write(contentsOf: Self.update([patch]))
         try await Self.expectRequest(peer, incremental: true, side: 240)
         try await wait { model.viewport != nil && model.receivedFrames == 2 }
         let viewport = try XCTUnwrap(model.viewport)
         XCTAssertLessThan(viewport.width, 240, "Keep the local zoom crop")
         XCTAssertEqual(viewport.scale, 1)
+        let baseline = try XCTUnwrap(model.renderer.snapshot())
+        XCTAssertEqual(baseline.width, viewport.bufferWidth)
+        XCTAssertEqual(baseline.height, viewport.bufferHeight)
+        let baselineBytes = try XCTUnwrap(baseline.dataProvider?.data) as Data
+        XCTAssertEqual(Data(baselineBytes.prefix(4)), Data(repeating: 255, count: 4))
 
         // Verify a second pixel update without another zoom or pan.
         for (index, pixel) in [Data([0, 0, 0, 255]), Data([0, 0, 255, 255])].enumerated() {

@@ -191,8 +191,7 @@ public struct SessionScreen: View {
             RemoteCanvasView(
                 renderer: model.renderer,
                 contentMode: model.scaling == .stretch ? .stretch : .fit,
-                imageRect: model.displayedViewportRect(in: proxy.size)
-                    ?? model.displayedImageRect(in: proxy.size),
+                imageRect: model.displayedImageRect(in: proxy.size),
                 containerSize: proxy.size
             )
             .frame(width: proxy.size.width, height: proxy.size.height)

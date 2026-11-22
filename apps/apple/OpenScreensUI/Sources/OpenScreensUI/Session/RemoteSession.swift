@@ -102,13 +102,15 @@ public struct RemoteFrame: Sendable {
     public var data: Data
     /// All rectangles from one engine framebuffer update share this sequence.
     public var sequence: UInt64?
+    public var viewport: RemoteViewport?
 
-    public init(width: Int, height: Int, region: RemoteRegion? = nil, data: Data, sequence: UInt64? = nil) {
+    public init(width: Int, height: Int, region: RemoteRegion? = nil, data: Data, sequence: UInt64? = nil, viewport: RemoteViewport? = nil) {
         self.width = width
         self.height = height
         self.region = region
         self.data = data
         self.sequence = sequence
+        self.viewport = viewport
     }
 }
 
@@ -212,8 +214,6 @@ public enum RemoteSessionEvent: Sendable {
     case framebufferSize(width: Int, height: Int)
     case displays([RemoteDisplay])
     case frame(RemoteFrame)
-    /// The client now receives only this framebuffer crop, sampled by `scale`.
-    case viewport(RemoteViewport)
     case cursor(RemoteCursorShape)
     /// Pointer position reported by the server, normalized to 0...1.
     case pointerPosition(x: Double, y: Double)
@@ -343,7 +343,7 @@ public protocol RemoteSessionProtocol: Sendable {
     func selectDisplay(_ id: Int?) async throws
     /// Sets the visible crop in normalized framebuffer coordinates (0...1)
     /// and supplies the screen width for sampling. `nil` restores the full
-    /// framebuffer. The client emits a `viewport` event with the new crop.
+    /// framebuffer. Frames carry their viewport together with their pixels.
     func setViewport(_ normalizedRect: CGRect?, screenPixelWidth: Int) async
     /// Sends local files to the remote desktop through Apple's drag-and-drop
     /// file transfer protocol. Progress and completion arrive as events.

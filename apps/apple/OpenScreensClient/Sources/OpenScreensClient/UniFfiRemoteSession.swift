@@ -81,7 +81,7 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
     private var scaledHeight = 0
     /// Crop retained in the render texture.
     private var viewport: OpenScreensUI.RemoteViewport?
-    private var announceViewport = false
+    private var needsViewportBaseline = false
     #if DEBUG
     private var receivedDesktopLayout = false
     #endif
@@ -147,7 +147,7 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
         cursor = CGPoint(x: 0.5, y: 0.5)
         buttonMask = 0
         viewport = nil
-        announceViewport = false
+        needsViewportBaseline = false
         continuation.yield(.state(.connecting))
 
         let sessionPassword: String?
@@ -480,7 +480,7 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
         )
         guard next != viewport else { return }
         viewport = next
-        announceViewport = true
+        needsViewportBaseline = true
         logger.info(
             "viewport \(next.x),\(next.y) \(next.width)x\(next.height) sampling 1/\(next.scale)"
         )
@@ -899,9 +899,22 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
             #endif
             guard width > 0, height > 0 else { return }
             if let viewport {
-                if announceViewport {
-                    continuation.yield(.viewport(viewport))
-                    announceViewport = false
+                if needsViewportBaseline {
+                    // A server can split the refresh into several rectangles. Build
+                    // the complete crop before replacing the texture and its geometry.
+                    guard !rects.isEmpty, let data = session.copyRegionScaled(
+                        rect: OpenScreensCore.Rect(
+                            x: UInt16(viewport.x), y: UInt16(viewport.y),
+                            width: UInt16(viewport.width), height: UInt16(viewport.height)
+                        ),
+                        scale: UInt16(viewport.scale)
+                    ) else { return }
+                    needsViewportBaseline = false
+                    continuation.yield(.frame(RemoteFrame(
+                        width: viewport.bufferWidth, height: viewport.bufferHeight,
+                        data: data, sequence: sequence, viewport: viewport
+                    )))
+                    return
                 }
                 let scale = viewport.scale
                 for rect in rects where rect.width > 0 && rect.height > 0 {
@@ -943,7 +956,8 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
                         height: viewport.bufferHeight,
                         region: region,
                         data: data,
-                        sequence: sequence
+                        sequence: sequence,
+                        viewport: viewport
                     )))
                 }
                 return
@@ -984,7 +998,7 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
             self.width = width
             self.height = height
             viewport = nil
-            announceViewport = false
+            needsViewportBaseline = false
             updateDisplayScale()
             continuation.yield(.framebufferSize(width: Int(width), height: Int(height)))
 
@@ -1135,7 +1149,7 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
         guard !finished else { return }
         finished = true
         viewport = nil
-        announceViewport = false
+        needsViewportBaseline = false
         pendingUploads.removeAll()
         uploadFileNames.removeAll()
         for root in downloadRoots.values {

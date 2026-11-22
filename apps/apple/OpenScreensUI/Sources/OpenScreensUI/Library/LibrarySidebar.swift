@@ -30,7 +30,9 @@ public struct LibrarySidebar: View {
         List(selection: $selection) {
             Section {
                 row(.nearby)
+                #if os(macOS)
                 row(.links)
+                #endif
             }
             Section("Custom") {
                 row(.custom)

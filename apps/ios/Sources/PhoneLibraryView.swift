@@ -124,10 +124,6 @@ struct PhoneLibraryView: View {
             }
             .badge(store.count(in: .nearby))
 
-            Tab(PhoneTab.links.title, systemImage: PhoneTab.links.systemImage, value: PhoneTab.links) {
-                tabContent(.links)
-            }
-
             Tab(PhoneTab.library.title, systemImage: PhoneTab.library.systemImage, value: PhoneTab.library) {
                 tabContent(.library)
             }
@@ -144,8 +140,6 @@ struct PhoneLibraryView: View {
                 switch section {
                 case .nearby:
                     sectionContent(.nearby)
-                case .links:
-                    sectionContent(.links)
                 case .library:
                     libraryContent
                 case .search:
@@ -437,7 +431,6 @@ struct PhoneLibraryView: View {
 
 enum PhoneTab: String, CaseIterable, Identifiable {
     case nearby
-    case links
     case library
     case search
 
@@ -446,7 +439,6 @@ enum PhoneTab: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .nearby: NSLocalizedString("Nearby", comment: "Library tab")
-        case .links: NSLocalizedString("Links", comment: "Library tab")
         case .library: NSLocalizedString("Library", comment: "Library tab")
         case .search: NSLocalizedString("Search", comment: "Library tab")
         }
@@ -462,7 +454,6 @@ enum PhoneTab: String, CaseIterable, Identifiable {
     var systemImage: String {
         switch self {
         case .nearby: "dot.radiowaves.left.and.right"
-        case .links: "link"
         case .library: "square.grid.2x2"
         case .search: "magnifyingglass"
         }

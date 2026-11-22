@@ -217,8 +217,7 @@ public struct AppSettings: Codable, Hashable, Sendable {
     }
 }
 
-/// Buttons that can be shown in the session toolbar. The hide and disconnect
-/// controls are always present and intentionally not configurable.
+/// Actions in their default toolbar order.
 public enum SessionToolbarItem: String, Codable, CaseIterable, Identifiable, Sendable {
     case pointer
     case displays
@@ -227,8 +226,11 @@ public enum SessionToolbarItem: String, Codable, CaseIterable, Identifiable, Sen
     case download
     case display
     case hotCorners
+    case commands
     case observe
     case screenshot
+    case hide
+    case disconnect
 
     public var id: String { rawValue }
 
@@ -241,8 +243,11 @@ public enum SessionToolbarItem: String, Codable, CaseIterable, Identifiable, Sen
         case .download: NSLocalizedString("File Transfers", comment: "Toolbar item")
         case .display: NSLocalizedString("Display options", comment: "Toolbar item")
         case .hotCorners: NSLocalizedString("Hot Corners", comment: "Toolbar item")
+        case .commands: NSLocalizedString("Remote Commands", comment: "Toolbar item")
         case .observe: NSLocalizedString("Observe Mode", comment: "Toolbar item")
         case .screenshot: NSLocalizedString("Screenshot", comment: "Toolbar item")
+        case .hide: NSLocalizedString("Hide Toolbar", comment: "Toolbar item")
+        case .disconnect: NSLocalizedString("Disconnect", comment: "Toolbar item")
         }
     }
 
@@ -255,8 +260,11 @@ public enum SessionToolbarItem: String, Codable, CaseIterable, Identifiable, Sen
         case .download: "arrow.up.arrow.down"
         case .display: "display"
         case .hotCorners: "square.grid.3x3"
+        case .commands: "command"
         case .observe: "eye"
         case .screenshot: "camera"
+        case .hide: "chevron.down"
+        case .disconnect: "rectangle.portrait.and.arrow.right"
         }
     }
 }

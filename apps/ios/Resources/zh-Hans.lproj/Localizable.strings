@@ -486,3 +486,13 @@
 "Remote System Scale" = "远端系统缩放";
 "Actual Size (1:1)" = "实际大小（1:1）";
 "Fit Entire Desktop" = "完整显示";
+
+"Customize Session Toolbar" = "自定义会话工具栏";
+"Session Toolbar" = "会话工具栏";
+"Preview" = "预览";
+"Reset" = "重置";
+"On Toolbar" = "工具栏上";
+"In More" = "更多菜单中";
+"Move to More" = "移到更多菜单";
+"Add to Toolbar" = "添加到工具栏";
+"The order applies to all connections. Each session only shows supported actions." = "此顺序适用于所有连接。会话只显示支持的操作。";

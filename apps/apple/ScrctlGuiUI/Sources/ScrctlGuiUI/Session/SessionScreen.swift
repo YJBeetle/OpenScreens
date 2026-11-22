@@ -562,9 +562,7 @@ public struct SessionScreen: View {
         SessionToolbar(
             model: model,
             orientation: orientation,
-            items: settings.settings.toolbarItems.filter {
-                SessionToolbarItem.allCases.contains($0)
-            },
+            items: settings.settings.toolbarItems,
             onUpload: { showingUploadPicker = true },
             onDownload: {
                 downloadPath = ""

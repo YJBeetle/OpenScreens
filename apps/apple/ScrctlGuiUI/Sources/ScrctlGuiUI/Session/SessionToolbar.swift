@@ -19,59 +19,54 @@ struct SessionToolbar: View {
     private let buttonSize: CGFloat = 40
     #endif
 
-    private var visibleItems: [SessionToolbarItem] {
-        items.filter { item in
-            if item == .displays {
-                return model.displays.count > 1 || model.selectedDisplayID != nil
+    private var availableItems: [SessionToolbarItem] {
+        SessionToolbarItem.allCases.filter { item in
+            switch item {
+            case .displays:
+                model.displays.count > 1 || model.selectedDisplayID != nil
+            case .hotCorners:
+                !model.isObserving && (model.isAppleRemote || model.profile.platform == .macos)
+            case .download:
+                model.supportsFileTransfer
+            case .pointer, .commands:
+                !model.isObserving
+            case .keyboard:
+                #if os(macOS)
+                false
+                #else
+                !model.isObserving
+                #endif
+            default:
+                true
             }
-            if item == .hotCorners {
-                return !model.isObserving && (model.isAppleRemote || model.profile.platform == .macos)
-            }
-            if item == .download { return model.supportsFileTransfer }
-            if model.isObserving && (item == .pointer || item == .keyboard) { return false }
-            #if os(macOS)
-            if item == .keyboard { return false }
-            #endif
-            return true
         }
     }
 
     var body: some View {
-        #if os(iOS)
-        ViewThatFits(in: orientation == .horizontal ? .horizontal : .vertical) {
-            bar(items: visibleItems, primaryLimit: nil)
-            bar(items: visibleItems, primaryLimit: 3)
-            bar(items: visibleItems, primaryLimit: 0)
+        let layout = SessionToolbarLayout(pinned: items, available: availableItems)
+        FittingSessionToolbar(layout: layout, orientation: orientation) { count in
+            bar(layout: layout, inlineCount: count)
         }
-        #else
-        bar(items: visibleItems, primaryLimit: nil)
-        #endif
     }
 
-    private func bar(items: [SessionToolbarItem], primaryLimit: Int?) -> some View {
-        let primaryItems = items.prefix(primaryLimit ?? items.count)
+    private func bar(layout: SessionToolbarLayout, inlineCount: Int) -> some View {
+        let overflow = layout.overflow(after: inlineCount)
         return FloatingBar(orientation: orientation) {
             if showsDragHandle {
                 ToolbarDragHandle(orientation: orientation)
             }
 
-            ForEach(primaryItems) { item in
+            ForEach(layout.pinned.prefix(inlineCount)) { item in
                 control(item, inMenu: false)
             }
 
-            if primaryLimit != nil {
+            if !overflow.isEmpty || externalDisplayMirroring != nil {
                 Menu {
-                    Section {
-                        if let externalDisplayMirroring {
-                            Toggle("Mirror to External Display", systemImage: "airplayvideo", isOn: externalDisplayMirroring)
-                        }
-                        RemoteCommandMenu(model: model)
-                        Button("Hide Toolbar", systemImage: "chevron.down") { model.toggleChrome() }
-                        Button("Disconnect", systemImage: "rectangle.portrait.and.arrow.right",
-                               role: .destructive, action: onDisconnect)
-                    }
-                    ForEach(items.dropFirst(primaryItems.count)) { item in
+                    ForEach(overflow) { item in
                         control(item, inMenu: true)
+                    }
+                    if let externalDisplayMirroring {
+                        Toggle("Mirror to External Display", systemImage: "airplayvideo", isOn: externalDisplayMirroring)
                     }
                 } label: {
                     Label("More", systemImage: "ellipsis")
@@ -83,18 +78,6 @@ struct SessionToolbar: View {
                 .menuIndicator(.hidden)
                 .buttonStyle(.plain)
                 .accessibilityLabel("More")
-            } else {
-                if let externalDisplayMirroring {
-                    Toggle("Mirror to External Display", systemImage: "airplayvideo", isOn: externalDisplayMirroring)
-                        .labelStyle(.iconOnly)
-                        .toggleStyle(.button)
-                        .frame(minWidth: buttonSize, minHeight: buttonSize)
-                }
-                FloatingIconButton(systemImage: "chevron.down", title: "Hide Toolbar", size: buttonSize) {
-                    model.toggleChrome()
-                }
-                FloatingIconButton(systemImage: "rectangle.portrait.and.arrow.right", title: "Disconnect",
-                                   size: buttonSize, action: onDisconnect)
             }
         }
         .fixedSize()
@@ -102,7 +85,7 @@ struct SessionToolbar: View {
 
     private func control(_ item: SessionToolbarItem, inMenu: Bool) -> some View {
         SessionToolbarControl(model: model, item: item, buttonSize: buttonSize, inMenu: inMenu,
-                              onUpload: onUpload, onDownload: onDownload)
+                              onUpload: onUpload, onDownload: onDownload, onDisconnect: onDisconnect)
     }
 
     /// Grab area for moving the floating toolbar between screen edges.
@@ -137,6 +120,7 @@ private struct SessionToolbarControl: View {
     let inMenu: Bool
     let onUpload: () -> Void
     let onDownload: () -> Void
+    let onDisconnect: () -> Void
 
     @ViewBuilder
     var body: some View {
@@ -178,6 +162,22 @@ private struct SessionToolbarControl: View {
             displayMenu
         case .hotCorners:
             hotCornersMenu
+        case .commands:
+            if inMenu {
+                RemoteCommandMenu(model: model)
+            } else {
+                RemoteCommandMenu(model: model, buttonSize: buttonSize)
+                    .menuIndicator(.hidden)
+                    .buttonStyle(.plain)
+            }
+        case .hide:
+            actionButton(systemImage: item.systemImage, title: "Hide Toolbar") { model.toggleChrome() }
+        case .disconnect:
+            if inMenu {
+                Button("Disconnect", systemImage: item.systemImage, role: .destructive, action: onDisconnect)
+            } else {
+                actionButton(systemImage: item.systemImage, title: "Disconnect", action: onDisconnect)
+            }
         case .observe:
             actionButton(
                 systemImage: model.isObserving ? "eye.fill" : "eye",
@@ -411,6 +411,34 @@ private struct SessionToolbarControl: View {
                 .foregroundStyle(.primary)
                 .frame(width: buttonSize, height: buttonSize)
                 .contentShape(Rectangle())
+        }
+    }
+}
+
+struct SessionToolbarLayout {
+    let pinned: [SessionToolbarItem]
+    private let unpinned: [SessionToolbarItem]
+
+    init(pinned order: [SessionToolbarItem], available: [SessionToolbarItem]) {
+        let availableSet = Set(available)
+        var seen = Set<SessionToolbarItem>()
+        pinned = order.filter { availableSet.contains($0) && seen.insert($0).inserted }
+        unpinned = available.filter { !seen.contains($0) }
+    }
+
+    func overflow(after inlineCount: Int) -> [SessionToolbarItem] {
+        Array(pinned.dropFirst(inlineCount)) + unpinned
+    }
+}
+
+struct FittingSessionToolbar<Content: View>: View {
+    let layout: SessionToolbarLayout
+    let orientation: FloatingBarOrientation
+    @ViewBuilder let content: (Int) -> Content
+
+    var body: some View {
+        ViewThatFits(in: orientation == .horizontal ? .horizontal : .vertical) {
+            ForEach((0...layout.pinned.count).reversed(), id: \.self, content: content)
         }
     }
 }

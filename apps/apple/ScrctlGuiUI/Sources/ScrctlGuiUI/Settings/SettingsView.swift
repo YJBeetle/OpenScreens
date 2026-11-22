@@ -9,50 +9,7 @@ public struct SettingsView: View {
     private let buildVersion: String?
     @State private var confirmingRestore = false
 
-    private var visibleToolbarItems: [SessionToolbarItem] {
-        #if os(macOS)
-        SessionToolbarItem.allCases.filter { $0 != .keyboard }
-        #else
-        SessionToolbarItem.allCases
-        #endif
-    }
-
-    private var orderedToolbarItems: [SessionToolbarItem] {
-        let enabled = settings.settings.toolbarItems.filter { visibleToolbarItems.contains($0) }
-        let hidden = visibleToolbarItems.filter { !enabled.contains($0) }
-        return enabled + hidden
-    }
-
-    private func moveToolbarItem(_ item: SessionToolbarItem, by offset: Int) {
-        var items = settings.settings.toolbarItems
-        guard let index = items.firstIndex(of: item),
-              items.indices.contains(index + offset) else { return }
-        items.swapAt(index, index + offset)
-        settings.settings.toolbarItems = items
-    }
-
-    private func isFirstToolbarItem(_ item: SessionToolbarItem) -> Bool {
-        settings.settings.toolbarItems.first == item
-    }
-
-    private func isLastToolbarItem(_ item: SessionToolbarItem) -> Bool {
-        settings.settings.toolbarItems.last == item
-    }
-
-    private func toolbarBinding(_ item: SessionToolbarItem) -> Binding<Bool> {
-        Binding(
-            get: { settings.settings.toolbarItems.contains(item) },
-            set: { isOn in
-                var items = settings.settings.toolbarItems
-                if isOn {
-                    if !items.contains(item) { items.append(item) }
-                } else {
-                    items.removeAll { $0 == item }
-                }
-                settings.settings.toolbarItems = items
-            }
-        )
-    }
+    @State private var editingToolbar = false
 
     public init(appVersion: String = "1.0", buildVersion: String? = nil) {
         self.appVersion = appVersion
@@ -110,37 +67,14 @@ public struct SettingsView: View {
             Section {
                 Toggle("Show Toolbar on Launch", isOn: $settings.settings.showToolbarOnLaunch)
 
-                ForEach(orderedToolbarItems) { item in
-                    HStack(spacing: 6) {
-                        Toggle(isOn: toolbarBinding(item)) {
-                            Label(item.title, systemImage: item.systemImage)
-                        }
-
-                        if settings.settings.toolbarItems.contains(item) {
-                            Button {
-                                moveToolbarItem(item, by: -1)
-                            } label: {
-                                Image(systemName: "chevron.up")
-                            }
-                            .buttonStyle(.borderless)
-                            .disabled(isFirstToolbarItem(item))
-
-                            Button {
-                                moveToolbarItem(item, by: 1)
-                            } label: {
-                                Image(systemName: "chevron.down")
-                            }
-                            .buttonStyle(.borderless)
-                            .disabled(isLastToolbarItem(item))
-                        }
-                    }
+                Button {
+                    editingToolbar = true
+                } label: {
+                    Label("Customize Session Toolbar", systemImage: "slider.horizontal.3")
                 }
             } header: {
                 Text("Toolbar")
-            } footer: {
-                Text("Choose the buttons shown in the session toolbar.")
             }
-
 
             #if os(macOS)
             Section {
@@ -203,6 +137,11 @@ public struct SettingsView: View {
         }
         .modifier(SettingsFormStyle())
         .navigationTitle("Settings")
+        .sheet(isPresented: $editingToolbar) {
+            NavigationStack {
+                SessionToolbarSettings()
+            }
+        }
         .confirmationDialog(
             "Restore sample connections?",
             isPresented: $confirmingRestore,

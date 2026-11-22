@@ -49,9 +49,15 @@ struct RemoteDesktopCommand: Identifiable {
 
 public struct RemoteCommandMenu: View {
     private let model: SessionViewModel
+    private let buttonSize: CGFloat?
 
     public init(model: SessionViewModel) {
+        self.init(model: model, buttonSize: nil)
+    }
+
+    init(model: SessionViewModel, buttonSize: CGFloat?) {
         self.model = model
+        self.buttonSize = buttonSize
     }
 
     public var body: some View {
@@ -62,7 +68,14 @@ public struct RemoteCommandMenu: View {
                 }
             }
         } label: {
-            Label("Remote Commands", systemImage: "command")
+            if let buttonSize {
+                Label("Remote Commands", systemImage: "command")
+                    .labelStyle(.iconOnly)
+                    .frame(width: buttonSize, height: buttonSize)
+                    .contentShape(Rectangle())
+            } else {
+                Label("Remote Commands", systemImage: "command")
+            }
         }
         .disabled(!model.state.isConnected || model.isObserving)
     }

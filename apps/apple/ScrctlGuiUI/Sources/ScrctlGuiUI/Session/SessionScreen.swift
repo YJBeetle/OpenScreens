@@ -293,6 +293,27 @@ public struct SessionScreen: View {
                     model.movePress(to: point, in: proxy.size)
                     pressIndicator?.point = pressIndicatorPoint(finger: point, in: proxy.size)
                 },
+                onHeldDragMoved: { delta, followsCursor in
+                    model.moveHeldDrag(by: delta, in: proxy.size, followsCursor: followsCursor)
+                    updateHeldDragIndicator(in: proxy.size)
+                },
+                onHeldTransformBegan: { focal in
+                    pinchStart = (model.zoom, model.pan, focal)
+                },
+                onHeldTransformChanged: { scale, focal in
+                    guard model.zoomEnabled, let start = pinchStart else { return }
+                    model.applyPinch(
+                        scale: scale,
+                        startZoom: start.zoom,
+                        startPan: start.pan,
+                        startFocal: start.focal,
+                        currentFocal: focal,
+                        in: proxy.size,
+                        followsCursor: false
+                    )
+                    model.scheduleCurrentViewport()
+                    updateHeldDragIndicator(in: proxy.size)
+                },
                 onPressEnded: {
                     model.endPress()
                     pressIndicator = nil
@@ -323,6 +344,14 @@ public struct SessionScreen: View {
         .accessibilityAction(named: "Toggle Observe Mode") {
             model.toggleObserveMode()
         }
+    }
+
+    private func updateHeldDragIndicator(in size: CGSize) {
+        guard let rect = model.displayedImageRect(in: size) else { return }
+        pressIndicator?.point = CGPoint(
+            x: rect.minX + model.remoteCursor.x * rect.width,
+            y: rect.minY + model.remoteCursor.y * rect.height
+        )
     }
 
     private func pressIndicatorPoint(finger: CGPoint, in size: CGSize) -> CGPoint {

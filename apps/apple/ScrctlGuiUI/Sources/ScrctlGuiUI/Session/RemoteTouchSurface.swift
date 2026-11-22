@@ -1,6 +1,7 @@
 #if os(iOS)
 import SwiftUI
 import UIKit
+import UIKit.UIGestureRecognizerSubclass
 
 /// UIKit-backed touch surface for the remote screen. SwiftUI gestures cannot
 /// express touch counts, so the multi-finger vocabulary of Screens lives here:
@@ -22,6 +23,9 @@ struct RemoteTouchSurface: UIViewRepresentable {
     var onPinchEnded: () -> Void
     var onPressBegan: (PointerButton, CGPoint) -> Void
     var onPressMoved: (CGPoint) -> Void
+    var onHeldDragMoved: (CGPoint, Bool) -> Void
+    var onHeldTransformBegan: (CGPoint) -> Void
+    var onHeldTransformChanged: (CGFloat, CGPoint) -> Void
     var onPressEnded: () -> Void
     var onThreeFingerSwipe: (UISwipeGestureRecognizer.Direction) -> Void
 
@@ -44,6 +48,9 @@ final class TouchGestureView: UIView, UIGestureRecognizerDelegate {
     private var pressActive = false
     private var twoPan: UIPanGestureRecognizer!
     private var pinch: UIPinchGestureRecognizer!
+    private var heldTransformDistance: CGFloat?
+    private var heldFingerPosition: CGPoint?
+    private var heldDragNavigated = false
 
     init() {
         super.init(frame: .zero)
@@ -87,10 +94,7 @@ final class TouchGestureView: UIView, UIGestureRecognizerDelegate {
         addGestureRecognizer(pinch)
         self.pinch = pinch
 
-        let held = UILongPressGestureRecognizer(target: self, action: #selector(handleLongPress))
-        held.numberOfTouchesRequired = 1
-        held.allowableMovement = 12
-        held.minimumPressDuration = 0.45
+        let held = HeldDragGestureRecognizer(target: self, action: #selector(handleHeldDrag))
         addGestureRecognizer(held)
         singleTap.require(toFail: held)
 
@@ -210,6 +214,54 @@ final class TouchGestureView: UIView, UIGestureRecognizerDelegate {
         }
     }
 
+    @objc private func handleHeldDrag(_ gesture: HeldDragGestureRecognizer) {
+        switch gesture.state {
+        case .began:
+            guard let point = gesture.points.first else { return }
+            pressActive = true
+            heldFingerPosition = point
+            handlers?.onPressBegan(.left, point)
+        case .changed:
+            let points = gesture.points
+            if points.count >= 2 {
+                heldFingerPosition = nil
+                guard points.count == 2 else { return }
+                let focal = CGPoint(x: (points[0].x + points[1].x) / 2, y: (points[0].y + points[1].y) / 2)
+                let distance = max(hypot(points[0].x - points[1].x, points[0].y - points[1].y), 1)
+                if let start = heldTransformDistance, !gesture.touchSetChanged {
+                    heldDragNavigated = true
+                    handlers?.onHeldTransformChanged(distance / start, focal)
+                } else {
+                    heldTransformDistance = distance
+                    handlers?.onHeldTransformBegan(focal)
+                }
+            } else if let point = points.first {
+                if heldTransformDistance != nil {
+                    heldTransformDistance = nil
+                    handlers?.onPinchEnded()
+                }
+                if let last = heldFingerPosition, !gesture.touchSetChanged, last != point {
+                    handlers?.onHeldDragMoved(
+                        CGPoint(x: point.x - last.x, y: point.y - last.y),
+                        !heldDragNavigated
+                    )
+                }
+                heldFingerPosition = point
+            }
+        case .ended, .cancelled:
+            pressActive = false
+            heldFingerPosition = nil
+            heldDragNavigated = false
+            if heldTransformDistance != nil {
+                heldTransformDistance = nil
+                handlers?.onPinchEnded()
+            }
+            handlers?.onPressEnded()
+        default:
+            break
+        }
+    }
+
     @objc private func handleLongPress(_ gesture: UILongPressGestureRecognizer) {
         let button: PointerButton = switch gesture.numberOfTouchesRequired {
         case 1: .left
@@ -233,6 +285,68 @@ final class TouchGestureView: UIView, UIGestureRecognizerDelegate {
 
     @objc private func handleThreeFingerSwipe(_ gesture: UISwipeGestureRecognizer) {
         handlers?.onThreeFingerSwipe(gesture.direction)
+    }
+}
+/// Recognizes a single-finger hold, then keeps the gesture active across
+/// touch-count changes so the user can navigate without dropping the drag.
+final class HeldDragGestureRecognizer: UIGestureRecognizer {
+    private var fingers: [UITouch] = []
+    private var initialPosition = CGPoint.zero
+    private var timer: Timer?
+    private(set) var touchSetChanged = false
+
+    var points: [CGPoint] { fingers.map { $0.location(in: view) } }
+
+    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent) {
+        fingers.append(contentsOf: touches)
+        if state == .began || state == .changed {
+            touchSetChanged = true
+            state = .changed
+        } else if fingers.count == 1, let point = points.first {
+            initialPosition = point
+            let timer = Timer(timeInterval: 0.45, target: self, selector: #selector(recognizeHold), userInfo: nil, repeats: false)
+            RunLoop.main.add(timer, forMode: .common)
+            self.timer = timer
+        } else {
+            state = .failed
+        }
+    }
+
+    override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent) {
+        if state == .began || state == .changed {
+            touchSetChanged = false
+            state = .changed
+        } else if let point = points.first,
+                  hypot(point.x - initialPosition.x, point.y - initialPosition.y) > 12 {
+            state = .failed
+        }
+    }
+
+    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent) {
+        fingers.removeAll { touches.contains($0) }
+        guard state == .began || state == .changed else {
+            state = .failed
+            return
+        }
+        touchSetChanged = true
+        state = fingers.isEmpty ? .ended : .changed
+    }
+
+    override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent) {
+        state = state == .began || state == .changed ? .cancelled : .failed
+    }
+
+    override func reset() {
+        timer?.invalidate()
+        timer = nil
+        fingers.removeAll()
+        touchSetChanged = false
+        super.reset()
+    }
+
+    @objc private func recognizeHold() {
+        guard state == .possible, fingers.count == 1 else { return }
+        state = .began
     }
 }
 #endif

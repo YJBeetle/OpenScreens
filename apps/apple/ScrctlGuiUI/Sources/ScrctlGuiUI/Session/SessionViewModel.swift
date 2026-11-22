@@ -826,6 +826,20 @@ public final class SessionViewModel {
         queuePointer([PointerEvent(action: .move, x: target.x, y: target.y)])
     }
 
+    func moveHeldDrag(by delta: CGPoint, in size: CGSize, followsCursor: Bool) {
+        guard pressedButton == .left, state.isConnected, !isObserving,
+              let rect = displayedImageRect(in: size) else { return }
+        remoteCursor = CGPoint(
+            x: min(max(remoteCursor.x + delta.x / rect.width, 0), 1),
+            y: min(max(remoteCursor.y + delta.y / rect.height, 0), 1)
+        )
+        if followsCursor && isCenteredTrackpad {
+            followTrackpadCursor(in: size)
+            scheduleCurrentViewport()
+        }
+        queuePointer([PointerEvent(action: .move, x: remoteCursor.x, y: remoteCursor.y)])
+    }
+
     public func endPress() {
         guard let button = pressedButton else { return }
         dragAnchor = nil
@@ -935,7 +949,8 @@ public final class SessionViewModel {
         startPan: CGSize,
         startFocal: CGPoint,
         currentFocal: CGPoint,
-        in size: CGSize
+        in size: CGSize,
+        followsCursor: Bool = true
     ) {
         guard let base = remoteImageRect(in: size) else { return }
         stopRecentering()
@@ -946,7 +961,7 @@ public final class SessionViewModel {
             pan = .zero
             return
         }
-        if isCenteredTrackpad {
+        if followsCursor && isCenteredTrackpad {
             zoom = newZoom
             followTrackpadCursor(in: size)
             return

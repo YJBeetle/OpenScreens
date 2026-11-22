@@ -79,7 +79,7 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
     private var displayScale: UInt16 = 1
     private var scaledWidth = 0
     private var scaledHeight = 0
-    /// Crop currently subscribed for this session.
+    /// Crop retained in the render texture.
     private var viewport: OpenScreensUI.RemoteViewport?
     private var announceViewport = false
     #if DEBUG
@@ -415,9 +415,8 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
         try await session.selectDisplay(displayId: displayID)
     }
 
-    /// Subscribes only to the visible framebuffer region and samples it at
-    /// roughly one stored pixel per screen pixel, so a zoomed crop stays sharp
-    /// without transferring or retaining the whole desktop.
+    /// Samples the visible region into a bounded render texture. The wire
+    /// subscription stays full-frame so desktop damage continues while zoomed.
     public func setViewport(_ normalizedRect: CGRect?, screenPixelWidth: Int) async {
         guard let session, !finished, width > 0, height > 0 else { return }
         let unit = CGRect(x: 0, y: 0, width: 1, height: 1)
@@ -487,12 +486,10 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
         )
 
         do {
-            try await session.setViewport(
-                x: UInt16(alignedLeft),
-                y: UInt16(alignedTop),
-                width: UInt16(alignedWidth),
-                height: UInt16(alignedHeight)
-            )
+            // A crop change needs an initial refresh, then incremental updates
+            // must cover the whole desktop. Some servers stop delivering damage
+            // after the first response to a cropped subscription.
+            try await session.setViewport(x: 0, y: 0, width: 0, height: 0)
         } catch {
             logger.warning("set viewport failed: \(error.localizedDescription, privacy: .public)")
         }

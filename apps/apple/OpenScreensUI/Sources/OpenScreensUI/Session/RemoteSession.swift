@@ -341,10 +341,9 @@ public protocol RemoteSessionProtocol: Sendable {
     /// `nil`.
     func requestCurtainMode(_ enabled: Bool) async
     func selectDisplay(_ id: Int?) async throws
-    /// Restricts framebuffer updates to a normalized rect (0...1 in framebuffer
-    /// coordinates) and picks a sampling density that keeps the visible crop at
-    /// screen resolution. `nil` restores full-frame updates. The client sends a
-    /// `viewport` event once frames for the new crop start arriving.
+    /// Sets the visible crop in normalized framebuffer coordinates (0...1)
+    /// and supplies the screen width for sampling. `nil` restores the full
+    /// framebuffer. The client emits a `viewport` event with the new crop.
     func setViewport(_ normalizedRect: CGRect?, screenPixelWidth: Int) async
     /// Sends local files to the remote desktop through Apple's drag-and-drop
     /// file transfer protocol. Progress and completion arrive as events.

@@ -58,6 +58,49 @@ final class StaticFirstFrameTests: XCTestCase {
     }
 
     @MainActor
+    func testZoomKeepsReceivingIncrementalDesktopDamage() async throws {
+        try XCTSkipIf(MTLCreateSystemDefaultDevice() == nil, "Requires Metal for texture readback")
+        let listener = try LoopbackListener()
+        var profile = ConnectionProfile(name: "Zoom fixture", host: "127.0.0.1", port: listener.port)
+        profile.controls.autoReconnect = false
+        let model = SessionViewModel(profile: profile, service: UniFfiSessionService())
+        defer { model.stop() }
+
+        model.start()
+        let peer = try await Task.detached { try Self.acceptAppleClient(listener, side: 240) }.value
+        defer { try? peer.close() }
+        try await Self.expectRequest(peer, incremental: false, side: 240)
+        let initial = Self.update([Self.rawRectangle(width: 240, height: 240, pixels: Data(repeating: 255, count: 240 * 240 * 4))])
+        try peer.write(contentsOf: initial)
+        try await Self.expectRequest(peer, incremental: true, side: 240)
+        try await wait { model.receivedFrames == 1 }
+
+        let size = CGSize(width: 240, height: 240)
+        let center = CGPoint(x: 120, y: 120)
+        model.applyPinch(scale: 4, startZoom: 1, startPan: .zero, startFocal: center, currentFocal: center, in: size)
+        model.scheduleViewportUpdate(in: size, screenPixelWidth: 240)
+        try await Self.expectRequest(peer, incremental: false, side: 240)
+        try peer.write(contentsOf: initial)
+        try await Self.expectRequest(peer, incremental: true, side: 240)
+        try await wait { model.viewport != nil && model.receivedFrames == 2 }
+        let viewport = try XCTUnwrap(model.viewport)
+        XCTAssertLessThan(viewport.width, 240, "Keep the local zoom crop")
+        XCTAssertEqual(viewport.scale, 1)
+
+        // Verify a second pixel update without another zoom or pan.
+        for (index, pixel) in [Data([0, 0, 0, 255]), Data([0, 0, 255, 255])].enumerated() {
+            let patch = Self.rawRectangle(x: 120, y: 120, width: 1, height: 1, pixels: pixel)
+            try peer.write(contentsOf: Self.update([patch]))
+            try await Self.expectRequest(peer, incremental: true, side: 240)
+            try await wait { model.receivedFrames == 3 + index }
+            let image = try XCTUnwrap(model.renderer.snapshot())
+            let bytes = try XCTUnwrap(image.dataProvider?.data) as Data
+            let offset = (120 - viewport.y) * image.bytesPerRow + (120 - viewport.x) * 4
+            XCTAssertEqual(bytes.subdata(in: offset..<(offset + 4)), pixel)
+        }
+    }
+
+    @MainActor
     private func textureBytes(_ model: SessionViewModel) throws -> Data {
         let image = try XCTUnwrap(model.renderer.snapshot())
         XCTAssertEqual(image.width, 2)
@@ -76,7 +119,7 @@ final class StaticFirstFrameTests: XCTestCase {
 
     private static let pixelFormat = Data([32, 24, 0, 1, 0, 255, 0, 255, 0, 255, 16, 8, 0, 0, 0, 0])
 
-    private static func acceptAppleClient(_ listener: LoopbackListener) throws -> FileHandle {
+    private static func acceptAppleClient(_ listener: LoopbackListener, side: UInt8 = 2) throws -> FileHandle {
         let peer = try listener.accept()
         let version = Data("RFB 003.889\n".utf8)
         try peer.write(contentsOf: version)
@@ -85,7 +128,7 @@ final class StaticFirstFrameTests: XCTestCase {
         XCTAssertEqual(try peer.readExactly(1), Data([1]))
         try peer.write(contentsOf: Data([0, 0, 0, 0]))
         XCTAssertEqual(try peer.readExactly(1), Data([0xc1]))
-        try peer.write(contentsOf: Data([0, 2, 0, 2]) + pixelFormat + Data([0, 0, 0, 0]))
+        try peer.write(contentsOf: Data([0, side, 0, side]) + pixelFormat + Data([0, 0, 0, 0]))
         XCTAssertEqual(try peer.readExactly(66).first, 0x21)
         XCTAssertEqual(try peer.readExactly(20).first, 0)
         let header = try peer.readExactly(4)
@@ -94,9 +137,9 @@ final class StaticFirstFrameTests: XCTestCase {
         return peer
     }
 
-    private static func expectRequest(_ peer: FileHandle, incremental: Bool) async throws {
+    private static func expectRequest(_ peer: FileHandle, incremental: Bool, side: UInt8 = 2) async throws {
         let bytes = try await Task.detached { try peer.readExactly(10) }.value
-        let expected = Data([3, incremental ? 1 : 0, 0, 0, 0, 0, 0, 2, 0, 2])
+        let expected = Data([3, incremental ? 1 : 0, 0, 0, 0, 0, 0, side, 0, side])
         guard bytes == expected else {
             XCTFail("Expected request \(Array(expected)), got \(Array(bytes))")
             throw POSIXError(.EPROTO)

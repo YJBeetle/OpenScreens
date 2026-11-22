@@ -14,6 +14,9 @@ public struct SettingsView: View {
     #endif
 
     @State private var editingToolbar = false
+    #if os(macOS)
+    @State private var managingSshKeys = false
+    #endif
 
     public init(appVersion: String = "1.0", buildVersion: String? = nil) {
         self.appVersion = appVersion
@@ -113,6 +116,10 @@ public struct SettingsView: View {
                     Text("Private keys imported for SSH tunnels are kept in the Keychain.")
                 }
             }
+            #else
+            Section("Security") {
+                Button("SSH Keys") { managingSshKeys = true }
+            }
             #endif
 
             Section {
@@ -148,6 +155,19 @@ public struct SettingsView: View {
                 SessionToolbarSettings()
             }
         }
+        #if os(macOS)
+        .sheet(isPresented: $managingSshKeys) {
+            NavigationStack {
+                SSHKeyManagerView()
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Done") { managingSshKeys = false }
+                        }
+                    }
+            }
+            .frame(minWidth: 540, minHeight: 420)
+        }
+        #endif
         #if DEBUG
         .confirmationDialog(
             "Restore sample connections?",

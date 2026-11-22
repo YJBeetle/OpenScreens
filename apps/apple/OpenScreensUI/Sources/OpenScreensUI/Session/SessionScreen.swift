@@ -12,11 +12,13 @@ public struct SessionScreen: View {
     @Environment(SettingsStore.self) private var settings
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.displayScale) private var displayScale
+    @Environment(\.layoutDirection) private var layoutDirection
     @Environment(\.verticalSizeClass) private var verticalSizeClass
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     private let model: SessionViewModel
     private let onClose: () -> Void
+    private let toolbarBottomSpacing: CGFloat = 8
 
     @State private var presentedChallenge: RemoteFailureKind?
     @State private var isDropTargeted = false
@@ -72,6 +74,7 @@ public struct SessionScreen: View {
             }
             #if os(iOS)
             .clipped()
+            .padding(toolbarInsets)
             #endif
             #if os(macOS)
             if model.state.isConnected {
@@ -198,19 +201,27 @@ public struct SessionScreen: View {
         GeometryReader { safe in
             GeometryReader { render in
                 let safeFrame = safe.frame(in: .global)
+                let insets = toolbarInsets
+                let left = layoutDirection == .leftToRight ? insets.leading : insets.trailing
+                let controlSize = CGSize(
+                    width: max(0, safe.size.width - insets.leading - insets.trailing),
+                    height: max(0, safe.size.height - insets.top - insets.bottom)
+                )
                 let renderFrame = render.frame(in: .global)
-                let bounds = renderFrame.offsetBy(dx: -safeFrame.minX, dy: -safeFrame.minY)
+                let bounds = renderFrame.offsetBy(
+                    dx: -(safeFrame.minX + left), dy: -(safeFrame.minY + insets.top)
+                )
                 RemoteCanvasView(
                     renderer: model.renderer,
                     contentMode: model.scaling == .stretch ? .stretch : .fit,
-                    imageRect: model.displayedImageRect(in: safe.size)?
+                    imageRect: model.displayedImageRect(in: controlSize)?
                         .offsetBy(dx: -bounds.minX, dy: -bounds.minY),
                     containerSize: render.size
                 )
                 .frame(width: render.size.width, height: render.size.height)
-                .onChange(of: [bounds, CGRect(origin: .zero, size: safe.size)], initial: true) {
+                .onChange(of: [bounds, CGRect(origin: .zero, size: controlSize)], initial: true) {
                     model.scheduleViewportUpdate(
-                        in: safe.size,
+                        in: controlSize,
                         screenPixelWidth: render.size.width * displayScale,
                         renderBounds: bounds
                     )
@@ -359,7 +370,8 @@ public struct SessionScreen: View {
         if model.showsChrome {
             toolbarChrome
                 .padding(.horizontal, 12)
-                .padding(.vertical, 10)
+                .padding(.top, 10)
+                .padding(.bottom, toolbarBottomSpacing)
                 .transition(.opacity)
         } else {
             VStack {
@@ -410,13 +422,27 @@ public struct SessionScreen: View {
         #endif
     }
 
+    #if os(iOS)
+    private var toolbarInsets: EdgeInsets {
+        guard model.state.isConnected, model.showsChrome, toolbarSize != .zero else { return EdgeInsets() }
+        let dock = isToolbarDockable ? settings.settings.toolbarDock : (usesVerticalToolbar ? .right : .bottom)
+        switch dock {
+        case .bottom:
+            return EdgeInsets(top: 0, leading: 0, bottom: toolbarSize.height + toolbarBottomSpacing, trailing: 0)
+        case .left:
+            return EdgeInsets(top: 0, leading: toolbarSize.width + 16, bottom: 0, trailing: 0)
+        case .right:
+            return EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: toolbarSize.width + 16)
+        }
+    }
+    #endif
+
     @ViewBuilder
     private var toolbarChrome: some View {
         if isToolbarDockable {
             GeometryReader { proxy in
                 let dock = settings.settings.toolbarDock
                 sessionToolbar(orientation: dock.orientation)
-                    .onGeometryChange(for: CGSize.self, of: { $0.size }) { toolbarSize = $0 }
                     .contentShape(Capsule(style: .continuous))
                     .offset(toolbarDrag)
                     .highPriorityGesture(toolbarDragGesture(in: proxy.size))
@@ -517,6 +543,7 @@ public struct SessionScreen: View {
             onDisconnect: requestClose,
             showsDragHandle: isToolbarDockable
         )
+        .onGeometryChange(for: CGSize.self, of: { $0.size }) { toolbarSize = $0 }
     }
 
     private var connectingOverlay: some View {

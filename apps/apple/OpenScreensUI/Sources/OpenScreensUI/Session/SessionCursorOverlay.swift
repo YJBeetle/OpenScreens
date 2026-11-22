@@ -20,12 +20,20 @@ struct SessionCursorOverlay: View {
             if model.state.isConnected, !model.isObserving, let rect = imageRect(proxy.size) {
                 let x = rect.minX + model.remoteCursor.x * rect.width
                 let y = rect.minY + model.remoteCursor.y * rect.height
-                Image(systemName: "cursorarrow")
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .shadow(color: .black, radius: 1)
-                    .frame(width: 20, height: 22, alignment: .topLeading)
-                    .position(x: x + 10, y: y + 11)
+                Canvas { context, _ in
+                    let arrow = Path { path in
+                        path.move(to: CGPoint(x: x, y: y))
+                        path.addLine(to: CGPoint(x: x, y: y + 18))
+                        path.addLine(to: CGPoint(x: x + 4.5, y: y + 14))
+                        path.addLine(to: CGPoint(x: x + 8, y: y + 20))
+                        path.addLine(to: CGPoint(x: x + 11, y: y + 18.5))
+                        path.addLine(to: CGPoint(x: x + 7.5, y: y + 12.5))
+                        path.addLine(to: CGPoint(x: x + 14, y: y + 12.5))
+                        path.closeSubpath()
+                    }
+                    context.fill(arrow, with: .color(.white))
+                    context.stroke(arrow, with: .color(.black), lineWidth: 1)
+                }
             }
             #else
             if let placement = cursorPlacement(in: proxy.size) {

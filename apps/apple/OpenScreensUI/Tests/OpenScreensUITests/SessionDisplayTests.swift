@@ -115,6 +115,28 @@ final class SessionDisplayTests: XCTestCase {
         }
     }
 
+    func testTrackpadSendsThePositionShownByTheLocalCursor() async throws {
+        let transport = DisplayTestTransport()
+        let profile = ConnectionProfile(name: "Pointer fixture", host: "localhost")
+        let model = SessionViewModel(profile: profile, service: DisplayTestService(transport: transport))
+        model.cursorMode = .trackpad
+        model.start()
+        defer { model.stop() }
+        transport.emit(.framebufferSize(width: 1200, height: 800))
+        await waitUntil { model.state.isConnected && model.serverSize != nil }
+
+        let canvas = CGSize(width: 400, height: 800)
+        model.drag(to: CGPoint(x: 180, y: 390), in: canvas)
+        model.drag(to: CGPoint(x: 205, y: 410), in: canvas)
+
+        await waitUntil { await transport.lastPointer != nil }
+        let lastPointer = await transport.lastPointer
+        let event = try XCTUnwrap(lastPointer)
+        XCTAssertFalse(event.isRelative)
+        XCTAssertEqual(event.x, model.remoteCursor.x, accuracy: 0.0001)
+        XCTAssertEqual(event.y, model.remoteCursor.y, accuracy: 0.0001)
+    }
+
     private func waitUntil(_ condition: () async -> Bool, line: UInt = #line) async {
         let clock = ContinuousClock()
         let deadline = clock.now + .seconds(2)
@@ -151,7 +173,8 @@ actor DisplayTestTransport: RemoteSessionProtocol {
         emit(.state(.connected))
     }
     func disconnect() async { continuation.finish() }
-    func sendPointer(_ event: PointerEvent) async {}
+    private(set) var lastPointer: PointerEvent?
+    func sendPointer(_ event: PointerEvent) async { lastPointer = event }
     func sendKey(_ event: RemoteKeyEvent) async {}
     func setClipboardSharing(_ enabled: Bool) async {}
     func sendClipboard(_ text: String, automatic: Bool) async {}

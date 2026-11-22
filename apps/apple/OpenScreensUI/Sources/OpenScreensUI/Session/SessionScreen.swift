@@ -47,24 +47,26 @@ public struct SessionScreen: View {
             Theme.Colors.canvas
                 .ignoresSafeArea()
 
-            remoteCanvas
-                #if os(iOS)
-                .ignoresSafeArea()
-                #endif
-                .accessibilityHidden(true)
-
-            cursorOverlay
-            pointerSurface
-            if let indicator = pressIndicator {
-                Circle()
-                    .fill(indicator.color.opacity(0.9))
-                    .frame(width: 22, height: 22)
-                    .overlay(Circle().stroke(.white.opacity(0.85), lineWidth: 2))
-                    .shadow(color: indicator.color.opacity(0.55), radius: 8)
-                    .position(indicator.point)
-                    .allowsHitTesting(false)
+            ZStack {
+                remoteCanvas
                     .accessibilityHidden(true)
+
+                cursorOverlay
+                pointerSurface
+                if let indicator = pressIndicator {
+                    Circle()
+                        .fill(indicator.color.opacity(0.9))
+                        .frame(width: 22, height: 22)
+                        .overlay(Circle().stroke(.white.opacity(0.85), lineWidth: 2))
+                        .shadow(color: indicator.color.opacity(0.55), radius: 8)
+                        .position(indicator.point)
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                }
             }
+            #if os(iOS)
+            .ignoresSafeArea()
+            #endif
             #if os(macOS)
             if model.state.isConnected {
                 RemoteDragOutHandle(model: model)

@@ -697,7 +697,7 @@ public final class SessionViewModel {
                 x: min(max(remoteCursor.x + deltaX, 0), 1),
                 y: min(max(remoteCursor.y + deltaY, 0), 1)
             )
-            queuePointer([PointerEvent(action: .move, x: deltaX, y: deltaY, isRelative: true)])
+            queuePointer([PointerEvent(action: .move, x: remoteCursor.x, y: remoteCursor.y)])
         }
     }
 

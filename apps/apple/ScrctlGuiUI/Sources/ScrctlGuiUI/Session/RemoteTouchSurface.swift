@@ -50,16 +50,12 @@ final class TouchGestureView: UIView, UIGestureRecognizerDelegate {
     private var pinch: UIPinchGestureRecognizer!
     private var heldTransformDistance: CGFloat?
     private var heldFingerPosition: CGPoint?
-    private var heldDrag: HeldDragGestureRecognizer!
 
     init() {
         super.init(frame: .zero)
         isMultipleTouchEnabled = true
         backgroundColor = .clear
         isAccessibilityElement = false
-
-        let singleTap = UITapGestureRecognizer(target: self, action: #selector(handleSingleTap))
-        addGestureRecognizer(singleTap)
 
         let singlePan = UIPanGestureRecognizer(target: self, action: #selector(handleSinglePan))
         singlePan.minimumNumberOfTouches = 1
@@ -96,8 +92,6 @@ final class TouchGestureView: UIView, UIGestureRecognizerDelegate {
 
         let held = HeldDragGestureRecognizer(target: self, action: #selector(handleHeldDrag))
         addGestureRecognizer(held)
-        heldDrag = held
-        singleTap.require(toFail: held)
 
         let heldRight = UILongPressGestureRecognizer(target: self, action: #selector(handleLongPress))
         heldRight.numberOfTouchesRequired = 2
@@ -134,12 +128,6 @@ final class TouchGestureView: UIView, UIGestureRecognizerDelegate {
         // wins while it is active, then dragging resumes on the next gesture.
         let pair: [UIGestureRecognizer] = [gestureRecognizer, otherGestureRecognizer]
         return pair.contains { $0 === pinch } && pair.contains { $0 === twoPan }
-    }
-
-    @objc private func handleSingleTap(_ gesture: UITapGestureRecognizer) {
-        let point = gesture.location(in: self)
-        heldDrag.recordTap(at: point)
-        handlers?.onTap(point)
     }
 
     @objc private func handleSinglePan(_ gesture: UIPanGestureRecognizer) {
@@ -218,12 +206,16 @@ final class TouchGestureView: UIView, UIGestureRecognizerDelegate {
     }
 
     @objc private func handleHeldDrag(_ gesture: HeldDragGestureRecognizer) {
+        if gesture.state == .ended, let tap = gesture.tapPosition {
+            handlers?.onTap(tap)
+            return
+        }
         switch gesture.state {
         case .began:
             guard let point = gesture.points.first else { return }
             pressActive = true
             heldFingerPosition = point
-            handlers?.onPressBegan(.left, point)
+            handlers?.onPressBegan(.left, gesture.priorTapPosition ?? point)
         case .changed:
             let points = gesture.points
             if points.count >= 2 {
@@ -294,9 +286,12 @@ final class HeldDragGestureRecognizer: UIGestureRecognizer {
     private var fingers: [UITouch] = []
     private var holdFinger: UITouch?
     private var initialPosition = CGPoint.zero
+    private var initialTime: TimeInterval = 0
     private var timer: Timer?
     private var lastTap: (position: CGPoint, time: TimeInterval)?
     private(set) var touchSetChanged = false
+    private(set) var priorTapPosition: CGPoint?
+    private(set) var tapPosition: CGPoint?
 
     var points: [CGPoint] {
         let controls = fingers.count == 1 ? fingers : fingers.filter { $0 !== holdFinger }
@@ -308,13 +303,16 @@ final class HeldDragGestureRecognizer: UIGestureRecognizer {
         if state == .began || state == .changed {
             touchSetChanged = true
             state = .changed
-        } else if fingers.count == 1, let point = points.first {
+        } else if fingers.count == 1, let touch = fingers.first {
+            let point = touch.location(in: view)
             initialPosition = point
+            initialTime = touch.timestamp
             let priorTap = lastTap
             lastTap = nil
             if let priorTap,
-               ProcessInfo.processInfo.systemUptime - priorTap.time <= 0.3,
-               hypot(point.x - priorTap.position.x, point.y - priorTap.position.y) <= 20 {
+               (0...0.3).contains(initialTime - priorTap.time),
+               hypot(point.x - priorTap.position.x, point.y - priorTap.position.y) <= 40 {
+                priorTapPosition = priorTap.position
                 recognizeHold()
                 return
             }
@@ -325,10 +323,6 @@ final class HeldDragGestureRecognizer: UIGestureRecognizer {
             lastTap = nil
             state = .failed
         }
-    }
-
-    func recordTap(at position: CGPoint) {
-        lastTap = (position, ProcessInfo.processInfo.systemUptime)
     }
 
     override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent) {
@@ -343,12 +337,20 @@ final class HeldDragGestureRecognizer: UIGestureRecognizer {
     }
 
     override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent) {
-        fingers.removeAll { touches.contains($0) }
-        if let holdFinger, touches.contains(holdFinger) { self.holdFinger = fingers.first }
-        guard state == .began || state == .changed else {
-            state = .failed
+        if state == .possible {
+            guard fingers.count == 1, let touch = fingers.first, touches.contains(touch),
+                  touch.timestamp - initialTime < 0.45 else {
+                state = .failed
+                return
+            }
+            tapPosition = initialPosition
+            lastTap = (initialPosition, touch.timestamp)
+            state = .recognized
             return
         }
+        fingers.removeAll { touches.contains($0) }
+        if let holdFinger, touches.contains(holdFinger) { self.holdFinger = fingers.first }
+        guard state == .began || state == .changed else { return }
         touchSetChanged = true
         state = fingers.isEmpty ? .ended : .changed
     }
@@ -362,6 +364,8 @@ final class HeldDragGestureRecognizer: UIGestureRecognizer {
         timer = nil
         fingers.removeAll()
         holdFinger = nil
+        priorTapPosition = nil
+        tapPosition = nil
         touchSetChanged = false
         super.reset()
     }

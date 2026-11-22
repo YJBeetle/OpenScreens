@@ -211,6 +211,7 @@ public struct RemoteViewport: Sendable, Equatable {
 public enum RemoteSessionEvent: Sendable {
     case state(RemoteSessionState)
     case curtainModeSupport(Bool)
+    case serverFeatures(appleRemote: Bool, fileUpload: Bool, fileDownload: Bool)
     case framebufferSize(width: Int, height: Int)
     case displays([RemoteDisplay])
     case frame(RemoteFrame)
@@ -340,6 +341,7 @@ public protocol RemoteSessionProtocol: Sendable {
     /// Switches the host to one display, or shows every display when `id` is
     /// `nil`.
     func requestCurtainMode(_ enabled: Bool) async
+    func setQuality(_ quality: ConnectionQuality) async throws
     func selectDisplay(_ id: Int?) async throws
     /// Sets the visible crop in normalized framebuffer coordinates (0...1)
     /// and supplies the screen width for sampling. `nil` restores the full
@@ -368,6 +370,9 @@ public extension RemoteSessionProtocol {
     /// Transports without wheel support ignore the request.
     func sendScroll(at point: CGPoint, stepsX: Int32, stepsY: Int32) async {}
     func requestCurtainMode(_ enabled: Bool) async {}
+    func setQuality(_ quality: ConnectionQuality) async throws {
+        throw RemoteSessionFailure(kind: .invalidInput, reason: "This session cannot change picture quality.")
+    }
     /// Transports without viewport cropping ignore the request.
     func setViewport(_ normalizedRect: CGRect?, screenPixelWidth: Int) async {}
     /// Transports without file transfer support ignore the request.

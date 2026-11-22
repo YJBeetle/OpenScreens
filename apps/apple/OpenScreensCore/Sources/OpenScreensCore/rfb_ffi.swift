@@ -827,6 +827,11 @@ public protocol RemoteSessionProtocol: AnyObject, Sendable {
     
     func disconnect() async 
     
+    /**
+     * Reports whether the session negotiated Apple's RFB 3.889 variant.
+     */
+    func isAppleRemote()  -> Bool
+
     func nextEvent() async  -> SessionEvent?
     
     func nextTransferHandle()  -> UInt32
@@ -861,6 +866,12 @@ public protocol RemoteSessionProtocol: AnyObject, Sendable {
     func setClipboardSharing(enabled: Bool) async throws 
     
     /**
+     * Sets a fixed Tight JPEG quality (0 through 9) and refreshes the
+     * current viewport. The server may ignore the quality hint.
+     */
+    func setQuality(level: UInt8) async throws
+
+    /**
      * Restricts incremental update requests to a region and refreshes it.
      * A zero width or height restores full-screen updates.
      */
@@ -878,6 +889,16 @@ public protocol RemoteSessionProtocol: AnyObject, Sendable {
     
     func supportsCurtainMode()  -> Bool
     
+    /**
+     * Reports whether the Apple server advertised drag-out support.
+     */
+    func supportsFileDownload()  -> Bool
+
+    /**
+     * Reports whether the Apple server advertised drag-in support.
+     */
+    func supportsFileUpload()  -> Bool
+
     func uploadComplete(handle: UInt32) async throws 
     
     func uploadData(handle: UInt32, chunk: Data) async throws 
@@ -1087,6 +1108,18 @@ open func disconnect()async   {
         )
 }
     
+    /**
+     * Reports whether the session negotiated Apple's RFB 3.889 variant.
+     */
+open func isAppleRemote() -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_rfb_ffi_fn_method_remotesession_is_apple_remote(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+
 open func nextEvent()async  -> SessionEvent?  {
     return
         try!  await uniffiRustCallAsync(
@@ -1290,6 +1323,26 @@ open func setClipboardSharing(enabled: Bool)async throws   {
 }
     
     /**
+     * Sets a fixed Tight JPEG quality (0 through 9) and refreshes the
+     * current viewport. The server may ignore the quality hint.
+     */
+open func setQuality(level: UInt8)async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_rfb_ffi_fn_method_remotesession_set_quality(
+                        self.uniffiCloneHandle(),FfiConverterUInt8.lower(level)
+                )
+            },
+            pollFunc: ffi_rfb_ffi_rust_future_poll_void,
+            completeFunc: ffi_rfb_ffi_rust_future_complete_void,
+            freeFunc: ffi_rfb_ffi_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeSessionFailure_lift
+        )
+}
+
+    /**
      * Restricts incremental update requests to a region and refreshes it.
      * A zero width or height restores full-screen updates.
      */
@@ -1358,6 +1411,30 @@ open func supportsCurtainMode() -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
         uniffiCallStatus in
     uniffi_rfb_ffi_fn_method_remotesession_supports_curtain_mode(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+
+    /**
+     * Reports whether the Apple server advertised drag-out support.
+     */
+open func supportsFileDownload() -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_rfb_ffi_fn_method_remotesession_supports_file_download(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+
+    /**
+     * Reports whether the Apple server advertised drag-in support.
+     */
+open func supportsFileUpload() -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_rfb_ffi_fn_method_remotesession_supports_file_upload(
             self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
@@ -3434,6 +3511,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_rfb_ffi_checksum_method_remotesession_disconnect() != 3357) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_rfb_ffi_checksum_method_remotesession_is_apple_remote() != 7936) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_rfb_ffi_checksum_method_remotesession_next_event() != 40415) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -3473,6 +3553,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_rfb_ffi_checksum_method_remotesession_set_clipboard_sharing() != 23849) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_rfb_ffi_checksum_method_remotesession_set_quality() != 15466) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_rfb_ffi_checksum_method_remotesession_set_viewport() != 37258) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -3486,6 +3569,12 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_rfb_ffi_checksum_method_remotesession_supports_curtain_mode() != 26734) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_rfb_ffi_checksum_method_remotesession_supports_file_download() != 2911) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_rfb_ffi_checksum_method_remotesession_supports_file_upload() != 49819) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_rfb_ffi_checksum_method_remotesession_upload_complete() != 6976) {

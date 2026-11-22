@@ -16,6 +16,7 @@ struct SessionCommands {
     let isObserving: Bool
     let cursorMode: CursorMode
     let isConnected: Bool
+    let supportsFileTransfer: Bool
 }
 
 private struct SessionCommandsKey: FocusedValueKey {
@@ -62,7 +63,7 @@ struct SessionMenuCommands: Commands {
             Button("File Transfers") {
                 session?.showFileTransfers()
             }
-            .disabled(session == nil)
+            .disabled(session?.supportsFileTransfer != true)
 
             Toggle("Show Toolbar", isOn: Binding(
                 get: { session?.showsToolbar ?? false },

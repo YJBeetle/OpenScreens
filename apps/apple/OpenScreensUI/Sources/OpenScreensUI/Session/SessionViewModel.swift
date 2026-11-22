@@ -58,6 +58,12 @@ import SwiftUI
 public final class SessionViewModel {
     public let profile: ConnectionProfile
     private var qualityOverride: ConnectionQuality?
+    private(set) var changingQuality = false
+    private(set) var isAppleRemote = false
+    public private(set) var supportsFileUpload = false
+    public private(set) var supportsFileDownload = false
+
+    public var supportsFileTransfer: Bool { supportsFileUpload || supportsFileDownload }
 
     var quality: ConnectionQuality {
         qualityOverride ?? (store?.connection(id: profile.id) ?? profile).initialQuality
@@ -403,6 +409,9 @@ public final class SessionViewModel {
         previewRecorder.reset()
         cancelDisconnectConfirmation()
         supportsCurtainMode = false
+        isAppleRemote = false
+        supportsFileUpload = false
+        supportsFileDownload = false
         releasePointerInput()
         inputQueue?.events.finish()
         inputQueue = nil
@@ -452,6 +461,11 @@ public final class SessionViewModel {
 
         case .curtainModeSupport(let supported):
             supportsCurtainMode = supported
+        case .serverFeatures(let appleRemote, let fileUpload, let fileDownload):
+            isAppleRemote = appleRemote
+            supportsFileUpload = fileUpload
+            supportsFileDownload = fileDownload
+
         case .framebufferSize(let width, let height):
             let size = CGSize(width: width, height: height)
             if serverSize != size {
@@ -1267,7 +1281,7 @@ public final class SessionViewModel {
     /// Sends files dropped onto the remote screen. The transport announces the
     /// drag first and uploads once the server answers with a destination.
     public func uploadFiles(_ urls: [URL]) {
-        guard state.isConnected, !isObserving, !urls.isEmpty, let session else { return }
+        guard state.isConnected, supportsFileUpload, !isObserving, !urls.isEmpty, let session else { return }
         if urls.count == 1 {
             let name = urls[0].lastPathComponent
             uploadFileName = name.isEmpty
@@ -1292,7 +1306,7 @@ public final class SessionViewModel {
     /// Downloads one remote POSIX path into the local Downloads folder. The
     /// transport reports progress and completion as events.
     public func download(remotePath: String) {
-        guard state.isConnected, let session else { return }
+        guard state.isConnected, supportsFileDownload, let session else { return }
         let path = remotePath.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !path.isEmpty else { return }
         downloadFileName = Self.fileName(inRemotePath: path)
@@ -1333,7 +1347,7 @@ public final class SessionViewModel {
     /// Asks the remote server for the files on its drag pasteboard. The caller
     /// (macOS drag source) turns them into file promises.
     public func beginDragOut() async -> [RemoteFile] {
-        guard state.isConnected, let session else { return [] }
+        guard state.isConnected, supportsFileDownload, let session else { return [] }
         return await session.beginDragOut()
     }
 
@@ -1346,6 +1360,7 @@ public final class SessionViewModel {
         guard state.isConnected, let session else {
             throw RemoteTransferError.notConnected
         }
+        guard supportsFileDownload else { throw RemoteTransferError.unsupported }
         downloadFileName = file.name
         downloadFraction = nil
         let id = UUID()
@@ -1389,10 +1404,18 @@ public final class SessionViewModel {
     }
 
     func setQuality(_ quality: ConnectionQuality) {
-        guard self.quality != quality else { return }
-        qualityOverride = quality
-        store?.setQuality(quality, for: profile.id)
-        showMessage(NSLocalizedString("Picture quality will apply next time you connect.", comment: "Picture quality"))
+        guard state.isConnected, let session, self.quality != quality, !changingQuality else { return }
+        changingQuality = true
+        Task {
+            defer { changingQuality = false }
+            do {
+                try await session.setQuality(quality)
+                qualityOverride = quality
+                store?.setQuality(quality, for: profile.id)
+            } catch {
+                showMessage(NSLocalizedString("Could not change picture quality.", comment: "Picture quality"))
+            }
+        }
     }
 
     public func setScaling(_ mode: RemoteContentMode) {

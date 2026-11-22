@@ -56,7 +56,7 @@ public struct RemoteCommandMenu: View {
 
     public var body: some View {
         Menu {
-            ForEach(RemoteDesktopCommand.commands(for: model.profile.platform)) { command in
+            ForEach(RemoteDesktopCommand.commands(for: model.isAppleRemote ? .macos : model.profile.platform)) { command in
                 Button(NSLocalizedString(command.title, comment: "Remote desktop command")) {
                     model.sendCommand(command)
                 }

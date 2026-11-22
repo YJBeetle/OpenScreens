@@ -77,7 +77,7 @@ public struct SessionScreen: View {
             .padding(toolbarInsets)
             #endif
             #if os(macOS)
-            if model.state.isConnected {
+            if model.state.isConnected && model.supportsFileDownload {
                 RemoteDragOutHandle(model: model)
                     .frame(width: 112, height: 38)
                     .padding(.leading, 14)
@@ -752,7 +752,7 @@ public struct SessionScreen: View {
 
     #if os(macOS)
     private func handleDrop(providers: [NSItemProvider]) -> Bool {
-        guard model.state.isConnected, !model.isObserving else { return false }
+        guard model.state.isConnected, model.supportsFileUpload, !model.isObserving else { return false }
         let fileProviders = providers.filter {
             $0.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier)
         }
@@ -794,7 +794,7 @@ public struct SessionScreen: View {
     }
     #else
     private func handleDrop(urls: [URL]) -> Bool {
-        guard model.state.isConnected, !model.isObserving, !urls.isEmpty else { return false }
+        guard model.state.isConnected, model.supportsFileUpload, !model.isObserving, !urls.isEmpty else { return false }
         model.uploadFiles(urls)
         return true
     }

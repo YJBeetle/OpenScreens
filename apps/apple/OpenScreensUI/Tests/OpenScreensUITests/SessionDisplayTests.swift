@@ -217,6 +217,34 @@ final class SessionDisplayTests: XCTestCase {
         XCTAssertEqual(SessionViewModel(profile: ConnectionProfile(name: "New", host: "new.local")).cursorMode, .trackpadAndMouse)
     }
 
+    func testChangesQualityAndReadsFileCapabilitiesInTheActiveSession() async {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = ConnectionStore(fileURL: directory.appendingPathComponent("connections.json"), seedDemoData: false)
+        let profile = ConnectionProfile(name: "Capabilities", host: "localhost", quality: .high)
+        store.add(profile)
+        let transport = DisplayTestTransport()
+        let model = SessionViewModel(profile: profile, service: DisplayTestService(transport: transport), connectionStore: store)
+        model.start()
+        defer { model.stop() }
+        await waitUntil { model.state.isConnected }
+        XCTAssertFalse(model.supportsFileTransfer)
+
+        transport.emit(.serverFeatures(appleRemote: true, fileUpload: true, fileDownload: false))
+        await waitUntil { model.supportsFileUpload }
+        XCTAssertTrue(model.isAppleRemote)
+        XCTAssertFalse(model.supportsFileDownload)
+
+        model.setQuality(.low)
+        await waitUntil { model.quality == .low }
+        let setQuality = await transport.changedQuality
+        XCTAssertEqual(setQuality, .low)
+        XCTAssertEqual(store.connection(id: profile.id)?.quality, .low)
+
+        transport.emit(.state(.disconnected(reason: nil)))
+        await waitUntil { !model.supportsFileTransfer }
+    }
+
     private func waitUntil(_ condition: () async -> Bool, line: UInt = #line) async {
         let clock = ContinuousClock()
         let deadline = clock.now + .seconds(2)
@@ -239,6 +267,9 @@ actor DisplayTestTransport: RemoteSessionProtocol {
     private let continuation: AsyncStream<RemoteSessionEvent>.Continuation
     private(set) var selections: [Int?] = []
     private(set) var requestedQuality: ConnectionQuality?
+    private(set) var changedQuality: ConnectionQuality?
+
+    func setQuality(_ quality: ConnectionQuality) async throws { changedQuality = quality }
 
     init() {
         (events, continuation) = AsyncStream.makeStream()

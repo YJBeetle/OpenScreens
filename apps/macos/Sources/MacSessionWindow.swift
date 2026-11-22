@@ -64,7 +64,8 @@ struct MacSessionWindow: View {
             showsToolbar: model.showsChrome,
             isObserving: model.isObserving,
             cursorMode: model.cursorMode,
-            isConnected: model.state.isConnected
+            isConnected: model.state.isConnected,
+            supportsFileTransfer: model.supportsFileTransfer
         )
     }
 }

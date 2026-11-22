@@ -27,6 +27,8 @@ struct ClientProbe {
                     print("state: \(state.label)")
                 case .curtainModeSupport(let supported):
                     print("curtain mode support: \(supported)")
+                case .serverFeatures(let appleRemote, let fileUpload, let fileDownload):
+                    print("apple remote: \(appleRemote), upload: \(fileUpload), download: \(fileDownload)")
                 case .framebufferSize(let width, let height):
                     print("desktop: \(width)x\(height)")
                 case .displays(let displays):

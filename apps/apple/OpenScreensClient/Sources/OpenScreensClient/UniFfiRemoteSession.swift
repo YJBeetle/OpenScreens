@@ -266,6 +266,11 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
             guard !finished, !Task.isCancelled else { throw CancellationError() }
             self.session = session
             continuation.yield(.curtainModeSupport(session.supportsCurtainMode()))
+            continuation.yield(.serverFeatures(
+                appleRemote: session.isAppleRemote(),
+                fileUpload: session.supportsFileUpload(),
+                fileDownload: session.supportsFileDownload()
+            ))
             updateSize(session.size())
             continuation.yield(.framebufferSize(width: Int(width), height: Int(height)))
             continuation.yield(.state(.connected))
@@ -395,6 +400,11 @@ public actor UniFfiRemoteSession: OpenScreensUI.RemoteSessionProtocol {
     public func setObserveMode(_ observing: Bool) async {
         self.observing = observing
         try? await session?.setClipboardSharing(enabled: sharedClipboard && !observing)
+    }
+
+    public func setQuality(_ quality: ConnectionQuality) async throws {
+        guard let session else { throw RemoteSessionFailure(kind: .closed, reason: "The session is closed.") }
+        try await session.setQuality(level: quality.jpegLevel)
     }
 
     public func requestCurtainMode(_ enabled: Bool) async {

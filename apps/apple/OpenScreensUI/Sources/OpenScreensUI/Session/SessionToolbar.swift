@@ -25,9 +25,10 @@ struct SessionToolbar: View {
                 return model.displays.count > 1 || model.selectedDisplayID != nil
             }
             if item == .hotCorners {
-                return !model.isObserving && (model.profile.platform == .macos ||
-                    model.profile.authentication.requiresUsername || model.supportsCurtainMode)
+                return !model.isObserving && (model.isAppleRemote || model.profile.platform == .macos)
             }
+            if item == .download { return model.supportsFileTransfer }
+            if model.isObserving && (item == .pointer || item == .keyboard) { return false }
             #if os(macOS)
             if item == .keyboard { return false }
             #endif
@@ -156,9 +157,13 @@ private struct SessionToolbarControl: View {
             clipboardMenu
         case .download:
             Menu {
-                Button("Send Files…", systemImage: "arrow.up.doc", action: onUpload)
-                    .disabled(model.isObserving)
-                Button("Download Remote File", systemImage: "arrow.down.doc", action: onDownload)
+                if model.supportsFileUpload {
+                    Button("Send Files…", systemImage: "arrow.up.doc", action: onUpload)
+                        .disabled(model.isObserving)
+                }
+                if model.supportsFileDownload {
+                    Button("Download Remote File", systemImage: "arrow.down.doc", action: onDownload)
+                }
                 Button("File Transfers", systemImage: "arrow.up.arrow.down") {
                     model.showsFileTransfers = true
                 }
@@ -366,6 +371,7 @@ private struct SessionToolbarControl: View {
                         Text(quality.title).tag(quality)
                     }
                 }
+                .disabled(model.changingQuality)
             }
         } label: {
             menuIcon("display", title: "Display options")

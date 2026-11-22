@@ -245,6 +245,32 @@ final class SessionDisplayTests: XCTestCase {
         await waitUntil { !model.supportsFileTransfer }
     }
 
+    func testFillCanZoomOutToTheWholeDesktopAndInToFourLogicalTimes() async throws {
+        let transport = DisplayTestTransport()
+        var profile = ConnectionProfile(name: "HiDPI", host: "localhost")
+        profile.controls.remoteScalePercent = 200
+        profile.controls.scaling = .fill
+        let model = SessionViewModel(profile: profile, service: DisplayTestService(transport: transport))
+        model.start()
+        defer { model.stop() }
+        transport.emit(.framebufferSize(width: 1200, height: 600))
+        await waitUntil { model.state.isConnected && model.serverSize != nil }
+        let canvas = CGSize(width: 400, height: 400)
+        let center = CGPoint(x: 200, y: 200)
+        model.scheduleViewportUpdate(in: canvas, screenPixelWidth: 1200)
+
+        model.showActualSize()
+        XCTAssertEqual(try XCTUnwrap(model.displayedImageRect(in: canvas)).width, 600, accuracy: 0.001)
+
+        model.applyPinch(scale: 10, startZoom: model.zoom, startPan: .zero,
+                         startFocal: center, currentFocal: center, in: canvas)
+        XCTAssertEqual(try XCTUnwrap(model.displayedImageRect(in: canvas)).width, 2400, accuracy: 0.001)
+
+        model.applyPinch(scale: 0.01, startZoom: model.zoom, startPan: .zero,
+                         startFocal: center, currentFocal: center, in: canvas)
+        XCTAssertEqual(model.displayedImageRect(in: canvas), CGRect(x: 0, y: 100, width: 400, height: 200))
+    }
+
     private func waitUntil(_ condition: () async -> Bool, line: UInt = #line) async {
         let clock = ContinuousClock()
         let deadline = clock.now + .seconds(2)

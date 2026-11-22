@@ -264,7 +264,7 @@ public struct SessionScreen: View {
                     model.panZoom(by: $0, in: proxy.size)
                     model.scheduleCurrentViewport()
                 },
-                isZoomed: { model.zoom > 1.001 && !model.isCenteredTrackpad },
+                isZoomed: { model.canPanZoom(in: proxy.size) && !model.isCenteredTrackpad },
                 onPinchBegan: { focal in
                     guard model.zoomEnabled else { return }
                     pinchStart = (model.zoom, model.pan, focal)

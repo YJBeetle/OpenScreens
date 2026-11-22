@@ -764,6 +764,16 @@ public struct ConnectionEditorView: View {
                     Text(mode.title).tag(mode)
                 }
             }
+            #if os(iOS)
+            Picker("Remote System Scale", selection: Binding(
+                get: { draft.controls.remoteScalePercent ?? 100 },
+                set: { draft.controls.remoteScalePercent = $0 }
+            )) {
+                ForEach([100, 125, 150, 175, 200, 225, 250, 300, 350, 400], id: \.self) { percent in
+                    Text(Double(percent) / 100, format: .percent).tag(percent)
+                }
+            }
+            #endif
             Toggle(
                 "Allow Pinching to Zoom",
                 isOn: Binding(

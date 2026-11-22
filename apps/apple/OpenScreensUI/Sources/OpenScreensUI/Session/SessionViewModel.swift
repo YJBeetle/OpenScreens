@@ -181,7 +181,7 @@ public final class SessionViewModel {
     @ObservationIgnored private var lastViewportPixelWidth = 0
 
     private static let resumeReconnectDelay: TimeInterval = 5
-    private static let maxZoom: CGFloat = 6
+    private static let maxLogicalZoom: CGFloat = 4
     /// Points of two-finger travel that make one wheel click.
     private static let scrollStepPoints: CGFloat = 24
 
@@ -471,6 +471,7 @@ public final class SessionViewModel {
             if serverSize != size {
                 previewRecorder.reset()
                 serverSize = size
+                if canvasSize.width > 0, canvasSize.height > 0 { constrainViewZoom(in: canvasSize) }
                 lastViewportRect = nil
                 scheduleCurrentViewport()
             }
@@ -916,7 +917,7 @@ public final class SessionViewModel {
 
     /// Moves the zoomed image while two fingers drag it.
     public func panZoom(by delta: CGSize, in size: CGSize) {
-        guard zoom > 1.001, !isCenteredTrackpad else { return }
+        guard canPanZoom(in: size), !isCenteredTrackpad else { return }
         pan = clampedPan(
             CGSize(width: pan.width + delta.width, height: pan.height + delta.height),
             in: size
@@ -935,15 +936,16 @@ public final class SessionViewModel {
     ) {
         guard let base = remoteImageRect(in: size) else { return }
         stopRecentering()
-        let newZoom = min(max(startZoom * scale, 1), Self.maxZoom)
-        if isCenteredTrackpad {
-            zoom = newZoom > 1.001 ? newZoom : 1
-            followTrackpadCursor(in: size)
+        let bounds = zoomBounds(in: size)
+        let newZoom = min(max(startZoom * scale, bounds.minimum), bounds.maximum)
+        if newZoom <= bounds.minimum * 1.001 {
+            zoom = bounds.minimum
+            pan = .zero
             return
         }
-        guard newZoom > 1.001 else {
-            zoom = 1
-            pan = .zero
+        if isCenteredTrackpad {
+            zoom = newZoom
+            followTrackpadCursor(in: size)
             return
         }
         let center = CGPoint(x: base.midX, y: base.midY)
@@ -961,9 +963,42 @@ public final class SessionViewModel {
         )
     }
 
+    private func zoomBounds(in size: CGSize) -> (minimum: CGFloat, actual: CGFloat, maximum: CGFloat) {
+        guard let base = remoteImageRect(in: size), let framebuffer = serverSize ?? framebufferSize else {
+            return (1, 1, Self.maxLogicalZoom)
+        }
+        let minimum = min(size.width / base.width, size.height / base.height)
+        // UIKit already measures the local canvas in logical points.
+        let remoteScale = CGFloat(max(1, profile.controls.remoteScalePercent ?? 100)) / 100
+        let actual = framebuffer.width / remoteScale / base.width
+        return (minimum, actual, max(minimum, actual * Self.maxLogicalZoom))
+    }
+
+    func canPanZoom(in size: CGSize) -> Bool {
+        zoom > zoomBounds(in: size).minimum * 1.001
+    }
+
     public func resetZoom() {
-        zoom = 1
+        setViewZoom(zoomBounds(in: canvasSize).minimum)
+    }
+
+    func showActualSize() {
+        setViewZoom(zoomBounds(in: canvasSize).actual)
+    }
+
+    private func setViewZoom(_ newZoom: CGFloat) {
+        stopRecentering()
+        let bounds = zoomBounds(in: canvasSize)
+        zoom = min(max(newZoom, bounds.minimum), bounds.maximum)
         pan = .zero
+        if isCenteredTrackpad { followTrackpadCursor(in: canvasSize) }
+        scheduleCurrentViewport()
+    }
+
+    private func constrainViewZoom(in size: CGSize) {
+        let bounds = zoomBounds(in: size)
+        zoom = min(max(zoom, bounds.minimum), bounds.maximum)
+        if !canPanZoom(in: size) { pan = .zero }
     }
 
     /// Debounces a viewport subscription for the visible part of the image, so
@@ -972,6 +1007,7 @@ public final class SessionViewModel {
         in size: CGSize, screenPixelWidth: CGFloat, renderBounds: CGRect? = nil
     ) {
         if canvasSize != size { stopRecentering() }
+        constrainViewZoom(in: size)
         if isCenteredTrackpad { followTrackpadCursor(in: size) }
         canvasSize = size
         self.renderBounds = renderBounds ?? CGRect(origin: .zero, size: size)
@@ -1066,7 +1102,8 @@ public final class SessionViewModel {
     /// Rect the remote framebuffer occupies inside the view, mirroring the
     /// canvas renderer's fit/fill layout.
     public func remoteImageRect(in size: CGSize) -> CGRect? {
-        guard let framebufferSize, framebufferSize.width > 0, framebufferSize.height > 0,
+        guard let framebufferSize = serverSize ?? self.framebufferSize,
+              framebufferSize.width > 0, framebufferSize.height > 0,
               size.width > 0, size.height > 0
         else { return nil }
 
@@ -1397,7 +1434,7 @@ public final class SessionViewModel {
                 )
                 followTrackpadCursor(in: canvasSize)
             } else {
-                pan = zoom > 1.001 ? clampedPan(pan, in: canvasSize) : .zero
+                pan = canPanZoom(in: canvasSize) ? clampedPan(pan, in: canvasSize) : .zero
             }
             scheduleCurrentViewport()
         }
@@ -1420,6 +1457,7 @@ public final class SessionViewModel {
 
     public func setScaling(_ mode: RemoteContentMode) {
         scaling = mode
+        setViewZoom(1)
     }
 
     func requestCurtainMode(_ enabled: Bool) {

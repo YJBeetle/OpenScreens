@@ -483,3 +483,6 @@
 "Mirror to External Display" = "投放到外接显示器";
 "Picture Quality" = "画质";
 "Could not change picture quality." = "无法切换画质。";
+"Remote System Scale" = "远端系统缩放";
+"Actual Size (1:1)" = "实际大小（1:1）";
+"Fit Entire Desktop" = "完整显示";

@@ -1,5 +1,5 @@
 import AppIntents
-import OpenScreensUI
+import ScrctlGuiUI
 
 @available(iOS 18, *)
 struct OpenScreensShortcuts: AppShortcutsProvider {

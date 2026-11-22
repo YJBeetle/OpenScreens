@@ -32,9 +32,9 @@ vendor/scrctl/core/crates/rfb-tunnel/    userspace WireGuard tunnel
 vendor/scrctl/core/crates/rfb-engine/    handshake, session loop, framebuffer
 vendor/scrctl/core/crates/rfb-io/        TCP and SSH transports
 vendor/scrctl/core/crates/rfb-ffi/       UniFFI surface
-apps/apple/OpenScreensUI/  shared SwiftUI views and Metal canvas
-apps/apple/OpenScreensCore/ generated Swift bindings (XCFramework built locally)
-apps/apple/OpenScreensClient/ UniFFI session adapter
+apps/apple/ScrctlGuiUI/  shared SwiftUI views and Metal canvas
+apps/apple/ScrctlGuiCore/ generated Swift bindings (XCFramework built locally)
+apps/apple/ScrctlGuiClient/ UniFFI session adapter
 apps/macos/                macOS app shell
 apps/ios/                  iOS/iPadOS app shell
 ```

@@ -1,4 +1,4 @@
-import OpenScreensUI
+import ScrctlGuiUI
 import SwiftUI
 
 struct SessionCommands {

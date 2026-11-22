@@ -30,9 +30,9 @@ vendor/scrctl/core/crates/rfb-tunnel/    用户态 WireGuard 隧道
 vendor/scrctl/core/crates/rfb-engine/    握手、会话循环、帧缓冲
 vendor/scrctl/core/crates/rfb-io/        TCP 与 SSH 传输
 vendor/scrctl/core/crates/rfb-ffi/       UniFFI 接口层
-apps/apple/OpenScreensUI/  共享 SwiftUI 视图与 Metal 画布
-apps/apple/OpenScreensCore/ 生成的 Swift 绑定（XCFramework 本地构建）
-apps/apple/OpenScreensClient/ UniFFI 会话适配层
+apps/apple/ScrctlGuiUI/  共享 SwiftUI 视图与 Metal 画布
+apps/apple/ScrctlGuiCore/ 生成的 Swift 绑定（XCFramework 本地构建）
+apps/apple/ScrctlGuiClient/ UniFFI 会话适配层
 apps/macos/                macOS 应用壳
 apps/ios/                  iOS/iPadOS 应用壳
 ```

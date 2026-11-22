@@ -1,5 +1,5 @@
 import AppIntents
-import OpenScreensUI
+import ScrctlGuiUI
 
 struct OpenScreensShortcuts: AppShortcutsProvider {
     static var appShortcuts: [AppShortcut] {

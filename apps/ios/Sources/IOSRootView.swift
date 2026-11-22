@@ -1,5 +1,5 @@
-import OpenScreensClient
-import OpenScreensUI
+import ScrctlGuiClient
+import ScrctlGuiUI
 import SwiftUI
 
 struct IOSRootView: View {

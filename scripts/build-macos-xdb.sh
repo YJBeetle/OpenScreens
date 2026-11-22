@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CORE="$ROOT/vendor/scrctl/core"
-OUT="$ROOT/apps/apple/OpenScreensXdb"
+OUT="$ROOT/apps/apple/ScrctlGuiXdb"
 XDB_LIB_DIR="${XDB_LIB_DIR:-$(brew --prefix xdb)/lib}"
 export XDB_LIB_DIR MACOSX_DEPLOYMENT_TARGET=15.0
 export CFLAGS_aarch64_apple_darwin="${CFLAGS_aarch64_apple_darwin:--mmacosx-version-min=15.0}"
@@ -41,8 +41,8 @@ cat > "$framework/Resources/Info.plist" <<'PLIST'
 PLIST
 xcodebuild -create-xcframework -framework "$framework" -output "$stage/XdbCore.xcframework"
 
-mkdir -p "$OUT/Sources/OpenScreensXdb" "$OUT/runtime"
-cp "$stage/xdb_ffi.swift" "$OUT/Sources/OpenScreensXdb/"
+mkdir -p "$OUT/Sources/ScrctlGuiXdb" "$OUT/runtime"
+cp "$stage/xdb_ffi.swift" "$OUT/Sources/ScrctlGuiXdb/"
 rm -rf "$OUT/XdbCore.xcframework"
 mv "$stage/XdbCore.xcframework" "$OUT/"
 cp -L "$XDB_LIB_DIR/libxdb_client.1.dylib" "$OUT/runtime/"

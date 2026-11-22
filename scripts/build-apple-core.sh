@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CORE="$ROOT/vendor/scrctl/core"
 test -f "$CORE/Cargo.toml" || { echo "Run git submodule update --init" >&2; exit 1; }
-OUT="$ROOT/apps/apple/OpenScreensCore"
+OUT="$ROOT/apps/apple/ScrctlGuiCore"
 HEADERS="$CORE/target/apple-headers"
 TARGETS=(aarch64-apple-darwin aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios)
 
@@ -51,15 +51,15 @@ lipo -create \
   target/x86_64-apple-ios/release/librfb_ffi.a \
   -output target/apple-librfb_ffi-simulator.a
 
-rm -rf "$OUT/OpenScreensCore.xcframework"
+rm -rf "$OUT/ScrctlGuiCore.xcframework"
 xcodebuild -create-xcframework \
   -library target/aarch64-apple-darwin/release/librfb_ffi.a -headers "$HEADERS" \
   -library target/aarch64-apple-ios/release/librfb_ffi.a -headers "$HEADERS" \
   -library target/apple-librfb_ffi-simulator.a -headers "$HEADERS" \
-  -output "$OUT/OpenScreensCore.xcframework"
+  -output "$OUT/ScrctlGuiCore.xcframework"
 
-mkdir -p "$OUT/Sources/OpenScreensCore"
-binding="$OUT/Sources/OpenScreensCore/rfb_ffi.swift"
+mkdir -p "$OUT/Sources/ScrctlGuiCore"
+binding="$OUT/Sources/ScrctlGuiCore/rfb_ffi.swift"
 generated="target/apple-bindings/rfb_ffi.swift"
 # UniFFI can vary trailing whitespace without changing the binding.
 if [[ ! -f "$binding" ]] || ! cmp -s \

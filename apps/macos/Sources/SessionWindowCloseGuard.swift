@@ -1,5 +1,5 @@
 import AppKit
-import OpenScreensUI
+import ScrctlGuiUI
 import SwiftUI
 
 /// Adds the transfer check to the native close button and Command-W.

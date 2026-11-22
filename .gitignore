@@ -11,9 +11,9 @@ apps/**/.swiftpm/
 apps/**/DerivedData/
 apps/**/build/
 apps/**/*.xcodeproj
-apps/apple/OpenScreensCore/OpenScreensCore.xcframework/
+apps/apple/ScrctlGuiCore/ScrctlGuiCore.xcframework/
 apps/**/build-*/
 
-/apps/apple/OpenScreensXdb/XdbCore.xcframework/
-/apps/apple/OpenScreensXdb/Sources/
-/apps/apple/OpenScreensXdb/runtime/
+/apps/apple/ScrctlGuiXdb/XdbCore.xcframework/
+/apps/apple/ScrctlGuiXdb/Sources/
+/apps/apple/ScrctlGuiXdb/runtime/

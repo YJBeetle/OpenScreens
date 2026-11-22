@@ -25,10 +25,10 @@ settings:
     ENABLE_USER_SCRIPT_SANDBOXING: YES
 
 packages:
-  OpenScreensUI:
-    path: ../apple/OpenScreensUI
-  OpenScreensClient:
-    path: ../apple/OpenScreensClient
+  ScrctlGuiUI:
+    path: ../apple/ScrctlGuiUI
+  ScrctlGuiClient:
+    path: ../apple/ScrctlGuiClient
 
 targets:
   ScrctlGui:
@@ -38,12 +38,12 @@ targets:
       - path: Sources
       - path: Resources
     dependencies:
-      - package: OpenScreensUI
-        product: OpenScreensUI
-      - package: OpenScreensUI
-        product: OpenScreensCanvas
-      - package: OpenScreensClient
-        product: OpenScreensClient
+      - package: ScrctlGuiUI
+        product: ScrctlGuiUI
+      - package: ScrctlGuiUI
+        product: ScrctlGuiCanvas
+      - package: ScrctlGuiClient
+        product: ScrctlGuiClient
     settings:
       base:
         PRODUCT_NAME: ScrctlGui

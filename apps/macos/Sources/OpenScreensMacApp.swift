@@ -1,5 +1,5 @@
 import AppKit
-import OpenScreensUI
+import ScrctlGuiUI
 import SwiftUI
 
 @main

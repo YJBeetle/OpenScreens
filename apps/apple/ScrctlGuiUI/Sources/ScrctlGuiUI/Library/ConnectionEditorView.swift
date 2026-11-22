@@ -1,0 +1,1074 @@
+import ScrctlGuiCanvas
+import ScrctlGuiCore
+import SwiftUI
+import UniformTypeIdentifiers
+
+#if os(macOS)
+import AppKit
+#endif
+
+/// How the editor was opened: a fresh custom connection or an existing one.
+public enum ConnectionEditorMode: Sendable {
+    case create(LibrarySection)
+    case edit(ConnectionProfile)
+}
+
+/// Connection editor with Connection / Security / Controls / Advanced groups.
+/// It uses a section rail on regular widths and a single scrolling form on
+/// compact widths.
+public struct ConnectionEditorView: View {
+    @Environment(ConnectionStore.self) private var store
+    @Environment(SettingsStore.self) private var settings
+    @Environment(SSHKeyVault.self) private var keyVault
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
+    @State private var draft: ConnectionProfile
+    @State private var password: String = ""
+    @State private var sshEnabled = false
+    @State private var sshHost = ""
+    @State private var sshPort = "22"
+    @State private var sshUsername = ""
+    @State private var sshAuthMethod: SSHAuthMethod = .password
+    @State private var sshPassword = ""
+    @State private var sshKeyPath = ""
+    @State private var sshKeyPassphrase = ""
+    @State private var sshFingerprint = ""
+    @State private var sshImportedKeyID: UUID?
+    @State private var importingSSHKey = false
+    @State private var sshKeyImportError: String?
+    #if os(macOS)
+    @State private var sshKeyFiles: [SSHKeyFile] = []
+    #endif
+    @State private var importingWireGuard = false
+    @State private var wireGuardFileName: String?
+    @State private var wireGuardImportError: String?
+    @State private var importingOpenVpn = false
+    @State private var openVpnFileName: String?
+    @State private var openVpnImportError: String?
+    @State private var openVpnSummary: String?
+    @State private var selectedSection: EditorSection = .connection
+    @State private var appliedSettingsDefaults = false
+    @State private var saveError: String?
+    @State private var storedNewVNCPassword = false
+
+    private static let wireGuardByteLimit = 64 * 1024
+    private static let openVpnByteLimit = 256 * 1024
+
+    private let mode: ConnectionEditorMode
+    private let defaultGroupID: UUID?
+    private let onSaved: ((ConnectionProfile) -> Void)?
+
+    public init(
+        mode: ConnectionEditorMode,
+        defaultGroupID: UUID? = nil,
+        onSaved: ((ConnectionProfile) -> Void)? = nil
+    ) {
+        self.mode = mode
+        self.defaultGroupID = defaultGroupID
+        self.onSaved = onSaved
+        switch mode {
+        case .create(let section):
+            var draft = ConnectionProfile.draft(section: section)
+            draft.groupID = defaultGroupID
+            _draft = State(initialValue: draft)
+        case .edit(let profile):
+            _draft = State(initialValue: profile)
+        }
+    }
+
+    public var body: some View {
+        Group {
+            if horizontalSizeClass == .compact {
+                compactLayout
+            } else {
+                regularLayout
+            }
+        }
+        .onAppear {
+            applySettingsDefaults()
+            if !isCreating {
+                password = OpenScreensCredentials.password(for: draft.id) ?? ""
+                sshPassword = OpenScreensCredentials.secret(kind: "ssh-password", for: draft.id) ?? ""
+                sshKeyPassphrase = OpenScreensCredentials.secret(kind: "ssh-passphrase", for: draft.id) ?? ""
+            }
+            if let ssh = draft.ssh {
+                sshEnabled = ssh.enabled
+                sshHost = ssh.host
+                sshPort = String(ssh.port)
+                sshUsername = ssh.username
+                sshAuthMethod = ssh.authMethod
+                sshKeyPath = ssh.keyPath
+                sshImportedKeyID = ssh.importedKeyID
+                sshFingerprint = ssh.hostKeyFingerprint
+            }
+            if let config = draft.openVpnConfig {
+                openVpnSummary = Self.openVpnSummary(for: config)
+            }
+            #if os(macOS)
+            sshKeyFiles = SSHKeyCatalog.available()
+            #endif
+        }
+        .alert(
+            "Cannot Save Connection",
+            isPresented: Binding(
+                get: { saveError != nil },
+                set: { presented in if !presented { saveError = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(saveError ?? "")
+        }
+    }
+
+    // MARK: - Layouts
+
+    private var regularLayout: some View {
+        HStack(spacing: 0) {
+            sectionRail
+                .frame(width: 196)
+
+            Divider()
+
+            VStack(spacing: 0) {
+                header
+                Form {
+                    sectionContent
+                }
+                .modifier(EditorFormStyle())
+                Divider()
+                actionBar
+            }
+        }
+    }
+
+    private var compactLayout: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Button("Cancel") {
+                    dismiss()
+                }
+                .accessibilityLabel("Cancel editing")
+
+                Spacer()
+
+                Text(title)
+                    .font(.headline)
+
+                Spacer()
+
+                Button("Save") {
+                    save()
+                }
+                .fontWeight(.semibold)
+                .disabled(!canSave)
+                .accessibilityLabel("Save connection")
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+
+            Divider()
+
+            Form {
+                connectionSection
+                securitySection
+                controlsSection
+                advancedSection
+            }
+            .modifier(EditorFormStyle())
+        }
+    }
+
+    private var header: some View {
+        HStack(alignment: .firstTextBaseline) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.title3.weight(.semibold))
+                Text(headerSubtitle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            Spacer()
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 16)
+        .padding(.bottom, 4)
+    }
+
+    private var sectionRail: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text("Settings")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 12)
+                .padding(.top, 16)
+                .padding(.bottom, 4)
+
+            ForEach(EditorSection.allCases) { section in
+                Button {
+                    selectedSection = section
+                } label: {
+                    Label(section.title, systemImage: section.systemImage)
+                        .font(.subheadline.weight(selectedSection == section ? .semibold : .regular))
+                        .foregroundStyle(selectedSection == section ? Theme.Colors.accent : Color.primary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.vertical, 8)
+                        .padding(.horizontal, 10)
+                        .background {
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .fill(selectedSection == section ? Theme.Colors.accent.opacity(0.12) : .clear)
+                        }
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(selectedSection == section ? .isSelected : [])
+            }
+
+            Spacer()
+        }
+        .padding(.horizontal, 8)
+        .background(Color.primary.opacity(0.025))
+    }
+
+    private var actionBar: some View {
+        HStack {
+            Button("Cancel", role: .cancel) {
+                dismiss()
+            }
+            .controlSize(.large)
+            .keyboardShortcut(.cancelAction)
+
+            Spacer()
+
+            Button("Save") {
+                save()
+            }
+            .controlSize(.large)
+            .buttonStyle(.borderedProminent)
+            .keyboardShortcut(.defaultAction)
+            .disabled(!canSave)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(.regularMaterial)
+    }
+
+    // MARK: - Editor sections
+
+    @ViewBuilder
+    private var sectionContent: some View {
+        switch selectedSection {
+        case .connection: connectionSection
+        case .security: securitySection
+        case .controls: controlsSection
+        case .advanced: advancedSection
+        }
+    }
+
+    @ViewBuilder
+    private var connectionSection: some View {
+        Section {
+            TextField("Name", text: $draft.name, prompt: Text("Studio Mac"))
+            Picker("System", selection: $draft.platform) {
+                ForEach(RemoteOS.allCases) { platform in
+                    Text(platform.title).tag(platform)
+                }
+            }
+            .onChange(of: draft.platform) { _, _ in
+                if draft.supportedDisconnectAction == .none { draft.disconnectAction = nil }
+            }
+
+            if !draft.isValid {
+                Label(
+                    missingFieldsMessage,
+                    systemImage: "exclamationmark.circle.fill"
+                )
+                .font(.footnote)
+                .foregroundStyle(Theme.Colors.danger)
+            }
+        } header: {
+            Text("Details")
+        }
+
+        Section {
+            TextField("Hostname", text: $draft.host, prompt: Text("hostname or IP address"))
+                .modifier(HostInputStyle())
+            TextField("Port", value: $draft.port, format: .number)
+                .monospacedDigit()
+        } header: {
+            Text("Address")
+        } footer: {
+            Text(addressFooter)
+        }
+
+        Section {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Tile Colour")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                TilePalettePicker(selection: $draft.palette)
+            }
+            .padding(.vertical, 2)
+
+            Toggle("Favorite", isOn: $draft.isFavorite)
+
+            if draft.section == .custom, !store.groups.isEmpty {
+                Picker("Group", selection: $draft.groupID) {
+                    Text("None").tag(UUID?.none)
+                    ForEach(store.groups) { group in
+                        Text(group.name).tag(UUID?.some(group.id))
+                    }
+                }
+            }
+        } header: {
+            Text("Library")
+        } footer: {
+            Text("The colour appears only on this connection's library tile.")
+        }
+    }
+
+    @ViewBuilder
+    private var securitySection: some View {
+        Section {
+            Picker("Authentication", selection: $draft.authentication) {
+                ForEach(AuthenticationMethod.allCases) { method in
+                    Text(method.title).tag(method)
+                }
+            }
+
+            if draft.authentication.requiresUsername {
+                TextField("User Name", text: $draft.username, prompt: Text("Remote account"))
+                    .modifier(PlainInputStyle())
+            }
+
+            if draft.authentication != .none {
+                SecureField("Password", text: $password, prompt: Text("Connection password"))
+                    .modifier(PlainInputStyle())
+                if let passwordRequiredError {
+                    Label(passwordRequiredError, systemImage: "exclamationmark.circle.fill")
+                        .font(.footnote)
+                        .foregroundStyle(Theme.Colors.danger)
+                }
+            }
+        } header: {
+            Text("Authentication")
+        } footer: {
+            Text("Passwords are stored in the system Keychain for this connection.")
+        }
+
+        Section {
+            Toggle("Tunnel through SSH", isOn: $sshEnabled)
+
+            if sshEnabled {
+                TextField("SSH host", text: $sshHost, prompt: Text("Same as hostname"))
+                    .modifier(PlainInputStyle())
+                TextField("SSH port", text: $sshPort)
+                    .modifier(PlainInputStyle())
+                    .monospacedDigit()
+                TextField("SSH user name", text: $sshUsername)
+                    .modifier(PlainInputStyle())
+
+                Picker("SSH authentication", selection: $sshAuthMethod) {
+                    Text("Password").tag(SSHAuthMethod.password)
+                    Text("Private Key").tag(SSHAuthMethod.privateKey)
+                }
+
+                if sshAuthMethod == .password {
+                    SecureField("SSH password", text: $sshPassword, prompt: Text("SSH password"))
+                        .modifier(PlainInputStyle())
+                } else {
+                    #if os(macOS)
+                    Picker("Private key", selection: $sshKeyPath) {
+                        Text("Choose a key…").tag("")
+                        ForEach(sshKeyFiles) { file in
+                            Text(file.name).tag(file.path)
+                        }
+                        if !sshKeyPath.isEmpty,
+                           !sshKeyFiles.contains(where: { $0.path == sshKeyPath }) {
+                            Text(URL(fileURLWithPath: sshKeyPath).lastPathComponent).tag(sshKeyPath)
+                        }
+                    }
+                    HStack {
+                        Text("Keys from ~/.ssh")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Button("Browse…") { chooseSSHKeyFile() }
+                    }
+                    #else
+                    Picker("Private key", selection: $sshImportedKeyID) {
+                        Text("Choose a key…").tag(UUID?.none)
+                        ForEach(keyVault.keys) { key in
+                            Text(key.name).tag(Optional(key.id))
+                        }
+                    }
+                    HStack {
+                        Text(sshKeyHint)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        Spacer()
+                        Button("Import Key…") { importingSSHKey = true }
+                    }
+                    if let error = sshKeyImportError {
+                        Text(error)
+                            .font(.footnote)
+                            .foregroundStyle(Theme.Colors.danger)
+                    }
+                    #endif
+                    SecureField("Key passphrase", text: $sshKeyPassphrase, prompt: Text("Optional"))
+                        .modifier(PlainInputStyle())
+                }
+
+                TextField("Host key SHA-256 (optional)", text: $sshFingerprint)
+                    .modifier(PlainInputStyle())
+
+                if let error = sshValidationError {
+                    Text(error)
+                        .font(.footnote)
+                        .foregroundStyle(Theme.Colors.danger)
+                }
+            }
+        } header: {
+            Text("SSH Tunnel")
+        } footer: {
+            Text("The VNC address is resolved from the SSH host. SSH secrets are stored in the Keychain.")
+        }
+        .fileImporter(
+            isPresented: $importingSSHKey,
+            allowedContentTypes: [.data]
+        ) { result in
+            switch result {
+            case .success(let url):
+                importSSHKey(from: url)
+            case .failure(let error):
+                sshKeyImportError = error.localizedDescription
+            }
+        }
+
+        Section {
+            if draft.hasWireGuardConfig {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(wireGuardFileName ?? NSLocalizedString("WireGuard configuration", comment: "WireGuard file fallback"))
+                        .font(.subheadline)
+                        .lineLimit(1)
+                    Text(wireGuardSummary)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+
+                Button("Remove Configuration", role: .destructive) {
+                    draft.wireGuardConfig = nil
+                    wireGuardFileName = nil
+                    wireGuardImportError = nil
+                }
+            } else {
+                Button {
+                    importingWireGuard = true
+                } label: {
+                    Label("Import WireGuard Configuration…", systemImage: "doc.badge.plus")
+                }
+            }
+
+            if let error = wireGuardImportError {
+                Text(error)
+                    .font(.footnote)
+                    .foregroundStyle(Theme.Colors.danger)
+            }
+
+            if tunnelConflict {
+                Label(
+                    "SSH, WireGuard and OpenVPN are mutually exclusive. Turn one off to save.",
+                    systemImage: "exclamationmark.triangle.fill"
+                )
+                .font(.footnote)
+                .foregroundStyle(Theme.Colors.danger)
+            }
+        } header: {
+            Text("WireGuard")
+        } footer: {
+            Text("Import a wg-quick .conf file (64 KiB maximum). The configuration is stored with this connection and used instead of SSH or OpenVPN.")
+        }
+        .fileImporter(
+            isPresented: $importingWireGuard,
+            allowedContentTypes: [.data]
+        ) { result in
+            switch result {
+            case .success(let url):
+                importWireGuardConfig(from: url)
+            case .failure(let error):
+                wireGuardImportError = error.localizedDescription
+            }
+        }
+
+        Section {
+            if draft.hasOpenVpnConfig {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(openVpnFileName ?? NSLocalizedString("OpenVPN profile", comment: "OpenVPN file fallback"))
+                        .font(.subheadline)
+                        .lineLimit(1)
+                    if let openVpnSummary {
+                        Text(openVpnSummary)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                    }
+                }
+
+                Button("Remove Configuration", role: .destructive) {
+                    draft.openVpnConfig = nil
+                    openVpnFileName = nil
+                    openVpnSummary = nil
+                    openVpnImportError = nil
+                }
+            } else {
+                Button {
+                    importingOpenVpn = true
+                } label: {
+                    Label("Import OpenVPN Profile…", systemImage: "doc.badge.plus")
+                }
+            }
+
+            if let error = openVpnImportError {
+                Text(error)
+                    .font(.footnote)
+                    .foregroundStyle(Theme.Colors.danger)
+            }
+
+            if tunnelConflict {
+                Label(
+                    "SSH, WireGuard and OpenVPN are mutually exclusive. Turn one off to save.",
+                    systemImage: "exclamationmark.triangle.fill"
+                )
+                .font(.footnote)
+                .foregroundStyle(Theme.Colors.danger)
+            }
+        } header: {
+            Text("OpenVPN")
+        } footer: {
+            Text("Import an .ovpn profile with embedded certificates (256 KiB maximum). The profile is stored with this connection and used instead of SSH or WireGuard.")
+        }
+        .fileImporter(
+            isPresented: $importingOpenVpn,
+            allowedContentTypes: [.data]
+        ) { result in
+            switch result {
+            case .success(let url):
+                importOpenVpnConfig(from: url)
+            case .failure(let error):
+                openVpnImportError = error.localizedDescription
+            }
+        }
+    }
+
+    private var wireGuardSummary: String {
+        guard let text = draft.wireGuardConfig else { return "" }
+        let size = ByteCountFormatter.string(
+            fromByteCount: Int64(text.utf8.count),
+            countStyle: .file
+        )
+        let endpoint = text
+            .split(whereSeparator: \.isNewline)
+            .map(String.init)
+            .first { $0.trimmingCharacters(in: .whitespaces).lowercased().hasPrefix("endpoint") }
+        guard let endpoint else { return size }
+        return "\(endpoint.trimmingCharacters(in: .whitespaces)) · \(size)"
+    }
+
+    private func importWireGuardConfig(from url: URL) {
+        let accessing = url.startAccessingSecurityScopedResource()
+        defer {
+            if accessing { url.stopAccessingSecurityScopedResource() }
+        }
+
+        do {
+            guard url.pathExtension.lowercased() == "conf" else {
+                throw WireGuardImportError(NSLocalizedString("Choose a WireGuard .conf file.", comment: "WireGuard import error"))
+            }
+
+            let handle = try FileHandle(forReadingFrom: url)
+            defer { try? handle.close() }
+
+            var data = Data()
+            while data.count <= Self.wireGuardByteLimit,
+                  let chunk = try handle.read(upToCount: 16 * 1024),
+                  !chunk.isEmpty {
+                data.append(chunk)
+            }
+            guard data.count <= Self.wireGuardByteLimit else {
+                throw WireGuardImportError(
+                    NSLocalizedString("WireGuard configurations must be 64 KiB or smaller.", comment: "WireGuard import error")
+                )
+            }
+            guard let text = String(data: data, encoding: .utf8) else {
+                throw WireGuardImportError(
+                    NSLocalizedString("The WireGuard configuration is not UTF-8 text.", comment: "WireGuard import error")
+                )
+            }
+            guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                throw WireGuardImportError(
+                    NSLocalizedString("The WireGuard configuration is empty.", comment: "WireGuard import error")
+                )
+            }
+
+            draft.wireGuardConfig = text
+            wireGuardFileName = url.lastPathComponent
+            wireGuardImportError = nil
+        } catch {
+            wireGuardImportError = error.localizedDescription
+        }
+    }
+
+    private func importOpenVpnConfig(from url: URL) {
+        let accessing = url.startAccessingSecurityScopedResource()
+        defer {
+            if accessing { url.stopAccessingSecurityScopedResource() }
+        }
+
+        do {
+            guard url.pathExtension.lowercased() == "ovpn" else {
+                throw OpenVpnImportError(NSLocalizedString("Choose an OpenVPN .ovpn profile.", comment: "OpenVPN import error"))
+            }
+
+            let handle = try FileHandle(forReadingFrom: url)
+            defer { try? handle.close() }
+
+            var data = Data()
+            while data.count <= Self.openVpnByteLimit,
+                  let chunk = try handle.read(upToCount: 16 * 1024),
+                  !chunk.isEmpty {
+                data.append(chunk)
+            }
+            guard data.count <= Self.openVpnByteLimit else {
+                throw OpenVpnImportError(
+                    NSLocalizedString("OpenVPN profiles must be 256 KiB or smaller.", comment: "OpenVPN import error")
+                )
+            }
+            guard let text = String(data: data, encoding: .utf8) else {
+                throw OpenVpnImportError(
+                    NSLocalizedString("The OpenVPN profile is not UTF-8 text.", comment: "OpenVPN import error")
+                )
+            }
+            guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                throw OpenVpnImportError(
+                    NSLocalizedString("The OpenVPN profile is empty.", comment: "OpenVPN import error")
+                )
+            }
+
+            let summary: OpenVpnProfileSummary
+            do {
+                summary = try ScrctlGuiCore.validateOpenvpnProfile(text: text)
+            } catch OpenVpnProfileError.Invalid(let reason) {
+                throw OpenVpnImportError(reason)
+            }
+
+            draft.openVpnConfig = text
+            openVpnFileName = url.lastPathComponent
+            openVpnSummary = Self.summaryText(summary)
+            openVpnImportError = nil
+        } catch {
+            openVpnImportError = error.localizedDescription
+        }
+    }
+
+    private static func openVpnSummary(for text: String) -> String? {
+        guard let summary = try? ScrctlGuiCore.validateOpenvpnProfile(text: text) else {
+            return nil
+        }
+        return summaryText(summary)
+    }
+
+    private static func summaryText(_ summary: OpenVpnProfileSummary) -> String {
+        [summary.remote, summary.proto, summary.cipher, summary.tlsWrap]
+            .compactMap { $0 }
+            .joined(separator: " · ")
+    }
+
+    private func importSSHKey(from url: URL) {
+        do {
+            let key = try keyVault.importKey(contentsOf: url)
+            sshImportedKeyID = key.id
+            sshKeyImportError = nil
+        } catch {
+            sshKeyImportError = error.localizedDescription
+        }
+    }
+
+    #if os(macOS)
+    private func chooseSSHKeyFile() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.directoryURL = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".ssh", isDirectory: true)
+        if panel.runModal() == .OK, let url = panel.url {
+            sshKeyPath = url.path
+        }
+    }
+    #endif
+
+    @ViewBuilder
+    private var controlsSection: some View {
+        Section {
+            Picker("Cursor Mode", selection: $draft.controls.cursorMode) {
+                ForEach(CursorMode.allCases) { mode in
+                    Label(mode.title, systemImage: mode.systemImage).tag(mode)
+                }
+            }
+        } header: {
+            Text("Pointer")
+        } footer: {
+            Text(draft.controls.cursorMode.help)
+        }
+
+        Section {
+            if DisconnectAction.options(for: draft.platform).count > 1 {
+                Picker("Before Disconnecting", selection: Binding(
+                    get: { draft.supportedDisconnectAction },
+                    set: { draft.disconnectAction = $0 == .none ? nil : $0 }
+                )) {
+                    ForEach(DisconnectAction.options(for: draft.platform), id: \.self) { action in
+                        Text(action.title).tag(action)
+                    }
+                }
+            }
+            Toggle("Start in Observe Mode", isOn: $draft.controls.startInObserveMode)
+            Toggle("Use Shared Clipboard", isOn: $draft.controls.sharedClipboard)
+            Toggle("Remember Selected Display", isOn: Binding(
+                get: { draft.remembersSelectedDisplay },
+                set: { draft.rememberSelectedDisplay = $0 }
+            ))
+        } header: {
+            Text("Session")
+        } footer: {
+            Text("Observe mode disables remote input. Shared Clipboard automatically exchanges text. You can also send or get text manually.")
+        }
+    }
+
+    @ViewBuilder
+    private var advancedSection: some View {
+        Section {
+            Picker("JPEG Quality", selection: Binding(
+                get: { draft.initialQuality },
+                set: { draft.quality = $0 }
+            )) {
+                ForEach(ConnectionQuality.allCases) { quality in
+                    Text(quality.title).tag(quality)
+                }
+            }
+            Picker("Display Scaling", selection: $draft.controls.scaling) {
+                ForEach([RemoteContentMode.fit, .fill]) { mode in
+                    Text(mode.title).tag(mode)
+                }
+            }
+            #if os(iOS)
+            Picker("Remote System Scale", selection: Binding(
+                get: { draft.controls.remoteScalePercent ?? 100 },
+                set: { draft.controls.remoteScalePercent = $0 }
+            )) {
+                ForEach([100, 125, 150, 175, 200, 225, 250, 300, 350, 400], id: \.self) { percent in
+                    Text(Double(percent) / 100, format: .percent).tag(percent)
+                }
+            }
+            #endif
+            Toggle(
+                "Allow Pinching to Zoom",
+                isOn: Binding(
+                    get: { draft.controls.zoomEnabled ?? true },
+                    set: { draft.controls.zoomEnabled = $0 }
+                )
+            )
+            Toggle("Reconnect Automatically", isOn: $draft.controls.autoReconnect)
+            #if os(macOS)
+            Toggle("Keep Mac Awake", isOn: $draft.controls.keepScreenAwake)
+                .help("Prevent idle sleep during a session. The display can still sleep.")
+            #else
+            Toggle("Keep Screen Awake", isOn: $draft.controls.keepScreenAwake)
+            #endif
+        } header: {
+            Text("Display")
+        } footer: {
+            Text("Scaling controls how the framebuffer fits the session window. Pinching zooms the remote desktop; turn it off to reserve two-finger gestures for scrolling. Automatic reconnect retries up to three times after an unexpected close.")
+        }
+    }
+
+    // MARK: - SSH validation
+
+    private var sshPortNumber: Int? { Int(sshPort) }
+
+    private var tunnelConflict: Bool {
+        [sshEnabled, draft.hasWireGuardConfig, draft.hasOpenVpnConfig]
+            .filter { $0 }
+            .count > 1
+    }
+
+    private var sshValidationError: String? {
+        guard sshEnabled else { return nil }
+        if sshUsername.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return NSLocalizedString("SSH user name is required.", comment: "SSH validation")
+        }
+        guard let port = sshPortNumber, (1...65535).contains(port) else {
+            return NSLocalizedString("SSH port must be between 1 and 65535.", comment: "SSH validation")
+        }
+        #if os(macOS)
+        if sshAuthMethod == .privateKey,
+           sshKeyPath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return NSLocalizedString("Choose a private key from ~/.ssh.", comment: "SSH validation")
+        }
+        #else
+        if sshAuthMethod == .privateKey && sshImportedKeyID == nil {
+            return NSLocalizedString("Import a private key to continue.", comment: "SSH validation")
+        }
+        #endif
+        return nil
+    }
+
+    private var passwordRequiredError: String? {
+        guard draft.authentication != .none, password.isEmpty else { return nil }
+        return NSLocalizedString("Enter a password to continue.", comment: "Missing password")
+    }
+
+    private var canSave: Bool {
+        draft.isValid
+            && sshValidationError == nil
+            && passwordRequiredError == nil
+            && !tunnelConflict
+    }
+
+    // MARK: - Actions
+
+    private func applySettingsDefaults() {
+        guard isCreating, !appliedSettingsDefaults else { return }
+        appliedSettingsDefaults = true
+        draft.controls.cursorMode = settings.settings.defaultCursorMode
+        draft.controls.sharedClipboard = settings.settings.sharedClipboard
+        draft.controls.autoReconnect = settings.settings.autoReconnect
+    }
+
+    private func save() {
+        guard canSave, !tunnelConflict else { return }
+        if sshEnabled {
+            draft.ssh = SSHProfile(
+                enabled: true,
+                host: sshHost,
+                port: sshPortNumber ?? 22,
+                username: sshUsername,
+                authMethod: sshAuthMethod,
+                keyPath: sshKeyPath,
+                importedKeyID: sshImportedKeyID,
+                hostKeyFingerprint: sshFingerprint
+            )
+        } else {
+            draft.ssh = nil
+        }
+
+        let profile = draft.normalized()
+        guard profile.isValid else { return }
+
+        // Write credentials before touching the library so a rejected Keychain
+        // write keeps the editor open instead of leaving a connection that
+        // silently lacks its password.
+        if profile.authentication == .none {
+            if !isCreating || storedNewVNCPassword {
+                OpenScreensCredentials.deletePassword(for: profile.id)
+                storedNewVNCPassword = false
+            }
+        } else if !OpenScreensCredentials.setPassword(password, for: profile.id) {
+            saveError = NSLocalizedString(
+                "The password could not be saved to the Keychain.",
+                comment: "Keychain write failure"
+            )
+            return
+        } else if isCreating {
+            storedNewVNCPassword = true
+        }
+
+        if let ssh = profile.ssh, ssh.enabled {
+            switch ssh.authMethod {
+            case .password:
+                if sshPassword.isEmpty {
+                    if !isCreating {
+                        OpenScreensCredentials.deleteSecret(kind: "ssh-password", for: profile.id)
+                    }
+                } else if !OpenScreensCredentials.setSecret(
+                    sshPassword,
+                    kind: "ssh-password",
+                    for: profile.id
+                ) {
+                    saveError = NSLocalizedString(
+                        "The password could not be saved to the Keychain.",
+                        comment: "Keychain write failure"
+                    )
+                    return
+                }
+                if !isCreating {
+                    OpenScreensCredentials.deleteSecret(kind: "ssh-passphrase", for: profile.id)
+                }
+            case .privateKey:
+                if !isCreating {
+                    OpenScreensCredentials.deleteSecret(kind: "ssh-password", for: profile.id)
+                }
+                if sshKeyPassphrase.isEmpty {
+                    if !isCreating {
+                        OpenScreensCredentials.deleteSecret(kind: "ssh-passphrase", for: profile.id)
+                    }
+                } else if !OpenScreensCredentials.setSecret(
+                    sshKeyPassphrase,
+                    kind: "ssh-passphrase",
+                    for: profile.id
+                ) {
+                    saveError = NSLocalizedString(
+                        "The password could not be saved to the Keychain.",
+                        comment: "Keychain write failure"
+                    )
+                    return
+                }
+            }
+        } else if !isCreating {
+            OpenScreensCredentials.deleteSecret(kind: "ssh-password", for: profile.id)
+            OpenScreensCredentials.deleteSecret(kind: "ssh-passphrase", for: profile.id)
+        }
+
+        if isCreating {
+            store.add(profile)
+        } else {
+            store.update(profile)
+        }
+        onSaved?(profile)
+        dismiss()
+    }
+
+    private var isCreating: Bool {
+        if case .create = mode { return true }
+        return false
+    }
+
+    private var title: String {
+        isCreating
+            ? NSLocalizedString("New Connection", comment: "Connection editor title")
+            : NSLocalizedString("Edit Connection", comment: "Connection editor title")
+    }
+
+    private var headerSubtitle: String {
+        isCreating
+            ? NSLocalizedString("Configure a remote computer", comment: "Connection editor subtitle")
+            : draft.endpoint
+    }
+
+    private var addressFooter: String {
+        guard !draft.trimmedHost.isEmpty else {
+            return NSLocalizedString(
+                "The server's hostname or IP address. VNC uses port 5900 by default.",
+                comment: "Address section footer"
+            )
+        }
+        return String(
+            format: NSLocalizedString("Connects to %@.", comment: "Address section footer"),
+            draft.endpoint
+        )
+    }
+
+    private var sshKeyHint: String {
+        keyVault.keys.isEmpty
+            ? NSLocalizedString("No imported keys yet", comment: "SSH key hint")
+            : NSLocalizedString("Keys are stored in the Keychain", comment: "SSH key hint")
+    }
+
+    private var missingFieldsMessage: String {
+        if draft.trimmedName.isEmpty && draft.trimmedHost.isEmpty {
+            return NSLocalizedString("Enter a name and a hostname to continue.", comment: "Missing fields")
+        }
+        if draft.trimmedName.isEmpty {
+            return NSLocalizedString("Enter a name to continue.", comment: "Missing fields")
+        }
+        return NSLocalizedString("Enter a hostname to continue.", comment: "Missing fields")
+    }
+}
+
+private enum EditorSection: String, CaseIterable, Identifiable {
+    case connection
+    case security
+    case controls
+    case advanced
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .connection: NSLocalizedString("Connection", comment: "Editor section")
+        case .security: NSLocalizedString("Security", comment: "Editor section")
+        case .controls: NSLocalizedString("Controls", comment: "Editor section")
+        case .advanced: NSLocalizedString("Advanced", comment: "Editor section")
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .connection: "display"
+        case .security: "lock.shield"
+        case .controls: "hand.point.up.left"
+        case .advanced: "slider.horizontal.3"
+        }
+    }
+}
+
+private struct EditorFormStyle: ViewModifier {
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        #if os(macOS)
+        content.formStyle(.grouped)
+        #else
+        content
+        #endif
+    }
+}
+
+private struct HostInputStyle: ViewModifier {
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        #if os(iOS)
+        content
+            .keyboardType(.URL)
+            .textInputAutocapitalization(.never)
+            .autocorrectionDisabled()
+        #else
+        content.autocorrectionDisabled()
+        #endif
+    }
+}
+
+private struct PlainInputStyle: ViewModifier {
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        #if os(iOS)
+        content
+            .textInputAutocapitalization(.never)
+            .autocorrectionDisabled()
+        #else
+        content.autocorrectionDisabled()
+        #endif
+    }
+}
+
+private struct OpenVpnImportError: LocalizedError {
+    let message: String
+
+    init(_ message: String) {
+        self.message = message
+    }
+
+    var errorDescription: String? { message }
+}
+
+private struct WireGuardImportError: LocalizedError {
+    let message: String
+
+    init(_ message: String) {
+        self.message = message
+    }
+
+    var errorDescription: String? { message }
+}

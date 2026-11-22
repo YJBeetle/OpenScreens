@@ -1,5 +1,5 @@
 import AppKit
-import OpenScreensUI
+import ScrctlGuiUI
 import SwiftUI
 
 /// Connection shortcuts in the macOS menu bar, mirroring the library.

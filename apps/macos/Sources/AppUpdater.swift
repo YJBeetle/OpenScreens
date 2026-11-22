@@ -1,5 +1,5 @@
 import Combine
-import OpenScreensUI
+import ScrctlGuiUI
 import Sparkle
 
 @MainActor

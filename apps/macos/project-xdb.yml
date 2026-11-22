@@ -2,14 +2,14 @@ include:
   - project.yml
 
 packages:
-  OpenScreensXdb:
-    path: ../apple/OpenScreensXdb
+  ScrctlGuiXdb:
+    path: ../apple/ScrctlGuiXdb
 
 targets:
   ScrctlGui:
     dependencies:
-      - package: OpenScreensXdb
-      - framework: ../apple/OpenScreensXdb/runtime/libxdb_client.1.dylib
+      - package: ScrctlGuiXdb
+      - framework: ../apple/ScrctlGuiXdb/runtime/libxdb_client.1.dylib
         embed: true
         codeSign: true
     settings:
@@ -20,4 +20,4 @@ targets:
           - '@executable_path/../Frameworks'
         LIBRARY_SEARCH_PATHS:
           - $(inherited)
-          - $(SRCROOT)/../apple/OpenScreensXdb/runtime
+          - $(SRCROOT)/../apple/ScrctlGuiXdb/runtime

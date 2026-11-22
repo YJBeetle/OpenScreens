@@ -1,5 +1,5 @@
 #if SCRCTL_XDB
-import OpenScreensXdb
+import ScrctlGuiXdb
 import SwiftUI
 
 struct MacXdbSessionView: View {

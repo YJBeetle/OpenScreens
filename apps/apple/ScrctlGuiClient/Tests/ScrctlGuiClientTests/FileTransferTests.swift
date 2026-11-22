@@ -29,6 +29,8 @@ final class FileTransferTests: XCTestCase {
             peer.resumeDownload.signal()
         }
         try await waitUntil("connected") { model.state.isConnected }
+        XCTAssertTrue(model.supportsFileUpload)
+        XCTAssertTrue(model.supportsFileDownload)
 
         model.uploadFiles([uploads])
         try await waitUntil("upload record") { model.sentFiles.count == 1 }
@@ -155,10 +157,12 @@ private final class TransferPeer: Sendable {
         XCTAssertEqual(try read(1), Data([1]))
         try peer.write(contentsOf: Data(count: 4))
         XCTAssertEqual(try read(1), Data([0xC1]))
+        // Apple ServerInit advertises drag-and-drop support plus upload and download.
+        let transferFeatures: UInt64 = (1 << 29) | (1 << 31) | (1 << 33) | (1 << 49)
+        let capabilities = Data(count: 6) + bytes(transferFeatures) + Data(count: 8)
         try peer.write(contentsOf: Data([
-            0, 2, 0, 2, 32, 24, 0, 1, 0, 255, 0, 255, 0, 255, 16, 8, 0, 0, 0, 0,
-            0, 0, 0, 0
-        ]))
+            0, 2, 0, 2, 32, 24, 0, 1, 0, 255, 0, 255, 0, 255, 16, 8, 0, 0, 0, 0
+        ]) + bytes(UInt32(capabilities.count)) + capabilities)
 
         let destination = Data("/fixture/inbox".utf8)
         var uploaded = Data()

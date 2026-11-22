@@ -159,6 +159,64 @@ final class SessionDisplayTests: XCTestCase {
         XCTAssertEqual(oppositeEdge.minY, 0, accuracy: 0.0001)
     }
 
+    func testHybridTapStaysInPlaceAndDragRecentersWithinExpandedRenderingArea() async throws {
+        let transport = DisplayTestTransport()
+        let model = SessionViewModel(
+            profile: ConnectionProfile(name: "Hybrid", host: "localhost"),
+            service: DisplayTestService(transport: transport)
+        )
+        model.start()
+        defer { model.stop() }
+        transport.emit(.framebufferSize(width: 800, height: 800))
+        await waitUntil { model.state.isConnected && model.serverSize != nil }
+
+        let canvas = CGSize(width: 400, height: 400)
+        model.scheduleViewportUpdate(
+            in: canvas, screenPixelWidth: 500,
+            renderBounds: CGRect(x: -60, y: -20, width: 500, height: 500)
+        )
+        model.applyPinch(
+            scale: 2, startZoom: 1, startPan: .zero,
+            startFocal: CGPoint(x: 200, y: 200), currentFocal: CGPoint(x: 200, y: 200), in: canvas
+        )
+        model.tap(at: CGPoint(x: 300, y: 280), in: canvas)
+        XCTAssertEqual(model.pan, .zero)
+        await waitUntil { await transport.viewport?.rect?.width == 0.625 }
+        let requested = await transport.viewport
+        let viewport = try XCTUnwrap(requested?.rect)
+        XCTAssertEqual(viewport.minX, 0.175, accuracy: 0.0001)
+        XCTAssertEqual(viewport.minY, 0.225, accuracy: 0.0001)
+
+        model.drag(to: CGPoint(x: 220, y: 220), in: canvas)
+        XCTAssertEqual(model.pan, .zero)
+        await waitUntil { model.pan.width < -1 }
+        XCTAssertGreaterThan(model.pan.width, -100)
+        await waitUntil { abs(model.pan.width + 100) < 0.001 }
+        XCTAssertEqual(model.pan.height, -80, accuracy: 0.001)
+    }
+
+    func testLastCursorModePersistsForSavedAndNearbyDevices() {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let file = folder.appendingPathComponent("connections.json")
+        let store = ConnectionStore(fileURL: file, seedDemoData: false)
+        let saved = ConnectionProfile(name: "Saved", host: "saved.local")
+        let nearby = ConnectionProfile(name: "Nearby", host: "nearby.local")
+        store.add(saved)
+        store.setCursorMode(.touch, for: saved)
+        store.setCursorMode(.trackpad, for: nearby)
+
+        let reloaded = ConnectionStore(fileURL: file, seedDemoData: false)
+        let rediscovered = ConnectionProfile(name: "Nearby", host: "nearby.local")
+        XCTAssertEqual(SessionViewModel(profile: saved, connectionStore: reloaded).cursorMode, .touch)
+        XCTAssertEqual(SessionViewModel(profile: rediscovered, connectionStore: reloaded).cursorMode, .trackpad)
+        XCTAssertEqual(reloaded.connections.count, 1)
+        reloaded.syncDiscovered([DiscoveredComputer(name: "Nearby", host: "NEARBY.local.", port: 5900)])
+        let discovered = try? XCTUnwrap(reloaded.connections.first { $0.isDiscovered })
+        XCTAssertEqual(discovered.flatMap { reloaded.saveDiscovered(id: $0.id) }?.controls.cursorMode, .trackpad)
+        XCTAssertEqual(SessionViewModel(profile: ConnectionProfile(name: "New", host: "new.local")).cursorMode, .trackpadAndMouse)
+    }
+
     private func waitUntil(_ condition: () async -> Bool, line: UInt = #line) async {
         let clock = ContinuousClock()
         let deadline = clock.now + .seconds(2)

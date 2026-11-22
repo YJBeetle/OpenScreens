@@ -149,6 +149,7 @@ public struct AppSettings: Codable, Hashable, Sendable {
     public var confirmDisconnect: Bool
     public var updateChannel: UpdateChannel
     public var showToolbarOnLaunch: Bool
+    public var showDebugInfo: Bool
     public var toolbarItems: [SessionToolbarItem]
     public var toolbarDock: ToolbarDock
     /// Browse for computers advertising VNC over Bonjour on the local network.
@@ -162,12 +163,13 @@ public struct AppSettings: Codable, Hashable, Sendable {
         tileDensity: TileDensity = .comfortable,
         librarySort: LibrarySortOrder = .name,
         libraryLayout: LibraryLayout = .grid,
-        defaultCursorMode: CursorMode = .touch,
+        defaultCursorMode: CursorMode = .trackpadAndMouse,
         sharedClipboard: Bool = true,
         autoReconnect: Bool = true,
         confirmDisconnect: Bool = true,
         updateChannel: UpdateChannel = .release,
         showToolbarOnLaunch: Bool = true,
+        showDebugInfo: Bool = false,
         toolbarItems: [SessionToolbarItem] = SessionToolbarItem.allCases,
         toolbarDock: ToolbarDock = .bottom,
         discoverNearby: Bool = true,
@@ -184,6 +186,7 @@ public struct AppSettings: Codable, Hashable, Sendable {
         self.confirmDisconnect = confirmDisconnect
         self.updateChannel = updateChannel
         self.showToolbarOnLaunch = showToolbarOnLaunch
+        self.showDebugInfo = showDebugInfo
         self.toolbarItems = toolbarItems
         self.toolbarDock = toolbarDock
         self.discoverNearby = discoverNearby
@@ -193,7 +196,7 @@ public struct AppSettings: Codable, Hashable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case appearance, tileDensity, librarySort, libraryLayout, defaultCursorMode, sharedClipboard
         case autoReconnect, confirmDisconnect, updateChannel, showToolbarOnLaunch, toolbarItems
-        case toolbarDock, discoverNearby, requireBiometrics, showSessionPreviews
+        case toolbarDock, discoverNearby, requireBiometrics, showSessionPreviews, showDebugInfo
     }
 
     public init(from decoder: Decoder) throws {
@@ -209,6 +212,7 @@ public struct AppSettings: Codable, Hashable, Sendable {
         confirmDisconnect = try container.decode(Bool.self, forKey: .confirmDisconnect)
         updateChannel = try container.decodeIfPresent(UpdateChannel.self, forKey: .updateChannel) ?? .release
         showToolbarOnLaunch = try container.decodeIfPresent(Bool.self, forKey: .showToolbarOnLaunch) ?? true
+        showDebugInfo = try container.decodeIfPresent(Bool.self, forKey: .showDebugInfo) ?? false
         toolbarItems = try container.decodeIfPresent([SessionToolbarItem].self, forKey: .toolbarItems)
             ?? SessionToolbarItem.allCases
         toolbarDock = try container.decodeIfPresent(ToolbarDock.self, forKey: .toolbarDock) ?? .bottom

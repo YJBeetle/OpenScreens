@@ -176,10 +176,10 @@
 "Pointer" = "指针";
 "Touch" = "触摸";
 "Trackpad" = "触控板";
-"Trackpad & Mouse" = "触控板与鼠标";
+"Hybrid Mode" = "混合模式";
 "Taps jump the pointer to the touched spot. Drag to move the pointer." = "轻点会将指针移到触摸位置，拖移可移动指针。";
 "The screen behaves like a trackpad; the pointer moves relative to your fingers." = "屏幕如同触控板，指针会相对手指移动。";
-"Use relative touch movement and pair a hardware mouse when one is available." = "使用相对触摸移动，并在有硬件鼠标时配对使用。";
+"Tap where you touch. Drag to move the cursor and follow it with the desktop." = "轻点手指所在的位置。拖动光标时，画面跟随光标。";
 "Connect in Observe Mode" = "以观察模式连接";
 "Start in Observe Mode" = "以查看模式启动";
 "Use Shared Clipboard" = "使用共享剪贴板";
@@ -481,3 +481,4 @@
 "Hot Corner — %@" = "触发角 — %@";
 
 "Mirror to External Display" = "投放到外接显示器";
+"Show Debug Info" = "显示调试信息";

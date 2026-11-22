@@ -47,10 +47,16 @@ public struct SessionScreen: View {
             Theme.Colors.canvas
                 .ignoresSafeArea()
 
-            ZStack {
-                remoteCanvas
-                    .accessibilityHidden(true)
+            #if os(iOS)
+            remoteCanvas
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+            #endif
 
+            ZStack {
+                #if os(macOS)
+                remoteCanvas.accessibilityHidden(true)
+                #endif
                 cursorOverlay
                 pointerSurface
                 if let indicator = pressIndicator {
@@ -189,20 +195,28 @@ public struct SessionScreen: View {
     @ViewBuilder
     private var remoteCanvas: some View {
         #if os(iOS)
-        GeometryReader { proxy in
-            RemoteCanvasView(
-                renderer: model.renderer,
-                contentMode: model.scaling == .stretch ? .stretch : .fit,
-                imageRect: model.displayedImageRect(in: proxy.size),
-                containerSize: proxy.size
-            )
-            .frame(width: proxy.size.width, height: proxy.size.height)
-            .onChange(of: proxy.size, initial: true) { _, size in
-                model.scheduleViewportUpdate(
-                    in: size,
-                    screenPixelWidth: size.width * displayScale
+        GeometryReader { safe in
+            GeometryReader { render in
+                let safeFrame = safe.frame(in: .global)
+                let renderFrame = render.frame(in: .global)
+                let bounds = renderFrame.offsetBy(dx: -safeFrame.minX, dy: -safeFrame.minY)
+                RemoteCanvasView(
+                    renderer: model.renderer,
+                    contentMode: model.scaling == .stretch ? .stretch : .fit,
+                    imageRect: model.displayedImageRect(in: safe.size)?
+                        .offsetBy(dx: -bounds.minX, dy: -bounds.minY),
+                    containerSize: render.size
                 )
+                .frame(width: render.size.width, height: render.size.height)
+                .onChange(of: [bounds, CGRect(origin: .zero, size: safe.size)], initial: true) {
+                    model.scheduleViewportUpdate(
+                        in: safe.size,
+                        screenPixelWidth: render.size.width * displayScale,
+                        renderBounds: bounds
+                    )
+                }
             }
+            .ignoresSafeArea(.container)
         }
         #else
         RemoteCanvasView(renderer: model.renderer, contentMode: model.scaling)
@@ -237,10 +251,7 @@ public struct SessionScreen: View {
                 onScroll: { model.scroll(by: $0) },
                 onDragZoomed: {
                     model.panZoom(by: $0, in: proxy.size)
-                    model.scheduleViewportUpdate(
-                        in: proxy.size,
-                        screenPixelWidth: proxy.size.width * displayScale
-                    )
+                    model.scheduleCurrentViewport()
                 },
                 isZoomed: { model.zoom > 1.001 && !model.isCenteredTrackpad },
                 onPinchBegan: { focal in
@@ -257,10 +268,7 @@ public struct SessionScreen: View {
                         currentFocal: focal,
                         in: proxy.size
                     )
-                    model.scheduleViewportUpdate(
-                        in: proxy.size,
-                        screenPixelWidth: proxy.size.width * displayScale
-                    )
+                    model.scheduleCurrentViewport()
                 },
                 onPinchEnded: { pinchStart = nil },
                 onPressBegan: { button, point in
@@ -350,7 +358,8 @@ public struct SessionScreen: View {
     private var chrome: some View {
         if model.showsChrome {
             ZStack {
-                VStack(spacing: 0) {
+                VStack(spacing: 6) {
+                    sessionDebugInfo
                     HStack(alignment: .top) {
                         Spacer(minLength: 0)
                         statusHeader
@@ -366,7 +375,8 @@ public struct SessionScreen: View {
             .padding(.bottom, 10)
             .transition(.opacity)
         } else {
-            VStack {
+            VStack(spacing: 6) {
+                sessionDebugInfo
                 HStack {
                     Spacer()
                     showToolbarButton
@@ -376,6 +386,32 @@ public struct SessionScreen: View {
             .padding(12)
             .transition(.opacity)
         }
+    }
+
+    @ViewBuilder
+    private var sessionDebugInfo: some View {
+        if settings.settings.showDebugInfo {
+            HStack {
+                if let size = model.serverSize, size.width > 0, size.height > 0, !model.isObserving {
+                    let x = min(Int((model.remoteCursor.x * size.width).rounded()), Int(size.width) - 1)
+                    let y = min(Int((model.remoteCursor.y * size.height).rounded()), Int(size.height) - 1)
+                    debugBadge("X \(x)  Y \(y)")
+                }
+                Spacer(minLength: 8)
+                debugBadge("\(Double(model.zoom).formatted(.number.precision(.fractionLength(1))))×")
+            }
+            .environment(\.layoutDirection, .leftToRight)
+            .allowsHitTesting(false)
+        }
+    }
+
+    private func debugBadge(_ text: String) -> some View {
+        Text(verbatim: text)
+            .font(.caption.monospacedDigit())
+            .lineLimit(1)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .glassSurface(in: RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 
     @ViewBuilder
@@ -538,7 +574,7 @@ public struct SessionScreen: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                 #if DEBUG && os(iOS)
-                if let presentation = model.renderer.presentation {
+                if settings.settings.showDebugInfo, let presentation = model.renderer.presentation {
                     Text(firstFrameDetail(presentation.stage))
                         .font(.caption2.monospacedDigit())
                         .foregroundStyle(.white.opacity(0.7))

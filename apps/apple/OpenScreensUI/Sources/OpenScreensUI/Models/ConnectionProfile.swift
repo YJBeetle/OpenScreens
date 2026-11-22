@@ -357,7 +357,7 @@ public struct ControlPreferences: Codable, Hashable, Sendable {
     public init(
         startInObserveMode: Bool = false,
         sharedClipboard: Bool = true,
-        cursorMode: CursorMode = .touch,
+        cursorMode: CursorMode = .trackpadAndMouse,
         scaling: RemoteContentMode = .fit,
         autoReconnect: Bool = true,
         keepScreenAwake: Bool = true,
@@ -439,7 +439,7 @@ public enum CursorMode: String, Codable, CaseIterable, Identifiable, Sendable {
         switch self {
         case .touch: NSLocalizedString("Touch", comment: "Cursor mode")
         case .trackpad: NSLocalizedString("Trackpad", comment: "Cursor mode")
-        case .trackpadAndMouse: NSLocalizedString("Trackpad & Mouse", comment: "Cursor mode")
+        case .trackpadAndMouse: NSLocalizedString("Hybrid Mode", comment: "Cursor mode")
         }
     }
 
@@ -465,7 +465,7 @@ public enum CursorMode: String, Codable, CaseIterable, Identifiable, Sendable {
             )
         case .trackpadAndMouse:
             NSLocalizedString(
-                "Use relative touch movement and pair a hardware mouse when one is available.",
+                "Tap where you touch. Drag to move the cursor and follow it with the desktop.",
                 comment: "Cursor mode help"
             )
         }

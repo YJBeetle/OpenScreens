@@ -19,6 +19,8 @@ public final class ConnectionStore {
     private var advertisedEndpoints: Set<String> = []
     @ObservationIgnored private var dismissedDiscovered: Set<String> = []
 
+    @ObservationIgnored private var nearbyCursorModes: [String: CursorMode] = [:]
+
     let previews: ConnectionPreviews
 
     public init(fileURL: URL? = nil, seedDemoData: Bool = true, settings: SettingsStore? = nil) {
@@ -30,6 +32,7 @@ public final class ConnectionStore {
         if let stored = Self.load(from: self.fileURL, decoder: decoder) {
             self.connections = stored.connections.filter { !$0.isDiscovered }
             self.groups = stored.groups ?? []
+            self.nearbyCursorModes = stored.nearbyCursorModes ?? [:]
             if self.connections.count != stored.connections.count {
                 persist()
             }
@@ -199,6 +202,8 @@ public final class ConnectionStore {
         guard let index = connections.firstIndex(where: { $0.id == id }),
               connections[index].isDiscovered
         else { return nil }
+        let mode = cursorMode(for: connections[index])
+        connections[index].controls.cursorMode = mode
         connections[index].isDiscovered = false
         connections[index].section = .custom
         persist()
@@ -307,6 +312,24 @@ public final class ConnectionStore {
         persist()
     }
 
+    func cursorMode(for profile: ConnectionProfile) -> CursorMode {
+        if let saved = connection(id: profile.id), !saved.isDiscovered { return saved.controls.cursorMode }
+        let key = Self.endpointKey(host: profile.host, port: profile.port)
+        return nearbyCursorModes[key] ?? profile.controls.cursorMode
+    }
+
+    func setCursorMode(_ mode: CursorMode, for profile: ConnectionProfile) {
+        if let index = connections.firstIndex(where: { $0.id == profile.id && !$0.isDiscovered }) {
+            guard connections[index].controls.cursorMode != mode else { return }
+            connections[index].controls.cursorMode = mode
+        } else {
+            let key = Self.endpointKey(host: profile.host, port: profile.port)
+            guard nearbyCursorModes[key] != mode else { return }
+            nearbyCursorModes[key] = mode
+        }
+        persist()
+    }
+
     public func setPreferredDisplay(_ displayID: Int?, for id: UUID) {
         guard let index = connections.firstIndex(where: { $0.id == id }),
               connections[index].remembersSelectedDisplay,
@@ -402,13 +425,15 @@ public final class ConnectionStore {
         var version: Int
         var connections: [ConnectionProfile]
         var groups: [LibraryGroup]?
+        var nearbyCursorModes: [String: CursorMode]?
     }
 
     private func persist() {
         let payload = StoreFile(
             version: 2,
             connections: connections.filter { !$0.isDiscovered },
-            groups: groups
+            groups: groups,
+            nearbyCursorModes: nearbyCursorModes.isEmpty ? nil : nearbyCursorModes
         )
         do {
             try FileManager.default.createDirectory(

@@ -353,7 +353,7 @@ public final class SessionViewModel {
         remoteCursorShape = nil
         remoteCursorImage = nil
         #if os(iOS)
-        remoteCursor = CGPoint(x: 0.5, y: 0.55)
+        remoteCursor = CGPoint(x: 0.5, y: isCenteredTrackpad ? 0.5 : 0.55)
         #endif
         lastHoverPixel = nil
 
@@ -657,6 +657,32 @@ public final class SessionViewModel {
 
     // MARK: - Pointer input
 
+    var isCenteredTrackpad: Bool { cursorMode == .trackpad && !isObserving }
+
+    private func followTrackpadCursor(in size: CGSize) {
+        guard let base = remoteImageRect(in: size) else { return }
+        let width = base.width * zoom
+        let height = base.height * zoom
+        let maxX = max(0, (width - size.width) / 2)
+        let maxY = max(0, (height - size.height) / 2)
+        pan = CGSize(
+            width: min(max((0.5 - remoteCursor.x) * width, -maxX), maxX),
+            height: min(max((0.5 - remoteCursor.y) * height, -maxY), maxY)
+        )
+    }
+
+    private func moveCenteredTrackpad(to point: CGPoint, in size: CGSize) {
+        defer { dragAnchor = point }
+        guard let anchor = dragAnchor, let rect = displayedImageRect(in: size) else { return }
+        remoteCursor = CGPoint(
+            x: min(max(remoteCursor.x + (point.x - anchor.x) / rect.width, 0), 1),
+            y: min(max(remoteCursor.y + (point.y - anchor.y) / rect.height, 0), 1)
+        )
+        followTrackpadCursor(in: size)
+        queuePointer([PointerEvent(action: .move, x: remoteCursor.x, y: remoteCursor.y)])
+        scheduleCurrentViewport()
+    }
+
     public func tap(at point: CGPoint, in size: CGSize) {
         guard state.isConnected, !isObserving, size.width > 0, size.height > 0 else { return }
         let normalized = normalized(point, in: size)
@@ -672,6 +698,7 @@ public final class SessionViewModel {
             ])
         case .trackpad:
             queuePointer([
+                PointerEvent(action: .move, x: remoteCursor.x, y: remoteCursor.y),
                 PointerEvent(action: .down, button: button, x: remoteCursor.x, y: remoteCursor.y),
                 PointerEvent(action: .up, button: button, x: remoteCursor.x, y: remoteCursor.y)
             ])
@@ -680,6 +707,10 @@ public final class SessionViewModel {
 
     public func drag(to point: CGPoint, in size: CGSize) {
         guard state.isConnected, !isObserving, size.width > 0, size.height > 0 else { return }
+        if isCenteredTrackpad {
+            moveCenteredTrackpad(to: point, in: size)
+            return
+        }
         let normalized = normalized(point, in: size)
         defer { dragAnchor = normalized }
 
@@ -709,7 +740,8 @@ public final class SessionViewModel {
     /// finger and stays down until `endPress`.
     public func beginPress(button: PointerButton, at point: CGPoint, in size: CGSize) {
         guard state.isConnected, !isObserving, size.width > 0, size.height > 0 else { return }
-        let target = normalized(point, in: size)
+        let target = isCenteredTrackpad ? remoteCursor : normalized(point, in: size)
+        if isCenteredTrackpad { dragAnchor = point }
         remoteCursor = target
         pressedButton = button
         queuePointer([
@@ -720,6 +752,10 @@ public final class SessionViewModel {
 
     public func movePress(to point: CGPoint, in size: CGSize) {
         guard pressedButton != nil, state.isConnected, !isObserving else { return }
+        if isCenteredTrackpad {
+            moveCenteredTrackpad(to: point, in: size)
+            return
+        }
         let target = normalized(point, in: size)
         remoteCursor = target
         queuePointer([PointerEvent(action: .move, x: target.x, y: target.y)])
@@ -727,6 +763,7 @@ public final class SessionViewModel {
 
     public func endPress() {
         guard let button = pressedButton else { return }
+        dragAnchor = nil
         pressedButton = nil
         queuePointer([
             PointerEvent(action: .up, button: button, x: remoteCursor.x, y: remoteCursor.y)
@@ -813,7 +850,7 @@ public final class SessionViewModel {
 
     /// Moves the zoomed image while two fingers drag it.
     public func panZoom(by delta: CGSize, in size: CGSize) {
-        guard zoom > 1.001 else { return }
+        guard zoom > 1.001, !isCenteredTrackpad else { return }
         pan = clampedPan(
             CGSize(width: pan.width + delta.width, height: pan.height + delta.height),
             in: size
@@ -832,6 +869,11 @@ public final class SessionViewModel {
     ) {
         guard let base = remoteImageRect(in: size) else { return }
         let newZoom = min(max(startZoom * scale, 1), Self.maxZoom)
+        if isCenteredTrackpad {
+            zoom = newZoom > 1.001 ? newZoom : 1
+            followTrackpadCursor(in: size)
+            return
+        }
         guard newZoom > 1.001 else {
             zoom = 1
             pan = .zero
@@ -860,6 +902,7 @@ public final class SessionViewModel {
     /// Debounces a viewport subscription for the visible part of the image, so
     /// a pinch or pan settles before the server is re-asked.
     public func scheduleViewportUpdate(in size: CGSize, screenPixelWidth: CGFloat) {
+        if isCenteredTrackpad { followTrackpadCursor(in: size) }
         canvasSize = size
         canvasPixelWidth = Int(max(1, screenPixelWidth.rounded()))
         scheduleCurrentViewport()
@@ -1275,6 +1318,18 @@ public final class SessionViewModel {
     public func setCursorMode(_ mode: CursorMode) {
         cursorMode = mode
         dragAnchor = nil
+        if canvasSize.width > 0, canvasSize.height > 0 {
+            if isCenteredTrackpad {
+                remoteCursor = normalized(
+                    CGPoint(x: canvasSize.width / 2, y: canvasSize.height / 2),
+                    in: canvasSize
+                )
+                followTrackpadCursor(in: canvasSize)
+            } else {
+                pan = zoom > 1.001 ? clampedPan(pan, in: canvasSize) : .zero
+            }
+            scheduleCurrentViewport()
+        }
     }
 
     public func setScaling(_ mode: RemoteContentMode) {

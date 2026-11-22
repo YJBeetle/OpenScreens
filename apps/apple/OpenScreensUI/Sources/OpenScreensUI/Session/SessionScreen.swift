@@ -65,7 +65,7 @@ public struct SessionScreen: View {
                 }
             }
             #if os(iOS)
-            .ignoresSafeArea()
+            .clipped()
             #endif
             #if os(macOS)
             if model.state.isConnected {
@@ -242,7 +242,7 @@ public struct SessionScreen: View {
                         screenPixelWidth: proxy.size.width * displayScale
                     )
                 },
-                isZoomed: { model.zoom > 1.001 },
+                isZoomed: { model.zoom > 1.001 && !model.isCenteredTrackpad },
                 onPinchBegan: { focal in
                     guard model.zoomEnabled else { return }
                     pinchStart = (model.zoom, model.pan, focal)
@@ -267,12 +267,12 @@ public struct SessionScreen: View {
                     model.beginPress(button: button, at: point, in: proxy.size)
                     pressIndicator = PressIndicator(
                         color: Self.indicatorColor(for: button),
-                        point: point
+                        point: pressIndicatorPoint(finger: point, in: proxy.size)
                     )
                 },
                 onPressMoved: { point in
                     model.movePress(to: point, in: proxy.size)
-                    pressIndicator?.point = point
+                    pressIndicator?.point = pressIndicatorPoint(finger: point, in: proxy.size)
                 },
                 onPressEnded: {
                     model.endPress()
@@ -304,6 +304,14 @@ public struct SessionScreen: View {
         .accessibilityAction(named: "Toggle Observe Mode") {
             model.toggleObserveMode()
         }
+    }
+
+    private func pressIndicatorPoint(finger: CGPoint, in size: CGSize) -> CGPoint {
+        guard model.isCenteredTrackpad, let rect = model.displayedImageRect(in: size) else { return finger }
+        return CGPoint(
+            x: rect.minX + model.remoteCursor.x * rect.width,
+            y: rect.minY + model.remoteCursor.y * rect.height
+        )
     }
 
     private static func indicatorColor(for button: PointerButton) -> Color {

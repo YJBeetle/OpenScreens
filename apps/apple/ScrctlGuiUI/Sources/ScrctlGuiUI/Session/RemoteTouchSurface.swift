@@ -50,6 +50,7 @@ final class TouchGestureView: UIView, UIGestureRecognizerDelegate {
     private var pinch: UIPinchGestureRecognizer!
     private var heldTransformDistance: CGFloat?
     private var heldFingerPosition: CGPoint?
+    private var heldDrag: HeldDragGestureRecognizer!
 
     init() {
         super.init(frame: .zero)
@@ -95,6 +96,7 @@ final class TouchGestureView: UIView, UIGestureRecognizerDelegate {
 
         let held = HeldDragGestureRecognizer(target: self, action: #selector(handleHeldDrag))
         addGestureRecognizer(held)
+        heldDrag = held
         singleTap.require(toFail: held)
 
         let heldRight = UILongPressGestureRecognizer(target: self, action: #selector(handleLongPress))
@@ -135,7 +137,9 @@ final class TouchGestureView: UIView, UIGestureRecognizerDelegate {
     }
 
     @objc private func handleSingleTap(_ gesture: UITapGestureRecognizer) {
-        handlers?.onTap(gesture.location(in: self))
+        let point = gesture.location(in: self)
+        heldDrag.recordTap(at: point)
+        handlers?.onTap(point)
     }
 
     @objc private func handleSinglePan(_ gesture: UIPanGestureRecognizer) {
@@ -291,6 +295,7 @@ final class HeldDragGestureRecognizer: UIGestureRecognizer {
     private var holdFinger: UITouch?
     private var initialPosition = CGPoint.zero
     private var timer: Timer?
+    private var lastTap: (position: CGPoint, time: TimeInterval)?
     private(set) var touchSetChanged = false
 
     var points: [CGPoint] {
@@ -305,12 +310,25 @@ final class HeldDragGestureRecognizer: UIGestureRecognizer {
             state = .changed
         } else if fingers.count == 1, let point = points.first {
             initialPosition = point
+            let priorTap = lastTap
+            lastTap = nil
+            if let priorTap,
+               ProcessInfo.processInfo.systemUptime - priorTap.time <= 0.3,
+               hypot(point.x - priorTap.position.x, point.y - priorTap.position.y) <= 20 {
+                recognizeHold()
+                return
+            }
             let timer = Timer(timeInterval: 0.45, target: self, selector: #selector(recognizeHold), userInfo: nil, repeats: false)
             RunLoop.main.add(timer, forMode: .common)
             self.timer = timer
         } else {
+            lastTap = nil
             state = .failed
         }
+    }
+
+    func recordTap(at position: CGPoint) {
+        lastTap = (position, ProcessInfo.processInfo.systemUptime)
     }
 
     override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent) {

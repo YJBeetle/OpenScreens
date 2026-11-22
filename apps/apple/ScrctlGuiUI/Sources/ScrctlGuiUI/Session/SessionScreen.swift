@@ -62,14 +62,17 @@ public struct SessionScreen: View {
                 cursorOverlay
                 pointerSurface
                 if let indicator = pressIndicator {
-                    Circle()
-                        .fill(indicator.color.opacity(0.9))
-                        .frame(width: 22, height: 22)
-                        .overlay(Circle().stroke(.white.opacity(0.85), lineWidth: 2))
-                        .shadow(color: indicator.color.opacity(0.55), radius: 8)
-                        .position(indicator.point)
-                        .allowsHitTesting(false)
-                        .accessibilityHidden(true)
+                    GeometryReader { geometry in
+                        let size = geometry.size
+                        Circle()
+                            .fill(indicator.color.opacity(0.9))
+                            .frame(width: 22, height: 22)
+                            .overlay(Circle().stroke(.white.opacity(0.85), lineWidth: 2))
+                            .shadow(color: indicator.color.opacity(0.55), radius: 8)
+                            .position(pressIndicatorPoint(finger: indicator.point, in: size))
+                            .allowsHitTesting(false)
+                            .accessibilityHidden(true)
+                    }
                 }
             }
             #if os(iOS)
@@ -281,7 +284,11 @@ public struct SessionScreen: View {
                     )
                     model.scheduleCurrentViewport()
                 },
-                onPinchEnded: { pinchStart = nil },
+                onPinchEnded: {
+                    guard pinchStart != nil else { return }
+                    pinchStart = nil
+                    model.recenterTrackpad(in: proxy.size)
+                },
                 onPressBegan: { button, point in
                     model.beginPress(button: button, at: point, in: proxy.size)
                     pressIndicator = PressIndicator(
@@ -293,8 +300,8 @@ public struct SessionScreen: View {
                     model.movePress(to: point, in: proxy.size)
                     pressIndicator?.point = pressIndicatorPoint(finger: point, in: proxy.size)
                 },
-                onHeldDragMoved: { delta, followsCursor in
-                    model.moveHeldDrag(by: delta, in: proxy.size, followsCursor: followsCursor)
+                onHeldDragMoved: { delta in
+                    model.moveHeldDrag(by: delta, in: proxy.size)
                     updateHeldDragIndicator(in: proxy.size)
                 },
                 onHeldTransformBegan: { focal in
@@ -308,8 +315,7 @@ public struct SessionScreen: View {
                         startPan: start.pan,
                         startFocal: start.focal,
                         currentFocal: focal,
-                        in: proxy.size,
-                        followsCursor: false
+                        in: proxy.size
                     )
                     model.scheduleCurrentViewport()
                     updateHeldDragIndicator(in: proxy.size)

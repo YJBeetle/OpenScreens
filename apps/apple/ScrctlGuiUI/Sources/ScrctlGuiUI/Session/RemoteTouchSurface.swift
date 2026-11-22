@@ -23,7 +23,7 @@ struct RemoteTouchSurface: UIViewRepresentable {
     var onPinchEnded: () -> Void
     var onPressBegan: (PointerButton, CGPoint) -> Void
     var onPressMoved: (CGPoint) -> Void
-    var onHeldDragMoved: (CGPoint, Bool) -> Void
+    var onHeldDragMoved: (CGPoint) -> Void
     var onHeldTransformBegan: (CGPoint) -> Void
     var onHeldTransformChanged: (CGFloat, CGPoint) -> Void
     var onPressEnded: () -> Void
@@ -50,7 +50,6 @@ final class TouchGestureView: UIView, UIGestureRecognizerDelegate {
     private var pinch: UIPinchGestureRecognizer!
     private var heldTransformDistance: CGFloat?
     private var heldFingerPosition: CGPoint?
-    private var heldDragNavigated = false
 
     init() {
         super.init(frame: .zero)
@@ -229,7 +228,6 @@ final class TouchGestureView: UIView, UIGestureRecognizerDelegate {
                 let focal = CGPoint(x: (points[0].x + points[1].x) / 2, y: (points[0].y + points[1].y) / 2)
                 let distance = max(hypot(points[0].x - points[1].x, points[0].y - points[1].y), 1)
                 if let start = heldTransformDistance, !gesture.touchSetChanged {
-                    heldDragNavigated = true
                     handlers?.onHeldTransformChanged(distance / start, focal)
                 } else {
                     heldTransformDistance = distance
@@ -243,8 +241,7 @@ final class TouchGestureView: UIView, UIGestureRecognizerDelegate {
                 if let point = points.first, let last = heldFingerPosition,
                    !gesture.touchSetChanged, last != point {
                     handlers?.onHeldDragMoved(
-                        CGPoint(x: point.x - last.x, y: point.y - last.y),
-                        !heldDragNavigated
+                        CGPoint(x: point.x - last.x, y: point.y - last.y)
                     )
                 }
                 heldFingerPosition = points.first
@@ -252,7 +249,6 @@ final class TouchGestureView: UIView, UIGestureRecognizerDelegate {
         case .ended, .cancelled:
             pressActive = false
             heldFingerPosition = nil
-            heldDragNavigated = false
             if heldTransformDistance != nil {
                 heldTransformDistance = nil
                 handlers?.onPinchEnded()

@@ -17,7 +17,8 @@ struct SessionToolbarSettings: View {
         let unpinned = layout.overflow(after: layout.pinned.count)
         Form {
             Section("Preview") {
-                FittingSessionToolbar(layout: layout, orientation: .horizontal) { count in
+                GeometryReader { geometry in
+                    let count = layout.inlineCount(availableLength: geometry.size.width, buttonSize: 44)
                     FloatingBar {
                         ForEach(layout.pinned.prefix(count)) { item in
                             Image(systemName: item.systemImage)
@@ -31,8 +32,9 @@ struct SessionToolbarSettings: View {
                         }
                     }
                     .fixedSize()
+                    .frame(maxWidth: .infinity)
                 }
-                .frame(maxWidth: .infinity)
+                .frame(height: 56)
             }
 
             Section {

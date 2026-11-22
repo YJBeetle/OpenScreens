@@ -24,6 +24,15 @@ final class SessionToolbarLayoutTests: XCTestCase {
         XCTAssertEqual(layout.overflow(after: 0), [.keyboard, .pointer, .disconnect])
     }
 
+    func testReservesSpaceForOverflowAtTheFitBoundary() {
+        let items: [SessionToolbarItem] = [.pointer, .displays, .keyboard, .disconnect]
+        let layout = SessionToolbarLayout(pinned: items, available: items)
+        XCTAssertEqual(layout.inlineCount(availableLength: 194, buttonSize: 44), 4)
+        XCTAssertEqual(layout.inlineCount(availableLength: 193, buttonSize: 44), 2)
+        XCTAssertEqual(layout.inlineCount(availableLength: 194, buttonSize: 44, requiresMore: true), 3)
+        XCTAssertEqual(layout.inlineCount(availableLength: 194, buttonSize: 44, leadingLength: 12), 2)
+    }
+
     func testRoundTripPreservesOrderAndEmptyToolbar() throws {
         for items: [SessionToolbarItem] in [[.disconnect, .commands, .download], []] {
             let settings = AppSettings(toolbarItems: items)

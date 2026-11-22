@@ -470,30 +470,23 @@ public struct SessionScreen: View {
 
     @ViewBuilder
     private var toolbarChrome: some View {
-        if isToolbarDockable {
-            GeometryReader { proxy in
+        GeometryReader { proxy in
+            if isToolbarDockable {
                 let dock = settings.settings.toolbarDock
-                sessionToolbar(orientation: dock.orientation)
+                let available = dock == .bottom ? proxy.size.width : proxy.size.height
+                sessionToolbar(orientation: dock.orientation, availableLength: available)
                     .contentShape(Capsule(style: .continuous))
                     .offset(toolbarDrag)
                     .highPriorityGesture(toolbarDragGesture(in: proxy.size))
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: alignment(for: dock))
                     .padding(dockPadding(for: dock))
-            }
-        } else if usesVerticalToolbar {
-            HStack {
-                Spacer(minLength: 0)
-                sessionToolbar(orientation: .vertical)
-            }
-            .padding(.trailing, 4)
-        } else {
-            VStack {
-                Spacer(minLength: 0)
-                HStack {
-                    Spacer(minLength: 0)
-                    sessionToolbar(orientation: .horizontal)
-                    Spacer(minLength: 0)
-                }
+            } else if usesVerticalToolbar {
+                sessionToolbar(orientation: .vertical, availableLength: proxy.size.height)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
+                    .padding(.trailing, 4)
+            } else {
+                sessionToolbar(orientation: .horizontal, availableLength: proxy.size.width)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
             }
         }
     }
@@ -559,11 +552,12 @@ public struct SessionScreen: View {
         }
     }
 
-    private func sessionToolbar(orientation: FloatingBarOrientation) -> some View {
+    private func sessionToolbar(orientation: FloatingBarOrientation, availableLength: CGFloat) -> some View {
         SessionToolbar(
             model: model,
             orientation: orientation,
             items: settings.settings.toolbarItems,
+            availableLength: availableLength,
             onUpload: { showingUploadPicker = true },
             onDownload: {
                 downloadPath = ""
@@ -572,7 +566,10 @@ public struct SessionScreen: View {
             onDisconnect: requestClose,
             showsDragHandle: isToolbarDockable
         )
-        .onGeometryChange(for: CGSize.self, of: { $0.size }) { toolbarSize = $0 }
+        .onGeometryChange(for: CGSize.self, of: { $0.size }) { size in
+            guard toolbarSize != size else { return }
+            toolbarSize = size
+        }
     }
 
     private var connectingOverlay: some View {

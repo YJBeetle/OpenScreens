@@ -8,6 +8,7 @@ struct SessionToolbar: View {
     let model: SessionViewModel
     let orientation: FloatingBarOrientation
     let items: [SessionToolbarItem]
+    let availableLength: CGFloat
     let onUpload: () -> Void
     let onDownload: () -> Void
     let onDisconnect: () -> Void
@@ -44,9 +45,13 @@ struct SessionToolbar: View {
 
     var body: some View {
         let layout = SessionToolbarLayout(pinned: items, available: availableItems)
-        FittingSessionToolbar(layout: layout, orientation: orientation) { count in
-            bar(layout: layout, inlineCount: count)
-        }
+        let inlineCount = layout.inlineCount(
+            availableLength: availableLength,
+            buttonSize: buttonSize,
+            leadingLength: showsDragHandle ? 12 : 0,
+            requiresMore: externalDisplayMirroring != nil
+        )
+        bar(layout: layout, inlineCount: inlineCount)
     }
 
     private func bar(layout: SessionToolbarLayout, inlineCount: Int) -> some View {
@@ -426,19 +431,21 @@ struct SessionToolbarLayout {
         unpinned = available.filter { !seen.contains($0) }
     }
 
+    func inlineCount(
+        availableLength: CGFloat,
+        buttonSize: CGFloat,
+        leadingLength: CGFloat = 0,
+        requiresMore: Bool = false
+    ) -> Int {
+        // FloatingBar uses 6 points of padding on each side and 2 between controls.
+        let slots = max(0, Int((availableLength - 12 - leadingLength + 2) / (buttonSize + 2)))
+        if !requiresMore, unpinned.isEmpty, pinned.count <= slots {
+            return pinned.count
+        }
+        return min(pinned.count, max(0, slots - 1))
+    }
+
     func overflow(after inlineCount: Int) -> [SessionToolbarItem] {
         Array(pinned.dropFirst(inlineCount)) + unpinned
-    }
-}
-
-struct FittingSessionToolbar<Content: View>: View {
-    let layout: SessionToolbarLayout
-    let orientation: FloatingBarOrientation
-    @ViewBuilder let content: (Int) -> Content
-
-    var body: some View {
-        ViewThatFits(in: orientation == .horizontal ? .horizontal : .vertical) {
-            ForEach((0...layout.pinned.count).reversed(), id: \.self, content: content)
-        }
     }
 }

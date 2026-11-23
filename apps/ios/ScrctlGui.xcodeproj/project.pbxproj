@@ -1,0 +1,447 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		3B9B49882D95759FE9AEDF64 /* IOSRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C0F1B7DC29E14795B31F545 /* IOSRootView.swift */; };
+		47926FE09237230E33DB20ED /* ScrctlGuiUI in Frameworks */ = {isa = PBXBuildFile; productRef = E4D2B2A8EF3D14289FCE122F /* ScrctlGuiUI */; };
+		519E10B11CB6FCF4CE60264B /* PhoneLibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D1AEF272EE8D247C26D0C55 /* PhoneLibraryView.swift */; };
+		58B33D2BBE4D5B4840A88DDF /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 16E2631FA1D071F411764512 /* Localizable.strings */; };
+		5A314F065D1C54C78AFD8D09 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 85D4CFCE7944590202EC6F95 /* Assets.xcassets */; };
+		676916AA3D3D5B804761E660 /* ScrctlGuiCanvas in Frameworks */ = {isa = PBXBuildFile; productRef = 80ADFF6F5C463EE0AC452736 /* ScrctlGuiCanvas */; };
+		87A6483FF7E555300F5828F2 /* OpenScreensIOSApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 49EECF5A99786AA1343CB2CF /* OpenScreensIOSApp.swift */; };
+		B1FBDE6ABA8CBBB35C514869 /* IPadLibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C29D5A6026833E9D69F0E14 /* IPadLibraryView.swift */; };
+		B69AF7F5D7FBCCCEA599ECFB /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = B71A5B36B308D059049D547F /* InfoPlist.strings */; };
+		C3333AD9BA636714D4E9F5E0 /* ScrctlGuiClient in Frameworks */ = {isa = PBXBuildFile; productRef = 3E95D1110BA6275EC4E9BD56 /* ScrctlGuiClient */; };
+		D9B2E99053CBB72AF4FBEA2B /* OpenScreensShortcuts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00248FB37938A982EC409561 /* OpenScreensShortcuts.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		00248FB37938A982EC409561 /* OpenScreensShortcuts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenScreensShortcuts.swift; sourceTree = "<group>"; };
+		0C0F1B7DC29E14795B31F545 /* IOSRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOSRootView.swift; sourceTree = "<group>"; };
+		16E2631FA1D071F411764512 /* Localizable.strings */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = Localizable.strings; path = "zh-Hans.lproj/Localizable.strings"; sourceTree = "<group>"; };
+		3D1AEF272EE8D247C26D0C55 /* PhoneLibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhoneLibraryView.swift; sourceTree = "<group>"; };
+		49EECF5A99786AA1343CB2CF /* OpenScreensIOSApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenScreensIOSApp.swift; sourceTree = "<group>"; };
+		85D4CFCE7944590202EC6F95 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		8C29D5A6026833E9D69F0E14 /* IPadLibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IPadLibraryView.swift; sourceTree = "<group>"; };
+		8E5A98F3CF7DD0D5BFCD708D /* ScrctlGui.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = ScrctlGui.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		B71A5B36B308D059049D547F /* InfoPlist.strings */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = InfoPlist.strings; path = "zh-Hans.lproj/InfoPlist.strings"; sourceTree = "<group>"; };
+		D88025330A7904AFC60B103B /* ScrctlGuiUI */ = {isa = PBXFileReference; lastKnownFileType = folder; name = ScrctlGuiUI; path = ../apple/ScrctlGuiUI; sourceTree = SOURCE_ROOT; };
+		D8BB14A1C1AAD7E6CCD33DA9 /* ScrctlGuiClient */ = {isa = PBXFileReference; lastKnownFileType = folder; name = ScrctlGuiClient; path = ../apple/ScrctlGuiClient; sourceTree = SOURCE_ROOT; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		11CA0B1F959CC1D40405E7FC /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				47926FE09237230E33DB20ED /* ScrctlGuiUI in Frameworks */,
+				676916AA3D3D5B804761E660 /* ScrctlGuiCanvas in Frameworks */,
+				C3333AD9BA636714D4E9F5E0 /* ScrctlGuiClient in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		240ABB0F31F1BB9994A7C941 /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				0C0F1B7DC29E14795B31F545 /* IOSRootView.swift */,
+				8C29D5A6026833E9D69F0E14 /* IPadLibraryView.swift */,
+				49EECF5A99786AA1343CB2CF /* OpenScreensIOSApp.swift */,
+				00248FB37938A982EC409561 /* OpenScreensShortcuts.swift */,
+				3D1AEF272EE8D247C26D0C55 /* PhoneLibraryView.swift */,
+			);
+			path = Sources;
+			sourceTree = "<group>";
+		};
+		4B11C26ACDCEE36F8D4673FB /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				8E5A98F3CF7DD0D5BFCD708D /* ScrctlGui.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		7BAD17EE9E9FF48BB63A31FB = {
+			isa = PBXGroup;
+			children = (
+				CD1BC3B3DBF3FB5F88D0AF6C /* Packages */,
+				986DCAD38D1EA1627BC5E159 /* Resources */,
+				240ABB0F31F1BB9994A7C941 /* Sources */,
+				4B11C26ACDCEE36F8D4673FB /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		986DCAD38D1EA1627BC5E159 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				85D4CFCE7944590202EC6F95 /* Assets.xcassets */,
+				B71A5B36B308D059049D547F /* InfoPlist.strings */,
+				16E2631FA1D071F411764512 /* Localizable.strings */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		CD1BC3B3DBF3FB5F88D0AF6C /* Packages */ = {
+			isa = PBXGroup;
+			children = (
+				D8BB14A1C1AAD7E6CCD33DA9 /* ScrctlGuiClient */,
+				D88025330A7904AFC60B103B /* ScrctlGuiUI */,
+			);
+			name = Packages;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		1E300852375869CB3F0E8854 /* ScrctlGui */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = BE4A9FA65EAAC6C7C26FADEA /* Build configuration list for PBXNativeTarget "ScrctlGui" */;
+			buildPhases = (
+				23A383C371DE1C78AD8159B5 /* Generate app version */,
+				BB4031F9C02998B21264BE2D /* Sources */,
+				3A8E0A2D08241CF2632C6699 /* Resources */,
+				11CA0B1F959CC1D40405E7FC /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = ScrctlGui;
+			packageProductDependencies = (
+				E4D2B2A8EF3D14289FCE122F /* ScrctlGuiUI */,
+				80ADFF6F5C463EE0AC452736 /* ScrctlGuiCanvas */,
+				3E95D1110BA6275EC4E9BD56 /* ScrctlGuiClient */,
+			);
+			productName = ScrctlGui;
+			productReference = 8E5A98F3CF7DD0D5BFCD708D /* ScrctlGui.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		2F54FAEE2F04F4B229BCE2D7 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 2600;
+				TargetAttributes = {
+					1E300852375869CB3F0E8854 = {
+						DevelopmentTeam = 84GS944T65;
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = D08EBAFD9C580800B6829BD2 /* Build configuration list for PBXProject "ScrctlGui" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+				"zh-Hans",
+			);
+			mainGroup = 7BAD17EE9E9FF48BB63A31FB;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				B24922CFF06D826416C89D48 /* XCLocalSwiftPackageReference "../apple/ScrctlGuiClient" */,
+				685494FB2E8AF384AA2C19C0 /* XCLocalSwiftPackageReference "../apple/ScrctlGuiUI" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 4B11C26ACDCEE36F8D4673FB /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				1E300852375869CB3F0E8854 /* ScrctlGui */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		3A8E0A2D08241CF2632C6699 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				5A314F065D1C54C78AFD8D09 /* Assets.xcassets in Resources */,
+				B69AF7F5D7FBCCCEA599ECFB /* InfoPlist.strings in Resources */,
+				58B33D2BBE4D5B4840A88DDF /* Localizable.strings in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		23A383C371DE1C78AD8159B5 /* Generate app version */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/Info.plist",
+				"$(SRCROOT)/../../scripts/ios-build-info.sh",
+				"$(SRCROOT)/../../.git",
+			);
+			name = "Generate app version";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(DERIVED_FILE_DIR)/Scrctl-Info.plist",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "/bin/bash \"$SCRIPT_INPUT_FILE_1\" \"$SCRIPT_INPUT_FILE_0\" \"$SCRIPT_OUTPUT_FILE_0\"\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		BB4031F9C02998B21264BE2D /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				3B9B49882D95759FE9AEDF64 /* IOSRootView.swift in Sources */,
+				B1FBDE6ABA8CBBB35C514869 /* IPadLibraryView.swift in Sources */,
+				87A6483FF7E555300F5828F2 /* OpenScreensIOSApp.swift in Sources */,
+				D9B2E99053CBB72AF4FBEA2B /* OpenScreensShortcuts.swift in Sources */,
+				519E10B11CB6FCF4CE60264B /* PhoneLibraryView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		7283133F261337DBC1D02F5D /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = 84GS944T65;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = "$(SCRCTL_BASE_VERSION)";
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				OPENSCREENS_BUILD_VERSION = dev;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SCRCTL_BASE_VERSION = 2.0.0;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+		C9AAAB5CE493851D42128BBD /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = ScrctlGui.entitlements;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "$(DERIVED_FILE_DIR)/Scrctl-Info.plist";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = org.scrctl.ios;
+				PRODUCT_NAME = ScrctlGui;
+				SDKROOT = iphoneos;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		E0A12541F5CF556CDD4C20E9 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = 84GS944T65;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = "$(SCRCTL_BASE_VERSION)";
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				OPENSCREENS_BUILD_VERSION = dev;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SCRCTL_BASE_VERSION = 2.0.0;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		ED836BE615DF9C9B3BBF5277 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = ScrctlGui.entitlements;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "$(DERIVED_FILE_DIR)/Scrctl-Info.plist";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = org.scrctl.ios;
+				PRODUCT_NAME = ScrctlGui;
+				SDKROOT = iphoneos;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		BE4A9FA65EAAC6C7C26FADEA /* Build configuration list for PBXNativeTarget "ScrctlGui" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				ED836BE615DF9C9B3BBF5277 /* Debug */,
+				C9AAAB5CE493851D42128BBD /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		D08EBAFD9C580800B6829BD2 /* Build configuration list for PBXProject "ScrctlGui" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E0A12541F5CF556CDD4C20E9 /* Debug */,
+				7283133F261337DBC1D02F5D /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		685494FB2E8AF384AA2C19C0 /* XCLocalSwiftPackageReference "../apple/ScrctlGuiUI" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../apple/ScrctlGuiUI;
+		};
+		B24922CFF06D826416C89D48 /* XCLocalSwiftPackageReference "../apple/ScrctlGuiClient" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../apple/ScrctlGuiClient;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		3E95D1110BA6275EC4E9BD56 /* ScrctlGuiClient */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = ScrctlGuiClient;
+		};
+		80ADFF6F5C463EE0AC452736 /* ScrctlGuiCanvas */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = ScrctlGuiCanvas;
+		};
+		E4D2B2A8EF3D14289FCE122F /* ScrctlGuiUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = ScrctlGuiUI;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 2F54FAEE2F04F4B229BCE2D7 /* Project object */;
+}

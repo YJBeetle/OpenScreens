@@ -72,4 +72,5 @@ jobs:
         working-directory: apps/ios
         run: |
           xcodegen generate
+          git diff --exit-code -- ScrctlGui.xcodeproj
           xcodebuild -project ScrctlGui.xcodeproj -target ScrctlGui -configuration Debug -sdk iphoneos -arch arm64 CODE_SIGNING_ALLOWED=NO SYMROOT="$PWD/build" OPENSCREENS_BUILD_VERSION="$(git describe --tags --match 'v[0-9]*' --always)" CURRENT_PROJECT_VERSION="$(git rev-list --count HEAD)" build

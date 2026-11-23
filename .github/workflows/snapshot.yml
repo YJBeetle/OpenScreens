@@ -10,10 +10,6 @@ on:
 permissions:
   contents: write
 
-concurrency:
-  group: snapshot-release
-  cancel-in-progress: true
-
 jobs:
   macos:
     if: >-
@@ -140,13 +136,21 @@ jobs:
       && github.event.workflow_run.head_repository.full_name == github.repository)
     needs: macos
     runs-on: ubuntu-latest
+    concurrency:
+      group: snapshot-release
+      queue: max
     steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
       - uses: actions/download-artifact@v4
         with:
           pattern: ScrctlGui-snapshot-*
           merge-multiple: true
           path: dist
       - name: Publish rolling snapshot release
+        id: snapshot
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -165,22 +169,36 @@ jobs:
           - $mac_note
           - Stable and pre-release channels are unaffected by this rolling release.
           EOF
-          if gh release view snapshot --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+          if published_body="$(gh release view snapshot --repo "$GITHUB_REPOSITORY" --json body --jq .body)"; then
+            published_sha="$(printf '%s\n' "$published_body" | \
+              sed -n '1s/^Automated development snapshot from `\([0-9a-f]\{40\}\)`.*/\1/p')"
+            if [[ -z "$published_sha" ]]; then
+              echo "Cannot identify the commit of the published macOS snapshot." >&2
+              exit 1
+            fi
+            if ! git cat-file -e "$published_sha^{commit}" 2>/dev/null; then
+              git fetch origin "$published_sha"
+            fi
+            if [[ "$published_sha" != "$sha" ]] && git merge-base --is-ancestor "$sha" "$published_sha"; then
+              echo "A newer macOS snapshot is already published."
+              exit 0
+            fi
+            gh release upload snapshot --repo "$GITHUB_REPOSITORY" dist/* --clobber
             gh release edit snapshot --repo "$GITHUB_REPOSITORY" \
               --title "$title" --notes-file notes.md --prerelease
-            gh release upload snapshot --repo "$GITHUB_REPOSITORY" dist/* --clobber
           else
-            gh release create snapshot --repo "$GITHUB_REPOSITORY" dist/* \
+            gh release create snapshot --repo "$GITHUB_REPOSITORY" dist/* --target "$sha" \
               --title "$title" --notes-file notes.md --prerelease --latest=false
           fi
+          echo 'published=true' >> "$GITHUB_OUTPUT"
       - uses: actions/download-artifact@v4
-        if: needs.macos.outputs.notarized == 'true'
+        if: steps.snapshot.outputs.published == 'true' && needs.macos.outputs.notarized == 'true'
         continue-on-error: true
         with:
           name: ScrctlGui-appcast
           path: feed
       - name: Publish Sparkle update feed
-        if: needs.macos.outputs.notarized == 'true'
+        if: steps.snapshot.outputs.published == 'true' && needs.macos.outputs.notarized == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

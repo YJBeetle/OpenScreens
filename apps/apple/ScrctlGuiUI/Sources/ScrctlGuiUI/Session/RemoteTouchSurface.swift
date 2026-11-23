@@ -18,6 +18,7 @@ struct RemoteTouchSurface: UIViewRepresentable {
     var onScroll: (CGSize) -> Void
     var onDragZoomed: (CGSize) -> Void
     var isZoomed: () -> Bool
+    var isCenteredTrackpad: () -> Bool
     var onPinchBegan: (CGPoint) -> Void
     var onPinchChanged: (CGFloat, CGPoint) -> Void
     var onPinchEnded: () -> Void
@@ -90,6 +91,10 @@ final class TouchGestureView: UIView, UIGestureRecognizerDelegate {
         addGestureRecognizer(pinch)
         self.pinch = pinch
 
+        let trackpad = TrackpadTwoFingerGestureRecognizer(target: self, action: #selector(handleTrackpad))
+        trackpad.delegate = self
+        addGestureRecognizer(trackpad)
+
         let held = HeldDragGestureRecognizer(target: self, action: #selector(handleHeldDrag))
         addGestureRecognizer(held)
 
@@ -118,6 +123,17 @@ final class TouchGestureView: UIView, UIGestureRecognizerDelegate {
     @available(*, unavailable)
     required init?(coder: NSCoder) {
         fatalError("TouchGestureView is only created programmatically")
+    }
+
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+        let centered = handlers?.isCenteredTrackpad() == true
+        if gestureRecognizer is TrackpadTwoFingerGestureRecognizer {
+            return centered
+        }
+        if gestureRecognizer === twoPan || gestureRecognizer === pinch {
+            return !centered
+        }
+        return true
     }
 
     func gestureRecognizer(
@@ -170,6 +186,30 @@ final class TouchGestureView: UIView, UIGestureRecognizerDelegate {
             }
         case .ended, .cancelled, .failed:
             twoPanTranslation = .zero
+        default:
+            break
+        }
+    }
+
+    @objc private func handleTrackpad(_ gesture: TrackpadTwoFingerGestureRecognizer) {
+        switch gesture.state {
+        case .began, .changed:
+            guard !pressActive else { return }
+            switch gesture.mode {
+            case .scroll:
+                handlers?.onScroll(CGSize(width: -gesture.delta.x, height: -gesture.delta.y))
+            case .pinch:
+                if gesture.state == .began {
+                    handlers?.onPinchBegan(gesture.startCenter)
+                }
+                handlers?.onPinchChanged(gesture.scale, gesture.center)
+            case nil:
+                break
+            }
+        case .ended, .cancelled:
+            if gesture.mode == .pinch {
+                handlers?.onPinchEnded()
+            }
         default:
             break
         }
@@ -280,6 +320,76 @@ final class TouchGestureView: UIView, UIGestureRecognizerDelegate {
         handlers?.onThreeFingerSwipe(gesture.direction)
     }
 }
+/// Chooses one two-finger action and keeps it for the lifetime of that touch pair.
+final class TrackpadTwoFingerGestureRecognizer: UIGestureRecognizer {
+    private var fingers: Set<UITouch> = []
+    private var startDistance: CGFloat = 1
+    private(set) var mode: TrackpadTwoFingerMode?
+    private(set) var startCenter = CGPoint.zero
+    private(set) var center = CGPoint.zero
+    private(set) var delta = CGPoint.zero
+    private(set) var scale: CGFloat = 1
+
+    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent) {
+        fingers.formUnion(touches)
+        if fingers.count > 2 {
+            finish(cancelled: true)
+        } else if let pair = currentPair() {
+            startCenter = pair.center
+            center = pair.center
+            startDistance = max(pair.distance, 1)
+        }
+    }
+
+    override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent) {
+        guard let pair = currentPair() else { return }
+        if mode == nil {
+            mode = TrackpadTwoFingerMode.recognize(
+                translation: hypot(pair.center.x - startCenter.x, pair.center.y - startCenter.y),
+                spanChange: abs(pair.distance - startDistance)
+            )
+            guard mode != nil else { return }
+        }
+        delta = CGPoint(x: pair.center.x - center.x, y: pair.center.y - center.y)
+        center = pair.center
+        scale = pair.distance / startDistance
+        state = state == .possible ? .began : .changed
+    }
+
+    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent) {
+        finish(cancelled: false)
+    }
+
+    override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent) {
+        finish(cancelled: true)
+    }
+
+    override func reset() {
+        fingers.removeAll()
+        mode = nil
+        super.reset()
+    }
+
+    private func currentPair() -> (center: CGPoint, distance: CGFloat)? {
+        guard fingers.count == 2 else { return nil }
+        var iterator = fingers.makeIterator()
+        guard let first = iterator.next()?.location(in: view),
+              let second = iterator.next()?.location(in: view) else { return nil }
+        return (
+            CGPoint(x: (first.x + second.x) / 2, y: (first.y + second.y) / 2),
+            hypot(first.x - second.x, first.y - second.y)
+        )
+    }
+
+    private func finish(cancelled: Bool) {
+        if state == .began || state == .changed {
+            state = cancelled ? .cancelled : .ended
+        } else {
+            state = .failed
+        }
+    }
+}
+
 /// Recognizes a single-finger hold, then keeps the gesture active across
 /// touch-count changes so the user can navigate without dropping the drag.
 final class HeldDragGestureRecognizer: UIGestureRecognizer {

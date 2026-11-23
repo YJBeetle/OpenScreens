@@ -65,7 +65,7 @@ jobs:
           NOTARY_APP_PASSWORD: ${{ secrets.NOTARY_APP_PASSWORD }}
         run: |
           set -euo pipefail
-          APP="$PWD/build/Release/ScrctlGui.app"
+          APP="$PWD/build/Release/Scrctl.app"
           NOTARIZED=false
           if [[ "${HAS_MAC_SIGNING:-false}" == "true" ]]; then
             KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
@@ -115,7 +115,7 @@ jobs:
           SPARKLE_PRIVATE_KEY: ${{ secrets.BUILD_SPARKLE_PRIVATE_KEY }}
         run: |
           python3 -B scripts/ci/update-feed.py \
-            --app "$PWD/apps/macos/build/Release/ScrctlGui.app" \
+            --app "$PWD/apps/macos/build/Release/Scrctl.app" \
             --archive "$GITHUB_WORKSPACE/ScrctlGui-snapshot-macos.zip" \
             --channel snapshot \
             --enclosure-url "https://github.com/${{ github.repository }}/releases/download/snapshot/ScrctlGui-snapshot-macos.zip" \

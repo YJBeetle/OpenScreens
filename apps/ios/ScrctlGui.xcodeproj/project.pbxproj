@@ -24,11 +24,11 @@
 		00248FB37938A982EC409561 /* OpenScreensShortcuts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenScreensShortcuts.swift; sourceTree = "<group>"; };
 		0C0F1B7DC29E14795B31F545 /* IOSRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOSRootView.swift; sourceTree = "<group>"; };
 		16E2631FA1D071F411764512 /* Localizable.strings */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = Localizable.strings; path = "zh-Hans.lproj/Localizable.strings"; sourceTree = "<group>"; };
+		2978CBD6CA249A7517452F51 /* Scrctl.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Scrctl.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		3D1AEF272EE8D247C26D0C55 /* PhoneLibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhoneLibraryView.swift; sourceTree = "<group>"; };
 		49EECF5A99786AA1343CB2CF /* OpenScreensIOSApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenScreensIOSApp.swift; sourceTree = "<group>"; };
 		85D4CFCE7944590202EC6F95 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		8C29D5A6026833E9D69F0E14 /* IPadLibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IPadLibraryView.swift; sourceTree = "<group>"; };
-		8E5A98F3CF7DD0D5BFCD708D /* ScrctlGui.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = ScrctlGui.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B71A5B36B308D059049D547F /* InfoPlist.strings */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = InfoPlist.strings; path = "zh-Hans.lproj/InfoPlist.strings"; sourceTree = "<group>"; };
 		D88025330A7904AFC60B103B /* ScrctlGuiUI */ = {isa = PBXFileReference; lastKnownFileType = folder; name = ScrctlGuiUI; path = ../apple/ScrctlGuiUI; sourceTree = SOURCE_ROOT; };
 		D8BB14A1C1AAD7E6CCD33DA9 /* ScrctlGuiClient */ = {isa = PBXFileReference; lastKnownFileType = folder; name = ScrctlGuiClient; path = ../apple/ScrctlGuiClient; sourceTree = SOURCE_ROOT; };
@@ -63,7 +63,7 @@
 		4B11C26ACDCEE36F8D4673FB /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				8E5A98F3CF7DD0D5BFCD708D /* ScrctlGui.app */,
+				2978CBD6CA249A7517452F51 /* Scrctl.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -120,7 +120,7 @@
 				3E95D1110BA6275EC4E9BD56 /* ScrctlGuiClient */,
 			);
 			productName = ScrctlGui;
-			productReference = 8E5A98F3CF7DD0D5BFCD708D /* ScrctlGui.app */;
+			productReference = 2978CBD6CA249A7517452F51 /* Scrctl.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -295,7 +295,7 @@
 					"@executable_path/Frameworks",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = org.scrctl.ios;
-				PRODUCT_NAME = ScrctlGui;
+				PRODUCT_NAME = Scrctl;
 				SDKROOT = iphoneos;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -387,7 +387,7 @@
 					"@executable_path/Frameworks",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = org.scrctl.ios;
-				PRODUCT_NAME = ScrctlGui;
+				PRODUCT_NAME = Scrctl;
 				SDKROOT = iphoneos;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				TARGETED_DEVICE_FAMILY = "1,2";

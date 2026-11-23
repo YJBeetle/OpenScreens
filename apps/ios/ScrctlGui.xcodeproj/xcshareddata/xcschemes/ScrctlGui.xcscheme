@@ -17,7 +17,7 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "1E300852375869CB3F0E8854"
-               BuildableName = "ScrctlGui.app"
+               BuildableName = "Scrctl.app"
                BlueprintName = "ScrctlGui"
                ReferencedContainer = "container:ScrctlGui.xcodeproj">
             </BuildableReference>
@@ -34,7 +34,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "1E300852375869CB3F0E8854"
-            BuildableName = "ScrctlGui.app"
+            BuildableName = "Scrctl.app"
             BlueprintName = "ScrctlGui"
             ReferencedContainer = "container:ScrctlGui.xcodeproj">
          </BuildableReference>
@@ -57,7 +57,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "1E300852375869CB3F0E8854"
-            BuildableName = "ScrctlGui.app"
+            BuildableName = "Scrctl.app"
             BlueprintName = "ScrctlGui"
             ReferencedContainer = "container:ScrctlGui.xcodeproj">
          </BuildableReference>
@@ -76,7 +76,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "1E300852375869CB3F0E8854"
-            BuildableName = "ScrctlGui.app"
+            BuildableName = "Scrctl.app"
             BlueprintName = "ScrctlGui"
             ReferencedContainer = "container:ScrctlGui.xcodeproj">
          </BuildableReference>

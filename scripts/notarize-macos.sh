@@ -17,7 +17,7 @@ if [[ -z "$IDENTITY" ]]; then
 fi
 
 DD="$WORKSPACE/var/dd-macos-release"
-APP="$DD/Build/Products/Release/ScrctlGui.app"
+APP="$DD/Build/Products/Release/Scrctl.app"
 ZIP="$WORKSPACE/var/ScrctlGui-macos.zip"
 mkdir -p "$WORKSPACE/var"
 

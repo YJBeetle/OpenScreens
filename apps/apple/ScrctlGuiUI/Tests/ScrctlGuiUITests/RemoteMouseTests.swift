@@ -58,6 +58,19 @@ final class RemoteMouseTests: XCTestCase {
         XCTAssertEqual(recorded, expected)
     }
 
+    func testTypedShortcutConsumesModifiersBeforeTheNextCharacter() async throws {
+        let (model, recorder) = try await connected()
+        model.toggleStickyModifier(.command)
+        model.toggleStickyModifier(.shift)
+        model.type("a你😀")
+        XCTAssertTrue(model.keyboardModifiers.isEmpty)
+        model.type("b")
+
+        await verify([.key(.text("a"), [.command, .shift]),
+                      .key(.text("你😀"), []), .key(.text("b"), [])],
+                     model: model, recorder: recorder)
+    }
+
     func testConfirmedDisconnectSendsOnlyTheChosenActionAfterRelease() async throws {
         var profile = ConnectionProfile(platform: .macos)
         profile.disconnectAction = .logOut

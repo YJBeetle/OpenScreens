@@ -1226,7 +1226,17 @@ public final class SessionViewModel {
 
     public func type(_ text: String) {
         guard !text.isEmpty, state.isConnected, !isObserving else { return }
-        inputQueue?.events.yield(.key(RemoteKeyEvent(key: .text(text))))
+        if !keyboardModifiers.isEmpty, let first = text.unicodeScalars.first {
+            // The accessory modifiers apply to one remote key, even when an
+            // input method commits multiple characters in the same callback.
+            sendKey(.text(String(first)))
+            let remaining = String(text.unicodeScalars.dropFirst())
+            if !remaining.isEmpty {
+                inputQueue?.events.yield(.key(RemoteKeyEvent(key: .text(remaining))))
+            }
+        } else {
+            inputQueue?.events.yield(.key(RemoteKeyEvent(key: .text(text))))
+        }
     }
 
     public func sendKey(_ key: RemoteKey, extraModifiers: RemoteModifiers = []) {

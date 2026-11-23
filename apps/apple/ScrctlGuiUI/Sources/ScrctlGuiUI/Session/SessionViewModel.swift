@@ -191,11 +191,13 @@ public final class SessionViewModel {
         profile: ConnectionProfile,
         service: any RemoteSessionService = MockSessionService(),
         connectionStore: ConnectionStore? = nil,
+        initialMacSessionChoice: MacSessionChoice? = nil,
         readClipboardChangeCount: @escaping @MainActor () -> Int = { PlatformClipboard.changeCount },
         readClipboard: @escaping @MainActor () -> String? = { PlatformClipboard.string },
         writeClipboard: @escaping @MainActor (String) -> Void = { PlatformClipboard.setString($0) }
     ) {
         self.loginUsername = profile.username
+        self.selectedMacSession = initialMacSessionChoice
         self.profile = profile
         self.service = service
         self.store = connectionStore

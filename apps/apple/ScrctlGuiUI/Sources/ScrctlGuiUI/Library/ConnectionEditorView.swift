@@ -332,8 +332,11 @@ public struct ConnectionEditorView: View {
     @ViewBuilder
     private var securitySection: some View {
         Section {
-            Picker("Authentication", selection: $draft.authentication) {
-                ForEach(AuthenticationMethod.allCases) { method in
+            Picker("Authentication", selection: Binding(
+                get: { draft.authentication == .macOSAccountSharing ? .macOSAccount : draft.authentication },
+                set: { draft.authentication = $0 }
+            )) {
+                ForEach(AuthenticationMethod.allCases.filter { $0 != .macOSAccountSharing }) { method in
                     Text(method.title).tag(method)
                 }
             }

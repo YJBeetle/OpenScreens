@@ -135,6 +135,7 @@ enum MacAppInfo {
 struct SessionRoute: Codable, Hashable {
     var profileID: UUID
     var observeRequestID: UUID? = nil
+    var guestRequestID: UUID? = nil
 }
 
 struct MacSettingsView: View {

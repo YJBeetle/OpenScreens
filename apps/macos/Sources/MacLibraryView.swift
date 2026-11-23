@@ -115,7 +115,8 @@ struct MacLibraryView: View {
             LibrarySearchResultsView(
                 query: searchText,
                 nearbyDevices: nearbyDevices,
-                onConnect: connect,
+                onConnect: { connect($0, observeOnly: $1) },
+                onConnectAsGuest: { connect($0, asGuest: true) },
                 onEdit: edit,
                 onDuplicate: duplicate,
                 onDelete: delete
@@ -126,7 +127,8 @@ struct MacLibraryView: View {
                 LibrarySectionView(
                     section: section,
                     nearbyDevices: section == .nearby ? nearbyDevices : [],
-                    onConnect: connect,
+                    onConnect: { connect($0, observeOnly: $1) },
+                    onConnectAsGuest: { connect($0, asGuest: true) },
                     onEdit: edit,
                     onDuplicate: duplicate,
                     onDelete: delete,
@@ -136,7 +138,8 @@ struct MacLibraryView: View {
                 LibrarySectionView(
                     section: .custom,
                     groupID: groupID,
-                    onConnect: connect,
+                    onConnect: { connect($0, observeOnly: $1) },
+                    onConnectAsGuest: { connect($0, asGuest: true) },
                     onEdit: edit,
                     onDuplicate: duplicate,
                     onDelete: delete,
@@ -163,10 +166,14 @@ struct MacLibraryView: View {
         }
     }
 
-    private func connect(_ profile: ConnectionProfile, observeOnly: Bool = false) {
+    private func connect(_ profile: ConnectionProfile, observeOnly: Bool = false, asGuest: Bool = false) {
         openWindow(
             id: MacSceneID.session,
-            value: SessionRoute(profileID: profile.id, observeRequestID: observeOnly ? UUID() : nil)
+            value: SessionRoute(
+                profileID: profile.id,
+                observeRequestID: observeOnly ? UUID() : nil,
+                guestRequestID: asGuest ? UUID() : nil
+            )
         )
     }
 

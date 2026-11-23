@@ -9,7 +9,7 @@ struct IPadLibraryView: View {
     @State private var selection: LibraryDestination? = .section(.nearby)
     @State private var searchText = ""
     @State private var activeSheet: IOSLibrarySheet?
-    @State private var activeProfile: ConnectionProfile?
+    @State private var activeSession: IOSLibrarySession?
     @State private var pendingQuickConnect: URL?
 
     private var isSearching: Bool {
@@ -73,8 +73,8 @@ struct IPadLibraryView: View {
                 .presentationDragIndicator(.visible)
             }
         }
-        .fullScreenCover(item: $activeProfile) { profile in
-            IOSSessionPresenter(profile: profile, store: store)
+        .fullScreenCover(item: $activeSession) { session in
+            IOSSessionPresenter(profile: session.profile, store: store, asGuest: session.asGuest)
                 .environment(settings)
         }
     }
@@ -84,7 +84,8 @@ struct IPadLibraryView: View {
         if isSearching {
             LibrarySearchResultsView(
                 query: searchText,
-                onConnect: openSession,
+                onConnect: { openSession($0, observeOnly: $1) },
+                onConnectAsGuest: { openSession($0, asGuest: true) },
                 onEdit: edit,
                 onDuplicate: duplicate,
                 onDelete: delete,
@@ -95,7 +96,8 @@ struct IPadLibraryView: View {
             case .section(let section):
                 LibrarySectionView(
                     section: section,
-                    onConnect: openSession,
+                    onConnect: { openSession($0, observeOnly: $1) },
+                    onConnectAsGuest: { openSession($0, asGuest: true) },
                     onEdit: edit,
                     onDuplicate: duplicate,
                     onDelete: delete,
@@ -108,7 +110,8 @@ struct IPadLibraryView: View {
                 LibrarySectionView(
                     section: .custom,
                     groupID: groupID,
-                    onConnect: openSession,
+                    onConnect: { openSession($0, observeOnly: $1) },
+                    onConnectAsGuest: { openSession($0, asGuest: true) },
                     onEdit: edit,
                     onDuplicate: duplicate,
                     onDelete: delete,
@@ -145,8 +148,8 @@ struct IPadLibraryView: View {
         }
     }
 
-    private func openSession(_ profile: ConnectionProfile, observeOnly: Bool = false) {
-        activeProfile = profile.forSession(observeOnly: observeOnly)
+    private func openSession(_ profile: ConnectionProfile, observeOnly: Bool = false, asGuest: Bool = false) {
+        activeSession = IOSLibrarySession(profile: profile.forSession(observeOnly: observeOnly), asGuest: asGuest)
     }
 
     private func connectPendingLink() {

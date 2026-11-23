@@ -23,6 +23,7 @@ struct ConnectionGrid: View {
     let profiles: [ConnectionProfile]
     var devices: [NearbyLibraryDevice] = []
     let onConnect: (ConnectionProfile, Bool) -> Void
+    let onConnectAsGuest: (ConnectionProfile) -> Void
     let onEdit: (ConnectionProfile) -> Void
     let onDuplicate: (ConnectionProfile) -> Void
     let onDelete: (ConnectionProfile) -> Void
@@ -61,6 +62,7 @@ struct ConnectionGrid: View {
                             canMove: settings.settings.librarySort == .manual,
                             onConnect: { onConnect(profile, false) },
                             onObserve: { onConnect(profile, true) },
+                            onConnectAsGuest: { onConnectAsGuest(profile) },
                             onEdit: { onEdit(profile) },
                             onDuplicate: { onDuplicate(profile) },
                             onOpenInNewWindow: onOpenInNewWindow.map { action in
@@ -130,6 +132,7 @@ private struct ConnectionActionsMenu: View {
     let canMove: Bool
     let onConnect: () -> Void
     let onObserve: () -> Void
+    let onConnectAsGuest: () -> Void
     let onEdit: () -> Void
     let onDuplicate: () -> Void
     let onOpenInNewWindow: (() -> Void)?
@@ -144,6 +147,12 @@ private struct ConnectionActionsMenu: View {
 
         Button(action: onObserve) {
             Label("Connect in Observe Mode", systemImage: "eye")
+        }
+
+        if profile.platform == .macos {
+            Button(action: onConnectAsGuest) {
+                Label("Ask to Share as Guest", systemImage: "person.badge.plus")
+            }
         }
 
         if let onOpenInNewWindow {
@@ -192,6 +201,7 @@ private struct ConnectionActionsMenu: View {
 struct ConnectionList: View {
     let profiles: [ConnectionProfile]
     let onConnect: (ConnectionProfile, Bool) -> Void
+    let onConnectAsGuest: (ConnectionProfile) -> Void
     let onEdit: (ConnectionProfile) -> Void
     let onDuplicate: (ConnectionProfile) -> Void
     let onDelete: (ConnectionProfile) -> Void
@@ -225,6 +235,7 @@ struct ConnectionList: View {
                         canMove: settings.settings.librarySort == .manual,
                         onConnect: { onConnect(profile, false) },
                         onObserve: { onConnect(profile, true) },
+                        onConnectAsGuest: { onConnectAsGuest(profile) },
                         onEdit: { onEdit(profile) },
                         onDuplicate: { onDuplicate(profile) },
                         onOpenInNewWindow: onOpenInNewWindow.map { action in
@@ -360,6 +371,7 @@ public struct LibrarySectionView: View {
     private let nearbyDevices: [NearbyLibraryDevice]
     private let reordering: Bool
     private let onConnect: (ConnectionProfile, Bool) -> Void
+    private let onConnectAsGuest: (ConnectionProfile) -> Void
     private let onEdit: (ConnectionProfile) -> Void
     private let onDuplicate: (ConnectionProfile) -> Void
     private let onDelete: (ConnectionProfile) -> Void
@@ -378,6 +390,7 @@ public struct LibrarySectionView: View {
         nearbyDevices: [NearbyLibraryDevice] = [],
         reordering: Bool = false,
         onConnect: @escaping (ConnectionProfile, Bool) -> Void,
+        onConnectAsGuest: @escaping (ConnectionProfile) -> Void,
         onEdit: @escaping (ConnectionProfile) -> Void,
         onDuplicate: @escaping (ConnectionProfile) -> Void,
         onDelete: @escaping (ConnectionProfile) -> Void,
@@ -391,6 +404,7 @@ public struct LibrarySectionView: View {
         self.nearbyDevices = nearbyDevices
         self.reordering = reordering
         self.onConnect = onConnect
+        self.onConnectAsGuest = onConnectAsGuest
         self.onEdit = onEdit
         self.onDuplicate = onDuplicate
         self.onDelete = onDelete
@@ -411,6 +425,7 @@ public struct LibrarySectionView: View {
             ConnectionList(
                 profiles: profiles,
                 onConnect: onConnect,
+                onConnectAsGuest: onConnectAsGuest,
                 onEdit: onEdit,
                 onDuplicate: onDuplicate,
                 onDelete: onDelete,
@@ -428,6 +443,7 @@ public struct LibrarySectionView: View {
                 profiles: profiles,
                 devices: nearbyDevices,
                 onConnect: onConnect,
+                onConnectAsGuest: onConnectAsGuest,
                 onEdit: onEdit,
                 onDuplicate: onDuplicate,
                 onDelete: onDelete,
@@ -505,6 +521,7 @@ public struct LibrarySearchResultsView: View {
     private let layout: LibraryLayout
     private let nearbyDevices: [NearbyLibraryDevice]
     private let onConnect: (ConnectionProfile, Bool) -> Void
+    private let onConnectAsGuest: (ConnectionProfile) -> Void
     private let onEdit: (ConnectionProfile) -> Void
     private let onDuplicate: (ConnectionProfile) -> Void
     private let onDelete: (ConnectionProfile) -> Void
@@ -517,6 +534,7 @@ public struct LibrarySearchResultsView: View {
         layout: LibraryLayout = .grid,
         nearbyDevices: [NearbyLibraryDevice] = [],
         onConnect: @escaping (ConnectionProfile, Bool) -> Void,
+        onConnectAsGuest: @escaping (ConnectionProfile) -> Void,
         onEdit: @escaping (ConnectionProfile) -> Void,
         onDuplicate: @escaping (ConnectionProfile) -> Void,
         onDelete: @escaping (ConnectionProfile) -> Void,
@@ -526,6 +544,7 @@ public struct LibrarySearchResultsView: View {
         self.layout = layout
         self.nearbyDevices = nearbyDevices
         self.onConnect = onConnect
+        self.onConnectAsGuest = onConnectAsGuest
         self.onEdit = onEdit
         self.onDuplicate = onDuplicate
         self.onDelete = onDelete
@@ -553,6 +572,7 @@ public struct LibrarySearchResultsView: View {
                 ConnectionList(
                     profiles: results,
                     onConnect: onConnect,
+                    onConnectAsGuest: onConnectAsGuest,
                     onEdit: onEdit,
                     onDuplicate: onDuplicate,
                     onDelete: onDelete,
@@ -563,6 +583,7 @@ public struct LibrarySearchResultsView: View {
                     profiles: results,
                     devices: devices,
                     onConnect: onConnect,
+                    onConnectAsGuest: onConnectAsGuest,
                     onEdit: onEdit,
                     onDuplicate: onDuplicate,
                     onDelete: onDelete,

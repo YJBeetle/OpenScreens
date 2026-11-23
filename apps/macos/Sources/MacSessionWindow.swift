@@ -41,7 +41,8 @@ struct MacSessionWindow: View {
         model = SessionViewModel(
             profile: profile.forSession(observeOnly: route.observeRequestID != nil),
             service: UniFfiSessionService(),
-            connectionStore: store
+            connectionStore: store,
+            initialMacSessionChoice: route.guestRequestID != nil ? .guest : nil
         )
     }
 

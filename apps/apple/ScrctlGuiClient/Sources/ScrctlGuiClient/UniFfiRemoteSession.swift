@@ -153,7 +153,9 @@ public actor UniFfiRemoteSession: ScrctlGuiUI.RemoteSessionProtocol {
         continuation.yield(.state(.connecting))
 
         let sessionPassword: String?
-        if let password {
+        if macSessionChoice == .guest {
+            sessionPassword = nil
+        } else if let password {
             sessionPassword = password
         } else if profile.authentication == .none {
             sessionPassword = nil
@@ -243,7 +245,7 @@ public actor UniFfiRemoteSession: ScrctlGuiUI.RemoteSessionProtocol {
             target = .guest
         } else if macSessionChoice == .personal {
             target = .personal
-        } else if macSessionChoice == .share || profile.authentication == .macOSAccountSharing {
+        } else if macSessionChoice == .share {
             target = .shared
         } else {
             target = nil

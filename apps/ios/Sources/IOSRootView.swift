@@ -34,18 +34,25 @@ struct IOSRootView: View {
     }
 }
 
+struct IOSLibrarySession: Identifiable {
+    let profile: ConnectionProfile
+    let asGuest: Bool
+    var id: UUID { profile.id }
+}
+
 struct IOSSessionPresenter: View {
     @Environment(\.dismiss) private var dismiss
 
     private let profile: ConnectionProfile
     @State private var model: SessionViewModel
 
-    init(profile: ConnectionProfile, store: ConnectionStore) {
+    init(profile: ConnectionProfile, store: ConnectionStore, asGuest: Bool = false) {
         self.profile = profile
         _model = State(initialValue: SessionViewModel(
             profile: profile,
             service: UniFfiSessionService(),
-            connectionStore: store
+            connectionStore: store,
+            initialMacSessionChoice: asGuest ? .guest : nil
         ))
     }
 

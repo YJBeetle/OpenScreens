@@ -651,9 +651,9 @@ public struct SessionScreen: View {
                 }
 
                 if model.needsMacSessionChoice {
-                    Button("Open Personal Session") { model.chooseMacSession(.personal) }
+                    Button("Open My Desktop") { model.chooseMacSession(.personal) }
                         .buttonStyle(.borderedProminent)
-                    Button("Request Shared Session") { model.chooseMacSession(.share) }
+                    Button("Join the Current Desktop") { model.chooseMacSession(.share) }
                         .buttonStyle(.bordered)
                 }
                 HStack(spacing: 10) {

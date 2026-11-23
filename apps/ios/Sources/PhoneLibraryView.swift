@@ -26,7 +26,7 @@ struct PhoneLibraryView: View {
     @State private var isReordering = false
     @State private var searchText = ""
     @State private var activeSheet: IOSLibrarySheet?
-    @State private var activeProfile: ConnectionProfile?
+    @State private var activeSession: IOSLibrarySession?
     @State private var selectedGroupID: UUID?
     @State private var groupDialog: GroupDialog?
     @State private var groupName = ""
@@ -61,8 +61,8 @@ struct PhoneLibraryView: View {
                 .presentationDragIndicator(.visible)
             }
         }
-        .fullScreenCover(item: $activeProfile) { profile in
-            IOSSessionPresenter(profile: profile, store: store)
+        .fullScreenCover(item: $activeSession) { session in
+            IOSSessionPresenter(profile: session.profile, store: store, asGuest: session.asGuest)
                 .environment(settings)
         }
         .alert(
@@ -146,7 +146,8 @@ struct PhoneLibraryView: View {
                     LibrarySearchResultsView(
                         query: searchText,
                         layout: settings.settings.libraryLayout,
-                        onConnect: openSession,
+                        onConnect: { openSession($0, observeOnly: $1) },
+                        onConnectAsGuest: { openSession($0, asGuest: true) },
                         onEdit: edit,
                         onDuplicate: duplicate,
                         onDelete: delete
@@ -210,7 +211,8 @@ struct PhoneLibraryView: View {
                     groupID: groupID,
                     layout: settings.settings.libraryLayout,
                     reordering: isReordering,
-                    onConnect: openSession,
+                    onConnect: { openSession($0, observeOnly: $1) },
+                    onConnectAsGuest: { openSession($0, asGuest: true) },
                     onEdit: edit,
                     onDuplicate: duplicate,
                     onDelete: delete,
@@ -395,7 +397,8 @@ struct PhoneLibraryView: View {
             section: section,
             layout: settings.settings.libraryLayout,
             reordering: reordering,
-            onConnect: openSession,
+            onConnect: { openSession($0, observeOnly: $1) },
+            onConnectAsGuest: { openSession($0, asGuest: true) },
             onEdit: edit,
             onDuplicate: duplicate,
             onDelete: delete,
@@ -405,8 +408,8 @@ struct PhoneLibraryView: View {
         )
     }
 
-    private func openSession(_ profile: ConnectionProfile, observeOnly: Bool = false) {
-        activeProfile = profile.forSession(observeOnly: observeOnly)
+    private func openSession(_ profile: ConnectionProfile, observeOnly: Bool = false, asGuest: Bool = false) {
+        activeSession = IOSLibrarySession(profile: profile.forSession(observeOnly: observeOnly), asGuest: asGuest)
     }
 
     private func connectPendingLink() {

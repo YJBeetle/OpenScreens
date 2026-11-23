@@ -5,6 +5,7 @@ struct CredentialPrompt: View {
     let endpoint: String
     let challenge: RemoteFailureKind
     let isConnecting: Bool
+    let isAwaitingMacPermission: Bool
     @State var username: String
     @State var remember: Bool
     let onConnect: (String, String, Bool) -> Void
@@ -24,54 +25,28 @@ struct CredentialPrompt: View {
     var body: some View {
         NavigationStack {
             Form {
-                if challenge.offersMacGuestAccess {
+                if isAwaitingMacPermission {
                     Section {
-                        Button("Ask for Permission", action: onRequestPermission)
-                            .disabled(isConnecting)
-                    }
-                }
-                Section {
-                    Group {
-                        if showUsername || requiresUsername {
-                            TextField("User Name", text: $username)
-                                .textContentType(.username)
-                                .autocorrectionDisabled()
-                            #if os(iOS)
-                                .textInputAutocapitalization(.never)
-                            #endif
-                                .focused($focused, equals: .username)
-                                .submitLabel(.next)
-                                .onSubmit { focused = .password }
-                        } else {
-                            Button("Use a Mac account") {
-                                showUsername = true
-                                focused = .username
-                            }
+                        VStack(spacing: 10) {
+                            ProgressView()
+                            Text("Requesting Permission…")
+                                .font(.headline)
+                            Text("Approve the screen sharing request on the Mac.")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
                         }
-                        SecureField("Password", text: $password)
-                            .textContentType(.password)
-                            .focused($focused, equals: .password)
-                            .submitLabel(.go)
-                            .onSubmit(submit)
-                        Toggle("Remember Credentials", isOn: $remember)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                    } header: {
+                        Text(verbatim: endpoint)
                     }
-                    .disabled(isConnecting)
-                } header: {
-                    Text(verbatim: endpoint)
-                } footer: {
-                    if isConnecting {
-                        ProgressView("Connecting…")
-                    } else if challenge == .macGuestRequestFailed {
-                        Text("The Mac did not grant screen sharing permission.")
-                            .foregroundStyle(.red)
-                    } else if challenge == .authenticationFailed {
-                        Text("Authentication failed. Try again.")
-                            .foregroundStyle(.red)
-                    }
+                } else {
+                    credentialFields
                 }
             }
             .formStyle(.grouped)
-            .navigationTitle("Authentication Required")
+            .navigationTitle(isAwaitingMacPermission ? "Ask for Permission" : "Authentication Required")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
@@ -79,9 +54,11 @@ struct CredentialPrompt: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel", action: onCancel)
                 }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Connect", action: submit)
-                        .disabled(!canConnect)
+                if !isAwaitingMacPermission {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Connect", action: submit)
+                            .disabled(!canConnect)
+                    }
                 }
             }
         }
@@ -90,10 +67,74 @@ struct CredentialPrompt: View {
         #endif
         .onAppear {
             showUsername = requiresUsername || !username.isEmpty
-            focusInput()
+            if !isConnecting { focusInput() }
         }
         .onChange(of: isConnecting) { _, connecting in
             if connecting { focused = nil } else { focusInput() }
+        }
+    }
+
+    @ViewBuilder
+    private var credentialFields: some View {
+        Section {
+            Group {
+                if showUsername || requiresUsername {
+                    TextField("User Name", text: $username)
+                        .textContentType(.username)
+                        .autocorrectionDisabled()
+                    #if os(iOS)
+                        .textInputAutocapitalization(.never)
+                    #endif
+                        .focused($focused, equals: .username)
+                        .submitLabel(.next)
+                        .onSubmit { focused = .password }
+                } else {
+                    Button("Use a Mac account") {
+                        showUsername = true
+                        focused = .username
+                    }
+                }
+                SecureField("Password", text: $password)
+                    .textContentType(.password)
+                    .focused($focused, equals: .password)
+                    .submitLabel(.go)
+                    .onSubmit(submit)
+                Toggle("Remember Credentials", isOn: $remember)
+            }
+            .disabled(isConnecting)
+        } header: {
+            Text(verbatim: endpoint)
+        } footer: {
+            if isConnecting {
+                ProgressView("Connecting…")
+            } else if challenge == .macGuestRequestFailed {
+                Text("The Mac did not grant screen sharing permission.")
+                    .foregroundStyle(.red)
+            } else if challenge == .authenticationFailed {
+                Text("Authentication failed. Try again.")
+                    .foregroundStyle(.red)
+            }
+        }
+        if challenge.offersMacGuestAccess {
+            Section {
+                Button(action: onRequestPermission) {
+                    Text("Ask for Permission")
+                        .frame(maxWidth: .infinity)
+                }
+                .disabled(isConnecting)
+            } header: {
+                HStack(spacing: 12) {
+                    Rectangle()
+                        .fill(Color.secondary.opacity(0.25))
+                        .frame(height: 1)
+                    Text("Or")
+                    Rectangle()
+                        .fill(Color.secondary.opacity(0.25))
+                        .frame(height: 1)
+                }
+                .frame(maxWidth: .infinity)
+                .textCase(nil)
+            }
         }
     }
 

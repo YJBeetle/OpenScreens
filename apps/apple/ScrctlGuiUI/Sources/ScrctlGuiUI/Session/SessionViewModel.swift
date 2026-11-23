@@ -287,6 +287,10 @@ public final class SessionViewModel {
 
     @ObservationIgnored private var selectedMacSession: MacSessionChoice?
 
+    var isAwaitingMacPermission: Bool {
+        selectedMacSession == .guest && !state.isConnected && !state.isTerminal && credentialChallenge == nil
+    }
+
     var needsMacSessionChoice: Bool {
         if case .disconnected(_, .macSessionChoiceRequired) = state { return true }
         return false

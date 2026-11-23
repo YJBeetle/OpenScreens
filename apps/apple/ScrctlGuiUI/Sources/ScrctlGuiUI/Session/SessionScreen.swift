@@ -158,6 +158,7 @@ public struct SessionScreen: View {
                 CredentialPrompt(
                     endpoint: model.profile.endpoint, challenge: challenge,
                     isConnecting: model.credentialChallenge == nil,
+                    isAwaitingMacPermission: model.isAwaitingMacPermission,
                     username: model.loginUsername, remember: model.rememberLogin,
                     onConnect: model.submitCredentials,
                     onRequestPermission: model.requestMacGuestAccess,
@@ -595,7 +596,9 @@ public struct SessionScreen: View {
                     .controlSize(.large)
 
                 Group {
-                    if model.state.isConnected {
+                    if model.isAwaitingMacPermission {
+                        Text("Requesting Permission…")
+                    } else if model.state.isConnected {
                         Text("Waiting for the remote screen")
                     } else {
                         Text(model.state.label)
@@ -608,6 +611,13 @@ public struct SessionScreen: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
+
+                if model.isAwaitingMacPermission {
+                    Text("Approve the screen sharing request on the Mac.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                }
 
                 Button("Cancel", action: closeSession)
                     .buttonStyle(.bordered)

@@ -61,8 +61,16 @@ jobs:
           workspaces: vendor/scrctl/core
       - name: Build Apple core
         run: ./scripts/build-apple-core.sh
-      - name: Install xcodegen
-        run: brew install xcodegen
+      - name: Install XcodeGen 2.48.0
+        run: |
+          # Keep the generator version in sync with the checked-in iOS project.
+          tool_dir="$(mktemp -d "$RUNNER_TEMP/xcodegen.XXXXXX")"
+          curl --fail --silent --show-error --location --retry 3 \
+            https://github.com/yonaskolb/XcodeGen/releases/download/2.48.0/xcodegen.zip \
+            --output "$tool_dir/xcodegen.zip"
+          echo "620c9f0dc10849f94728ab5df52d225ebab8187439dd6fee1925e59e80dff892  $tool_dir/xcodegen.zip" | shasum -a 256 -c -
+          unzip -q "$tool_dir/xcodegen.zip" -d "$tool_dir"
+          echo "$tool_dir/xcodegen/bin" >> "$GITHUB_PATH"
       - name: Build macOS app
         working-directory: apps/macos
         run: |

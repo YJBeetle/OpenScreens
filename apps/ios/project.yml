@@ -44,6 +44,17 @@ targets:
         product: ScrctlGuiCanvas
       - package: ScrctlGuiClient
         product: ScrctlGuiClient
+    preBuildScripts:
+      - name: Generate app version
+        script: |
+          /bin/bash "$SCRIPT_INPUT_FILE_1" "$SCRIPT_INPUT_FILE_0" "$SCRIPT_OUTPUT_FILE_0"
+        inputFiles:
+          - "$(SRCROOT)/Info.plist"
+          - "$(SRCROOT)/../../scripts/ios-build-info.sh"
+          - "$(SRCROOT)/../../.git"
+        outputFiles:
+          - "$(DERIVED_FILE_DIR)/Scrctl-Info.plist"
+        basedOnDependencyAnalysis: false
     settings:
       base:
         PRODUCT_NAME: ScrctlGui
@@ -53,7 +64,7 @@ targets:
         IPHONEOS_DEPLOYMENT_TARGET: "17.0"
         TARGETED_DEVICE_FAMILY: "1,2"
         GENERATE_INFOPLIST_FILE: NO
-        INFOPLIST_FILE: Info.plist
+        INFOPLIST_FILE: "$(DERIVED_FILE_DIR)/Scrctl-Info.plist"
         SWIFT_EMIT_LOC_STRINGS: YES
 
 schemes:

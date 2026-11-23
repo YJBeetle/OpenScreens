@@ -309,6 +309,78 @@ final class SessionDisplayTests: XCTestCase {
         XCTAssertEqual(model.displayedImageRect(in: canvas), CGRect(x: 0, y: 100, width: 400, height: 200))
     }
 
+    func testAppleTouchScrollUsesCursorDisplayOrSelectedDisplay() async {
+        let transport = DisplayTestTransport()
+        let model = SessionViewModel(profile: ConnectionProfile(), service: DisplayTestService(transport: transport))
+        model.start()
+        defer { model.stop() }
+
+        let standard = RemoteDisplay(id: 1, name: "1080p", width: 1920, height: 1080)
+        let highResolution = RemoteDisplay(id: 2, name: "4K", width: 3840, height: 2160,
+                                           isPrimary: false, origin: CGPoint(x: 1920, y: 0))
+        transport.emit(.framebufferSize(width: 5760, height: 2160))
+        transport.emit(.displays([standard, highResolution]))
+        transport.emit(.serverFeatures(appleRemote: true, fileUpload: false, fileDownload: false))
+        await waitUntil { model.state.isConnected && model.isAppleRemote }
+
+        model.jumpPointer(to: CGPoint(x: 0.2, y: 0.25))
+        model.scroll(by: CGSize(width: 24, height: -24))
+        await waitUntil { await transport.lastScroll?.y == -1 }
+        let standardScroll = await transport.lastScroll
+        XCTAssertEqual(standardScroll?.x, 1)
+
+        model.jumpPointer(to: CGPoint(x: 0.7, y: 0.25))
+        model.scroll(by: CGSize(width: 24, height: -24))
+        await waitUntil { await transport.lastScroll?.y == -2 }
+        let highResolutionScroll = await transport.lastScroll
+        XCTAssertEqual(highResolutionScroll?.x, 2)
+
+        model.selectDisplay(standard.id)
+        await waitUntil { model.selectedDisplayID == standard.id }
+        // The selected display wins even if the previous cursor lies on the 4K monitor.
+        model.scroll(by: CGSize(width: 24, height: -24))
+        await waitUntil { await transport.lastScroll?.y == -1 }
+    }
+
+    func testAppleTouchScrollUsesPrimaryForOverlappingDisplaysAndGaps() async {
+        let transport = DisplayTestTransport()
+        let model = SessionViewModel(profile: ConnectionProfile(), service: DisplayTestService(transport: transport))
+        model.start()
+        defer { model.stop() }
+
+        let standard = RemoteDisplay(id: 1, name: "1080p", width: 1920, height: 1080, isPrimary: false)
+        let primary = RemoteDisplay(id: 2, name: "4K", width: 3840, height: 2160)
+        transport.emit(.framebufferSize(width: 5760, height: 5000))
+        transport.emit(.displays([standard, primary]))
+        transport.emit(.serverFeatures(appleRemote: true, fileUpload: false, fileDownload: false))
+        await waitUntil { model.state.isConnected && model.isAppleRemote }
+
+        model.jumpPointer(to: CGPoint(x: 0.1, y: 0.1))
+        model.scroll(by: CGSize(width: 0, height: 24))
+        await waitUntil { await transport.lastScroll?.y == 2 }
+
+        model.jumpPointer(to: CGPoint(x: 0.9, y: 0.9))
+        model.scroll(by: CGSize(width: 0, height: -24))
+        await waitUntil { await transport.lastScroll?.y == -2 }
+    }
+
+    func testAppleTouchScrollFallsBackToFramebufferAndCapsGain() async {
+        let transport = DisplayTestTransport()
+        let model = SessionViewModel(profile: ConnectionProfile(), service: DisplayTestService(transport: transport))
+        model.start()
+        defer { model.stop() }
+
+        transport.emit(.framebufferSize(width: 8000, height: 8000))
+        await waitUntil { model.state.isConnected && model.serverSize != nil }
+        model.scroll(by: CGSize(width: 0, height: 24))
+        await waitUntil { await transport.lastScroll?.y == 1 }
+
+        transport.emit(.serverFeatures(appleRemote: true, fileUpload: false, fileDownload: false))
+        await waitUntil { model.isAppleRemote }
+        model.scroll(by: CGSize(width: 0, height: 24))
+        await waitUntil { await transport.lastScroll?.y == 4 }
+    }
+
     private func waitUntil(_ condition: () async -> Bool, line: UInt = #line) async {
         let clock = ContinuousClock()
         let deadline = clock.now + .seconds(2)
@@ -350,6 +422,10 @@ actor DisplayTestTransport: RemoteSessionProtocol {
     func disconnect() async { continuation.finish() }
     private(set) var lastPointer: PointerEvent?
     func sendPointer(_ event: PointerEvent) async { lastPointer = event }
+    private(set) var lastScroll: (x: Int32, y: Int32)?
+    func sendScroll(at point: CGPoint, stepsX: Int32, stepsY: Int32) async {
+        lastScroll = (stepsX, stepsY)
+    }
     func sendKey(_ event: RemoteKeyEvent) async {}
     func setClipboardSharing(_ enabled: Bool) async {}
     func sendClipboard(_ text: String, automatic: Bool) async {}

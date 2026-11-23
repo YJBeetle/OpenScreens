@@ -961,14 +961,47 @@ public final class SessionViewModel {
         guard state.isConnected, !isObserving,
               delta.width != 0 || delta.height != 0
         else { return }
-        scrollRemainder.width += delta.width
-        scrollRemainder.height += delta.height
+        let multiplier = touchScrollMultiplier
+        scrollRemainder.width += delta.width * multiplier
+        scrollRemainder.height += delta.height * multiplier
         let stepsX = Int(scrollRemainder.width / Self.scrollStepPoints)
         let stepsY = Int(scrollRemainder.height / Self.scrollStepPoints)
         guard stepsX != 0 || stepsY != 0 else { return }
         scrollRemainder.width -= CGFloat(stepsX) * Self.scrollStepPoints
         scrollRemainder.height -= CGFloat(stepsY) * Self.scrollStepPoints
         inputQueue?.events.yield(.scroll(remoteCursor, Int32(stepsX), Int32(stepsY)))
+    }
+
+    private var touchScrollMultiplier: CGFloat {
+        guard isAppleRemote else { return 1 }
+        let desktopSize = serverSize ?? framebufferSize
+        let layout = displays.filter { $0.width > 0 && $0.height > 0 }
+
+        // A wheel step on Apple Screen Sharing covers less of a high-resolution
+        // display. Compensate at the touch input boundary using remote pixels.
+        let activeDisplay = layout.first { $0.id == selectedDisplayID } ?? desktopSize.flatMap { size -> RemoteDisplay? in
+            guard size.width >= 1, size.height >= 1 else { return nil }
+            let point = CGPoint(
+                x: min(remoteCursor.x * size.width, size.width - 1),
+                y: min(remoteCursor.y * size.height, size.height - 1)
+            )
+            let matches = layout.filter { display in
+                CGRect(origin: display.origin, size: CGSize(width: display.width, height: display.height))
+                    .contains(point)
+            }
+            // Some Apple servers report multiple displays at the same origin.
+            return matches.count == 1 ? matches.first : nil
+        } ?? layout.first { $0.isPrimary } ?? layout.first
+
+        let shortEdge: CGFloat
+        if let activeDisplay {
+            shortEdge = CGFloat(min(activeDisplay.width, activeDisplay.height))
+        } else if let desktopSize {
+            shortEdge = min(desktopSize.width, desktopSize.height)
+        } else {
+            return 1
+        }
+        return min(max(shortEdge / 1080, 1), 4)
     }
 
     /// Moves the zoomed image while two fingers drag it.

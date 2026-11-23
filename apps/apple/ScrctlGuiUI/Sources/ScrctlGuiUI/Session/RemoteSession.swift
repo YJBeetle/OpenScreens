@@ -22,10 +22,20 @@ public enum RemoteFailureKind: Equatable, Sendable {
     case closed
     case invalidInput
     case macSessionChoiceRequired
+    case macCredentialsRequired
+    case macGuestRequestFailed
+
+    var requiresMacAccount: Bool {
+        self == .missingUsername || offersMacGuestAccess
+    }
+
+    var offersMacGuestAccess: Bool {
+        self == .macCredentialsRequired || self == .macGuestRequestFailed
+    }
 }
 
 public enum MacSessionChoice: Sendable {
-    case personal, share
+    case personal, share, guest
 }
 
 /// A failure raised while opening a session, carrying the core's error code

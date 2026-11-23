@@ -34,6 +34,8 @@ private extension ScrctlGuiCore.SessionFailureKind {
         case .closed: .closed
         case .invalidInput: .invalidInput
         case .macSessionChoiceRequired: .macSessionChoiceRequired
+        case .macCredentialsRequired: .macCredentialsRequired
+        case .macGuestRequestFailed: .macGuestRequestFailed
         }
     }
 }
@@ -237,7 +239,9 @@ public actor UniFfiRemoteSession: ScrctlGuiUI.RemoteSessionProtocol {
         )
 
         let target: MacSessionTarget?
-        if macSessionChoice == .personal {
+        if macSessionChoice == .guest {
+            target = .guest
+        } else if macSessionChoice == .personal {
             target = .personal
         } else if macSessionChoice == .share || profile.authentication == .macOSAccountSharing {
             target = .shared

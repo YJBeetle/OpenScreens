@@ -160,6 +160,7 @@ public struct SessionScreen: View {
                     isConnecting: model.credentialChallenge == nil,
                     username: model.loginUsername, remember: model.rememberLogin,
                     onConnect: model.submitCredentials,
+                    onRequestPermission: model.requestMacGuestAccess,
                     onCancel: {
                         presentedChallenge = nil
                         closeSession()

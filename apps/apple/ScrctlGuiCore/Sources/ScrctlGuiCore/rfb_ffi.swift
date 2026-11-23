@@ -2187,6 +2187,7 @@ public enum MacSessionTarget: Equatable, Hashable {
 
     case personal
     case shared
+    case guest
 
 
 
@@ -2212,6 +2213,8 @@ public struct FfiConverterTypeMacSessionTarget: FfiConverterRustBuffer {
 
         case 2: return .shared
 
+        case 3: return .guest
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -2226,6 +2229,10 @@ public struct FfiConverterTypeMacSessionTarget: FfiConverterRustBuffer {
 
         case .shared:
             writeInt(&buf, Int32(2))
+
+
+        case .guest:
+            writeInt(&buf, Int32(3))
 
         }
     }
@@ -2647,6 +2654,8 @@ public enum SessionFailureKind: Equatable, Hashable {
     case closed
     case invalidInput
     case macSessionChoiceRequired
+    case macCredentialsRequired
+    case macGuestRequestFailed
 
 
 
@@ -2697,6 +2706,10 @@ public struct FfiConverterTypeSessionFailureKind: FfiConverterRustBuffer {
         case 14: return .invalidInput
         
         case 15: return .macSessionChoiceRequired
+
+        case 16: return .macCredentialsRequired
+
+        case 17: return .macGuestRequestFailed
         
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -2764,6 +2777,14 @@ public struct FfiConverterTypeSessionFailureKind: FfiConverterRustBuffer {
         
         case .macSessionChoiceRequired:
             writeInt(&buf, Int32(15))
+
+
+        case .macCredentialsRequired:
+            writeInt(&buf, Int32(16))
+
+
+        case .macGuestRequestFailed:
+            writeInt(&buf, Int32(17))
         
         }
     }

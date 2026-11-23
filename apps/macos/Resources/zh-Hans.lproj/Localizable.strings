@@ -499,3 +499,7 @@
 "The connection timed out." = "连接超时。";
 "Actual Size (1:1)" = "实际大小（1:1）";
 "Fit Entire Desktop" = "完整显示";
+
+"Ask for Permission" = "请求许可";
+"Choose how to connect to this Mac." = "选择连接这台 Mac 的方式。";
+"The Mac did not grant screen sharing permission." = "Mac 未允许屏幕共享请求。";

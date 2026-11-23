@@ -6,6 +6,10 @@ import Foundation
 enum SessionFailureText {
     static func localized(_ kind: RemoteFailureKind, reason: String) -> String {
         switch kind {
+        case .macCredentialsRequired:
+            return NSLocalizedString("Choose how to connect to this Mac.", comment: "Mac credentials")
+        case .macGuestRequestFailed:
+            return NSLocalizedString("The Mac did not grant screen sharing permission.", comment: "Mac guest request")
         case .macSessionChoiceRequired:
             return NSLocalizedString("Another user is signed in on this Mac. Open a personal session with your Mac account, or ask to share the active session.", comment: "Mac session choice")
         case .unknown:

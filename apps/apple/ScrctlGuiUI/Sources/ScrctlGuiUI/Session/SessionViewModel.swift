@@ -651,7 +651,7 @@ public final class SessionViewModel {
     }
 
     private func scheduleReconnect() {
-        guard !isStopping, profile.controls.autoReconnect, reconnectAttempts < 3 else { return }
+        guard !isStopping, selectedMacSession != .guest, profile.controls.autoReconnect, reconnectAttempts < 3 else { return }
         reconnectAttempts += 1
         state = .reconnecting(attempt: reconnectAttempts)
         reconnectTask?.cancel()
@@ -679,7 +679,8 @@ public final class SessionViewModel {
     }
 
     private func challengeIfNeeded(_ kind: RemoteFailureKind) -> Bool {
-        guard kind == .missingUsername || kind == .missingPassword || kind == .authenticationFailed else { return false }
+        guard kind == .missingUsername || kind == .missingPassword
+                || kind == .authenticationFailed || kind.offersMacGuestAccess else { return false }
         endTransport()
         sessionPassword = nil
         credentialChallenge = kind
@@ -690,11 +691,20 @@ public final class SessionViewModel {
     func submitCredentials(username: String, password: String, remember: Bool) {
         let username = username.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let credentialChallenge, !password.isEmpty,
-              credentialChallenge != .missingUsername || !username.isEmpty else { return }
+              !credentialChallenge.requiresMacAccount || !username.isEmpty else { return }
+        if selectedMacSession == .guest { selectedMacSession = nil }
         self.credentialChallenge = nil
         loginUsername = username
         sessionPassword = password
         rememberLogin = remember
+        restartTransport()
+    }
+
+    func requestMacGuestAccess() {
+        guard credentialChallenge?.offersMacGuestAccess == true else { return }
+        credentialChallenge = nil
+        rememberLogin = false
+        selectedMacSession = .guest
         restartTransport()
     }
 

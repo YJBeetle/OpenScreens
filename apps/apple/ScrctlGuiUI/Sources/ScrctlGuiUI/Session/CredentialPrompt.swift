@@ -8,6 +8,7 @@ struct CredentialPrompt: View {
     @State var username: String
     @State var remember: Bool
     let onConnect: (String, String, Bool) -> Void
+    let onRequestPermission: () -> Void
     let onCancel: () -> Void
 
     @State private var password = ""
@@ -15,7 +16,7 @@ struct CredentialPrompt: View {
     @FocusState private var focused: Field?
     private enum Field { case username, password }
 
-    private var requiresUsername: Bool { challenge == .missingUsername }
+    private var requiresUsername: Bool { challenge.requiresMacAccount }
     private var canConnect: Bool {
         !isConnecting && !password.isEmpty && (!requiresUsername || !username.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
     }
@@ -23,6 +24,12 @@ struct CredentialPrompt: View {
     var body: some View {
         NavigationStack {
             Form {
+                if challenge.offersMacGuestAccess {
+                    Section {
+                        Button("Ask for Permission", action: onRequestPermission)
+                            .disabled(isConnecting)
+                    }
+                }
                 Section {
                     Group {
                         if showUsername || requiresUsername {
@@ -54,6 +61,9 @@ struct CredentialPrompt: View {
                 } footer: {
                     if isConnecting {
                         ProgressView("Connecting…")
+                    } else if challenge == .macGuestRequestFailed {
+                        Text("The Mac did not grant screen sharing permission.")
+                            .foregroundStyle(.red)
                     } else if challenge == .authenticationFailed {
                         Text("Authentication failed. Try again.")
                             .foregroundStyle(.red)

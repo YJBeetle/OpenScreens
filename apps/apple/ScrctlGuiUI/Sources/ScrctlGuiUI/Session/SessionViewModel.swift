@@ -459,9 +459,10 @@ public final class SessionViewModel {
             let wasConnected = state.isConnected
             state = newState
             if newState.isConnected {
-                connectionDeadlineTask?.cancel()
-                connectionDeadlineTask = nil
-                if !wasConnected { scheduleCurrentViewport() }
+                if !wasConnected {
+                    waitForFirstFrame()
+                    scheduleCurrentViewport()
+                }
                 if rememberLogin, let sessionPassword {
                     if store?.rememberLogin(for: profile, username: loginUsername, password: sessionPassword) != true {
                         showMessage(NSLocalizedString("The credentials could not be saved.", comment: "Credential storage failure"))
@@ -514,6 +515,10 @@ public final class SessionViewModel {
             reconcileDisplaySelection()
 
         case .frame(let frame):
+            if receivedFrames == 0 {
+                connectionDeadlineTask?.cancel()
+                connectionDeadlineTask = nil
+            }
             #if DEBUG
             if CanvasPresentation.isEnabled {
                 if receivedFrames == 0 { firstSequence = frame.sequence }
@@ -642,6 +647,32 @@ public final class SessionViewModel {
         }
     }
     #endif
+
+    private func waitForFirstFrame() {
+        connectionDeadlineTask?.cancel()
+        connectionDeadlineTask = nil
+        guard let session, receivedFrames == 0 else { return }
+        connectionDeadlineTask = Task { [weak self, session] in
+            do {
+                try await Task.sleep(for: .seconds(5))
+                guard !Task.isCancelled, self?.receivedFrames == 0 else { return }
+                // Keep the deadline independent of a stalled transport write.
+                let refresh = Task { try? await session.requestRefresh() }
+                defer { refresh.cancel() }
+                try await Task.sleep(for: .seconds(40))
+                guard !Task.isCancelled, let self, self.receivedFrames == 0 else { return }
+                self.handleTransportFailure(RemoteSessionFailure(
+                    kind: .unknown,
+                    reason: NSLocalizedString(
+                        "The remote computer did not send a picture.",
+                        comment: "First framebuffer timeout"
+                    )
+                ), isReconnect: false)
+            } catch {
+                // The first frame arrived, or the session ended before the deadline.
+            }
+        }
+    }
 
     private func handleRemoteClose(reason: String?, kind: RemoteFailureKind) {
         guard !isStopping else { return }

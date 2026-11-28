@@ -423,6 +423,11 @@ public actor UniFfiRemoteSession: ScrctlGuiUI.RemoteSessionProtocol {
         try await session.selectDisplay(displayId: displayID)
     }
 
+    public func requestRefresh() async throws {
+        guard let session, !finished else { throw CancellationError() }
+        try await session.requestRefresh()
+    }
+
     /// Samples the visible region into a bounded render texture. The wire
     /// subscription stays full-frame so desktop damage continues while zoomed.
     public func setViewport(_ normalizedRect: CGRect?, screenPixelWidth: Int) async {

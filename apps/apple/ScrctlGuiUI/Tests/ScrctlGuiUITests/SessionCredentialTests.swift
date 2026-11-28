@@ -67,6 +67,20 @@ final class SessionCredentialTests: XCTestCase {
     }
     #endif
 
+    func testAuthenticatedSessionRequestsARefreshWhenFirstFrameIsMissing() async throws {
+        let service = LoginService()
+        let model = SessionViewModel(profile: ConnectionProfile(name: "Test", host: "localhost"), service: service)
+        defer { model.stop() }
+
+        try await establishSession(model)
+        XCTAssertNil(model.frameSize)
+        try await wait(timeout: .seconds(8)) { model.frameSize != nil }
+        let refreshRequests = await service.log.refreshRequests
+        XCTAssertEqual(refreshRequests, 1)
+        XCTAssertEqual(model.frameSize, CGSize(width: 2, height: 2))
+        XCTAssertTrue(model.state.isConnected)
+    }
+
     func testAutomaticReconnectStopsAfterThreeFailedHandshakes() async throws {
         let service = LoginService()
         let model = SessionViewModel(profile: ConnectionProfile(name: "Test", host: "localhost"), service: service)
@@ -178,6 +192,11 @@ private actor LoginLog {
     var latest: AsyncStream<RemoteSessionEvent>.Continuation?
     var accepted = 0
     var handshakes = 0
+    private(set) var refreshRequests = 0
+
+    func didRequestRefresh() {
+        refreshRequests += 1
+    }
     private(set) var cancelledHandshakes = 0
     private var stall = false
     private var failures: [RemoteFailureKind] = []
@@ -241,6 +260,11 @@ private struct LoginTransport: RemoteSessionProtocol {
         await log.connected(stream)
         stream.yield(.displays([RemoteDisplay(id: 0, name: "Fixture", width: 2, height: 2)]))
         stream.yield(.state(.connected))
+    }
+
+    func requestRefresh() async throws {
+        await log.didRequestRefresh()
+        stream.yield(.frame(RemoteFrame(width: 2, height: 2, data: Data(repeating: 255, count: 16), sequence: 1)))
     }
 
     func setViewport(_ normalizedRect: CGRect?, screenPixelWidth: Int) async {

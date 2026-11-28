@@ -352,6 +352,8 @@ public protocol RemoteSessionProtocol: Sendable {
     /// `nil`.
     func requestCurtainMode(_ enabled: Bool) async
     func setQuality(_ quality: ConnectionQuality) async throws
+    /// Requests a complete frame when initial pixels have not arrived.
+    func requestRefresh() async throws
     func selectDisplay(_ id: Int?) async throws
     /// Sets the visible crop in normalized framebuffer coordinates (0...1)
     /// and supplies the screen width for sampling. `nil` restores the full
@@ -383,6 +385,7 @@ public extension RemoteSessionProtocol {
     func setQuality(_ quality: ConnectionQuality) async throws {
         throw RemoteSessionFailure(kind: .invalidInput, reason: "This session cannot change picture quality.")
     }
+    func requestRefresh() async throws {}
     /// Transports without viewport cropping ignore the request.
     func setViewport(_ normalizedRect: CGRect?, screenPixelWidth: Int) async {}
     /// Transports without file transfer support ignore the request.
